@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: SmartLab API
+  version: 0.1.0
+  description: Initial contract scaffold. Endpoints will be added domain by domain.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local Laravel API
+paths: {}
+components:
+  schemas:
+    ApiError:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        errors:
+          type: object
+          additionalProperties: true
