@@ -33,6 +33,8 @@ const colorMap = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.color]));
 export function CalendarPage() {
   const { db, mutate } = useAppData();
   const canCreate = usePermission('calendar', 'create');
+  const canUpdate = usePermission('calendar', 'update');
+  const canDelete = usePermission('calendar', 'delete');
   const [view, setView] = useState<'month' | 'week' | 'agenda'>('month');
   const [current, setCurrent] = useState(new Date());
   const [open, setOpen] = useState(false);
@@ -65,13 +67,15 @@ export function CalendarPage() {
   }
 
   function openCreate(date?: string) {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ date: date ?? new Date().toISOString().split('T')[0], category: 'kegiatan sekolah' });
     setOpen(true);
   }
-  function openEdit(e: CalendarEvent) { setEditing(e); setForm(e); setOpen(true); }
+  function openEdit(e: CalendarEvent) { if (!canUpdate) return; setEditing(e); setForm(e); setOpen(true); }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.title || !form.date) { toast('Judul dan tanggal wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -86,7 +90,7 @@ export function CalendarPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.calendarEvents = d.calendarEvents.filter((e) => e.id !== confirmDel.id); });
     toast('Event dihapus', 'success');
     setConfirmDel(null);
@@ -219,12 +223,10 @@ export function CalendarPage() {
             <div className="flex items-center gap-2"><span className={cn('h-3 w-3 rounded-full', colorMap[detail.category])} /><Badge tone="neutral">{detail.category}</Badge></div>
             <div><p className="text-xs text-ink-muted">Tanggal</p><p className="text-ink-primary">{detail.date}{detail.endDate ? ` - ${detail.endDate}` : ''}</p></div>
             {detail.description && <div><p className="text-xs text-ink-muted">Deskripsi</p><p className="text-ink-secondary">{detail.description}</p></div>}
-            {canCreate && (
-              <div className="flex gap-2 pt-2 border-t border-base-700">
+                    {canUpdate && <div className="flex gap-2 pt-2 border-t border-base-700">
                 <Button size="sm" variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => { openEdit(detail); setDetail(null); }}>Edit</Button>
-                <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setConfirmDel(detail)}>Hapus</Button>
-              </div>
-            )}
+                {canDelete && <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setConfirmDel(detail)}>Hapus</Button>}
+              </div>}
           </div>
         )}
       </Modal>

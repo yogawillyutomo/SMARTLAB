@@ -23,6 +23,8 @@ export function WorkOrdersPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('work-orders', 'create');
+  const canUpdate = usePermission('work-orders', 'update');
+  const canUseSparePart = usePermission('stock', 'create');
   const [view, setView] = useState<'table' | 'board' | 'calendar'>('table');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<WorkOrder | null>(null);
@@ -31,11 +33,13 @@ export function WorkOrdersPage() {
   const [form, setForm] = useState<Partial<WorkOrder>>({});
 
   function openCreate() {
+    if (!canCreate) return;
     setForm({ laboratoryId: db.labs[0]?.id, technician: 'Andi Wijaya', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.laboratoryId) { toast('Pilih lab', 'error'); return; }
     mutate((d) => {
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
@@ -51,6 +55,7 @@ export function WorkOrdersPage() {
   }
 
   function updateStatus(wo: WorkOrder, status: WorkOrderStatus) {
+    if (!canUpdate) return;
     mutate((d) => {
       const idx = d.workOrders.findIndex((w) => w.id === wo.id);
       if (idx >= 0) {
@@ -72,6 +77,7 @@ export function WorkOrdersPage() {
   }
 
   function useSparePart() {
+    if (!canUpdate || !canUseSparePart) return;
     if (!partOpen || !partForm.stockItemId || partForm.quantity <= 0) { toast('Lengkapi data spare part', 'error'); return; }
     const item = db.stock.items.find((s) => s.id === partForm.stockItemId);
     if (!item) return;
@@ -228,12 +234,12 @@ export function WorkOrdersPage() {
             <div className="space-y-2 border-t border-base-700 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi</p>
               <div className="flex flex-wrap gap-2">
-                {detail.status === 'Assigned' && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} onClick={() => updateStatus(detail, 'In Progress')}>Mulai</Button>}
-                {detail.status === 'In Progress' && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
-                <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>
-                {!['Completed', 'Verified', 'Cancelled'].includes(detail.status) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
-                {detail.status === 'Completed' && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
-                <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />
+                {canUpdate && detail.status === 'Assigned' && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} onClick={() => updateStatus(detail, 'In Progress')}>Mulai</Button>}
+                {canUpdate && detail.status === 'In Progress' && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
+                {canUpdate && canUseSparePart && <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>}
+                {canUpdate && !['Completed', 'Verified', 'Cancelled'].includes(detail.status) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
+                {canUpdate && detail.status === 'Completed' && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
+                {canUpdate && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />}
               </div>
             </div>
           </div>

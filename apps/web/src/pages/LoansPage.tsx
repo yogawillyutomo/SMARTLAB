@@ -22,7 +22,9 @@ export function LoansPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('loans', 'create');
+  const canUpdate = usePermission('loans', 'update');
   const canApprove = usePermission('loans', 'approve');
+  const canCreateIncident = usePermission('incidents', 'create');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Loan | null>(null);
   const [returnOpen, setReturnOpen] = useState<Loan | null>(null);
@@ -36,11 +38,13 @@ export function LoansPage() {
   }), [db.loans]);
 
   function openCreate() {
+    if (!canCreate) return;
     setForm({ borrowerName: '', unitOrClass: '', itemName: '', quantity: 1, borrowDate: new Date().toISOString().split('T')[0], plannedReturn: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0], conditionOut: 'Baik', status: 'Diajukan', PIC: user?.name ?? '' });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.itemName || !form.borrowerName) { toast('Nama barang dan peminjam wajib diisi', 'error'); return; }
     mutate((d) => {
       d.loans.push({ ...form, id: `loan-${Date.now()}` } as Loan);
@@ -50,6 +54,7 @@ export function LoansPage() {
   }
 
   function approve(l: Loan) {
+    if (!canApprove) return;
     mutate((d) => {
       const idx = d.loans.findIndex((x) => x.id === l.id);
       if (idx >= 0) d.loans[idx].status = 'Disetujui';
@@ -59,6 +64,7 @@ export function LoansPage() {
   }
 
   function handover(l: Loan) {
+    if (!canApprove) return;
     mutate((d) => {
       const idx = d.loans.findIndex((x) => x.id === l.id);
       if (idx >= 0) d.loans[idx].status = 'Dipinjam';
@@ -68,12 +74,13 @@ export function LoansPage() {
   }
 
   function openReturn(l: Loan) {
+    if (!canUpdate) return;
     setReturnOpen(l);
     setReturnForm({ condition: 'Baik', notes: '', createIncident: false });
   }
 
   function doReturn() {
-    if (!returnOpen) return;
+    if (!returnOpen || !canUpdate) return;
     mutate((d) => {
       const idx = d.loans.findIndex((x) => x.id === returnOpen.id);
       if (idx >= 0) {
@@ -81,7 +88,7 @@ export function LoansPage() {
         d.loans[idx].actualReturn = new Date().toISOString().split('T')[0];
         d.loans[idx].conditionReturn = returnForm.condition;
         if (returnForm.notes) d.loans[idx].notes = returnForm.notes;
-        if (returnForm.createIncident && returnForm.condition !== 'Baik') {
+        if (returnForm.createIncident && canCreateIncident && returnForm.condition !== 'Baik') {
           const num = `INC-2026-${String(d.incidents.length + 1).padStart(4, '0')}`;
           d.incidents.unshift({
             id: `inc-${Date.now()}`, ticketNumber: num, reporterName: user?.name ?? 'Admin', laboratoryId: '',
@@ -93,12 +100,13 @@ export function LoansPage() {
         }
       }
     });
-    toast('Pengembalian dicatat' + (returnForm.createIncident && returnForm.condition !== 'Baik' ? ', incident dibuat' : ''), 'success');
+    toast('Pengembalian dicatat' + (returnForm.createIncident && canCreateIncident && returnForm.condition !== 'Baik' ? ', incident dibuat' : ''), 'success');
     setReturnOpen(null);
     setDetail(null);
   }
 
   function markOverdue(l: Loan) {
+    if (!canUpdate) return;
     mutate((d) => {
       const idx = d.loans.findIndex((x) => x.id === l.id);
       if (idx >= 0) d.loans[idx].status = 'Terlambat';
@@ -150,8 +158,8 @@ export function LoansPage() {
                       <td className="px-4 py-3"><StatusBadge status={l.status} /></td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">
-                          {l.status === 'Dipinjam' && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => openReturn(l)}>Kembali</Button>}
-                          {isOverdue && l.status === 'Dipinjam' && <button onClick={() => markOverdue(l)} className="rounded p-1 text-danger hover:bg-danger/10" title="Tandai terlambat"><AlertTriangle className="h-4 w-4" /></button>}
+                          {canUpdate && l.status === 'Dipinjam' && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => openReturn(l)}>Kembali</Button>}
+                          {canUpdate && isOverdue && l.status === 'Dipinjam' && <button onClick={() => markOverdue(l)} className="rounded p-1 text-danger hover:bg-danger/10" title="Tandai terlambat"><AlertTriangle className="h-4 w-4" /></button>}
                         </div>
                       </td>
                     </tr>
@@ -196,7 +204,7 @@ export function LoansPage() {
             <div className="flex flex-wrap gap-2 pt-2 border-t border-base-700">
               {canApprove && detail.status === 'Diajukan' && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => approve(detail)}>Setujui</Button>}
               {canApprove && detail.status === 'Disetujui' && <Button size="sm" onClick={() => handover(detail)}>Serahkan</Button>}
-              {detail.status === 'Dipinjam' && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={() => openReturn(detail)}>Kembalikan</Button>}
+              {canUpdate && detail.status === 'Dipinjam' && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={() => openReturn(detail)}>Kembalikan</Button>}
               <Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Cetak Bukti</Button>
             </div>
           </div>
@@ -214,7 +222,7 @@ export function LoansPage() {
             </div>
             <Select label="Kondisi Kembali" value={returnForm.condition} onChange={(e) => setReturnForm({ ...returnForm, condition: e.target.value as AssetCondition })} options={CONDITIONS.map((c) => ({ value: c, label: c }))} />
             <Textarea label="Catatan" value={returnForm.notes} onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })} />
-            {returnForm.condition !== 'Baik' && (
+            {canCreateIncident && returnForm.condition !== 'Baik' && (
               <label className="flex items-center gap-2 text-sm text-ink-secondary">
                 <input type="checkbox" checked={returnForm.createIncident} onChange={(e) => setReturnForm({ ...returnForm, createIncident: e.target.checked })} className="rounded border-base-600 text-accent-blue" />
                 Buat incident dari kerusakan ini

@@ -33,6 +33,7 @@ import { EmptyState } from '@/components/ui/States';
 import { PCIconCard, PCStatusLegend } from '@/components/common/PCIconCard';
 import { Tabs } from '@/components/ui/Tabs';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { cn, relativeTime } from '@/utils';
 import type { Asset, Device, DeviceStatus, Incident, MaintenanceExecution } from '@/types';
@@ -43,6 +44,9 @@ export function MonitoringPage() {
   const { db, mutate, refresh } = useAppData();
   const { activeLabId, setActiveLab } = useUIStore();
   const user = useAuthStore((s) => s.user);
+  const canUpdateMonitoring = usePermission('monitoring', 'update');
+  const canCreateIncident = usePermission('incidents', 'create');
+  const canScheduleMaintenance = usePermission('maintenance', 'create');
   const [selectedLab, setSelectedLab] = useState(activeLabId);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | 'all'>('all');
@@ -84,6 +88,7 @@ export function MonitoringPage() {
   }, [labDevices]);
 
   async function handleSimulate() {
+    if (!canUpdateMonitoring) return;
     setSimulating(true);
     await deviceRepository.simulateHeartbeat(selectedLab);
     refresh();
@@ -92,6 +97,7 @@ export function MonitoringPage() {
   }
 
   function handleStatusChange(device: Device, newStatus: DeviceStatus) {
+    if (!canUpdateMonitoring) return;
     mutate((d) => {
       const idx = d.devices.findIndex((x) => x.id === device.id);
       if (idx >= 0) {
@@ -113,6 +119,7 @@ export function MonitoringPage() {
   }
 
   function createIncidentFromDevice(device: Device) {
+    if (!canCreateIncident) return;
     mutate((d) => {
       const num = `INC-2026-${String(d.incidents.length + 1).padStart(4, '0')}`;
       d.incidents.unshift({
@@ -139,6 +146,7 @@ export function MonitoringPage() {
   }
 
   function scheduleMaintenance(device: Device) {
+    if (!canScheduleMaintenance) return;
     mutate((d) => {
       d.maintenance.plans.push({
         id: `mp-${Date.now()}`,
@@ -170,9 +178,9 @@ export function MonitoringPage() {
             <Button variant="secondary" size="sm" icon={<Map className="h-4 w-4" />} onClick={() => (window.location.href = `/laboratories/${selectedLab}/layout`)}>
               Denah
             </Button>
-            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} loading={simulating} onClick={handleSimulate}>
+            {canUpdateMonitoring && <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} loading={simulating} onClick={handleSimulate}>
               Simulasi Heartbeat
-            </Button>
+            </Button>}
           </>
         }
       />
@@ -292,6 +300,9 @@ export function MonitoringPage() {
             onStatusChange={(s) => handleStatusChange(selected, s)}
             onCreateIncident={() => createIncidentFromDevice(selected)}
             onScheduleMaintenance={() => scheduleMaintenance(selected)}
+            canUpdateStatus={canUpdateMonitoring}
+            canCreateIncident={canCreateIncident}
+            canScheduleMaintenance={canScheduleMaintenance}
           />
         )}
       </Drawer>
@@ -316,7 +327,7 @@ function SummaryStat({ label, value, tone }: { label: string; value: number; ton
   );
 }
 
-function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, onCreateIncident, onScheduleMaintenance }: {
+function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, onCreateIncident, onScheduleMaintenance, canUpdateStatus, canCreateIncident, canScheduleMaintenance }: {
   device: Device;
   asset?: Asset;
   incidents: Incident[];
@@ -324,6 +335,9 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
   onStatusChange: (s: DeviceStatus) => void;
   onCreateIncident: () => void;
   onScheduleMaintenance: () => void;
+  canUpdateStatus: boolean;
+  canCreateIncident: boolean;
+  canScheduleMaintenance: boolean;
 }) {
   const [tab, setTab] = useState('overview');
   const statuses: DeviceStatus[] = ['Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
@@ -441,7 +455,7 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
 
       {tab === 'actions' && (
         <div className="space-y-3">
-          <div>
+          {canUpdateStatus && <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Ubah Status</p>
             <div className="grid grid-cols-3 gap-2">
               {statuses.map((s) => (
@@ -457,20 +471,20 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
           <div className="grid gap-2 pt-2">
-            <Button variant="danger" size="sm" icon={<AlertTriangle className="h-4 w-4" />} onClick={onCreateIncident} className="w-full justify-start">
+            {canCreateIncident && <Button variant="danger" size="sm" icon={<AlertTriangle className="h-4 w-4" />} onClick={onCreateIncident} className="w-full justify-start">
               Buat Laporan Kerusakan
-            </Button>
-            <Button variant="warning" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={onScheduleMaintenance} className="w-full justify-start">
+            </Button>}
+            {canScheduleMaintenance && <Button variant="warning" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={onScheduleMaintenance} className="w-full justify-start">
               Jadwalkan Maintenance
-            </Button>
-            <Button variant="secondary" size="sm" icon={<XCircle className="h-4 w-4" />} onClick={() => onStatusChange('Offline')} className="w-full justify-start">
+            </Button>}
+            {canUpdateStatus && <Button variant="secondary" size="sm" icon={<XCircle className="h-4 w-4" />} onClick={() => onStatusChange('Offline')} className="w-full justify-start">
               Tandai Offline
-            </Button>
-            <Button variant="secondary" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={() => onStatusChange('Maintenance')} className="w-full justify-start">
+            </Button>}
+            {canUpdateStatus && <Button variant="secondary" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={() => onStatusChange('Maintenance')} className="w-full justify-start">
               Mode Maintenance
-            </Button>
+            </Button>}
           </div>
         </div>
       )}

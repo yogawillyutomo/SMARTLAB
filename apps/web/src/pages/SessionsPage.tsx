@@ -19,6 +19,7 @@ export function SessionsPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('sessions', 'create');
+  const canUpdate = usePermission('sessions', 'update');
   const [open, setOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState<Session | null>(null);
   const [detail, setDetail] = useState<Session | null>(null);
@@ -26,11 +27,13 @@ export function SessionsPage() {
   const [finishForm, setFinishForm] = useState<Partial<Session>>({});
 
   function openCreate() {
+    if (!canCreate) return;
     setForm({ laboratoryId: db.labs[0]?.id, teacherName: user?.name ?? '', className: '', subject: '', participantCount: 30, initialCondition: '', notes: '', status: 'Belum Dimulai' });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.laboratoryId || !form.className || !form.subject) {
       toast('Lengkapi field wajib', 'error');
       return;
@@ -55,6 +58,7 @@ export function SessionsPage() {
   }
 
   function startSession(s: Session) {
+    if (!canUpdate) return;
     mutate((d) => {
       const idx = d.sessions.findIndex((x) => x.id === s.id);
       if (idx >= 0) {
@@ -71,6 +75,7 @@ export function SessionsPage() {
   }
 
   function finishSession() {
+    if (!canUpdate) return;
     if (!finishOpen) return;
     mutate((d) => {
       const idx = d.sessions.findIndex((x) => x.id === finishOpen.id);
@@ -183,8 +188,8 @@ export function SessionsPage() {
                   <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1">
-                      {s.status === 'Belum Dimulai' && canCreate && <Button size="sm" variant="success" icon={<Play className="h-3.5 w-3.5" />} onClick={() => startSession(s)}>Mulai</Button>}
-                      {s.status === 'Berlangsung' && canCreate && <Button size="sm" variant="danger" icon={<Square className="h-3.5 w-3.5" />} onClick={() => openFinish(s)}>Selesai</Button>}
+                      {s.status === 'Belum Dimulai' && canUpdate && <Button size="sm" variant="success" icon={<Play className="h-3.5 w-3.5" />} onClick={() => startSession(s)}>Mulai</Button>}
+                      {s.status === 'Berlangsung' && canUpdate && <Button size="sm" variant="danger" icon={<Square className="h-3.5 w-3.5" />} onClick={() => openFinish(s)}>Selesai</Button>}
                     </div>
                   </td>
                 </tr>

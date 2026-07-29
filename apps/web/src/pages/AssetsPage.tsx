@@ -22,6 +22,7 @@ export function AssetsPage() {
   const { db, mutate } = useAppData();
   const navigate = useNavigate();
   const canCreate = usePermission('assets', 'create');
+  const canUpdate = usePermission('assets', 'update');
   const canDelete = usePermission('assets', 'delete');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -46,17 +47,20 @@ export function AssetsPage() {
   const totalValue = db.assets.reduce((sum, a) => sum + a.price, 0);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ category: 'Komputer', condition: 'Baik', status: 'Aktif', yearAcquired: 2026, fundingSource: 'BOS', price: 0, purchaseDate: new Date().toISOString().split('T')[0], laboratoryId: db.labs[0]?.id });
     setOpen(true);
   }
   function openEdit(a: Asset) {
+    if (!canUpdate) return;
     setEditing(a);
     setForm(a);
     setOpen(true);
   }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name || !form.assetCode) { toast('Nama dan kode aset wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -71,13 +75,14 @@ export function AssetsPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.assets = d.assets.filter((a) => a.id !== confirmDel.id); });
     toast('Aset dihapus', 'success');
     setConfirmDel(null);
   }
 
   function doTransfer() {
+    if (!canUpdate) return;
     if (!transferOpen || !transferForm.toLabId) { toast('Pilih lokasi tujuan', 'error'); return; }
     mutate((d) => {
       const idx = d.assets.findIndex((a) => a.id === transferOpen.id);
@@ -122,8 +127,8 @@ export function AssetsPage() {
     { key: 'actions', header: 'Aksi', render: (a) => (
       <div className="flex gap-1">
         <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
-        {canCreate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => { setTransferOpen(a); setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' }); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => { setTransferOpen(a); setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' }); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
         {canDelete && <button onClick={() => setConfirmDel(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
     ) },

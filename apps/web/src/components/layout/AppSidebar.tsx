@@ -4,6 +4,7 @@ import { NAV_GROUPS } from '@/routes/nav';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { canView } from '@/lib/permissions';
+import { usePermissionStore } from '@/stores/permissionStore';
 import { useAppData } from '@/hooks/useAppData';
 import { cn } from '@/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -20,6 +21,7 @@ function useBadgeCounts() {
 export function AppSidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebar } = useUIStore();
   const user = useAuthStore((s) => s.user);
+  const permissions = usePermissionStore((s) => s.permissions);
   const badges = useBadgeCounts();
 
   return (
@@ -59,7 +61,7 @@ export function AppSidebar() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 no-scrollbar">
           {NAV_GROUPS.map((group) => {
-            const items = group.items.filter((it) => !user || canView(user.role, it.module));
+            const items = group.items.filter((it) => !user || canView(permissions, user.role, it.module));
             if (items.length === 0) return null;
             return (
               <div key={group.title} className="mb-4">

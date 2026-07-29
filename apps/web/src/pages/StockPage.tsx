@@ -17,6 +17,8 @@ import type { StockItem, StockTransaction } from '@/types';
 export function StockPage() {
   const { db, mutate } = useAppData();
   const canCreate = usePermission('stock', 'create');
+  const canUpdate = usePermission('stock', 'update');
+  const canDelete = usePermission('stock', 'delete');
   const [open, setOpen] = useState(false);
   const [txOpen, setTxOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<StockItem | null>(null);
@@ -33,13 +35,15 @@ export function StockPage() {
   }), [db.stock]);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ unit: 'pcs', quantity: 0, minStock: 5, price: 0, location: 'Gudang A' });
     setOpen(true);
   }
-  function openEdit(s: StockItem) { setEditing(s); setForm(s); setOpen(true); }
+  function openEdit(s: StockItem) { if (!canUpdate) return; setEditing(s); setForm(s); setOpen(true); }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name) { toast('Nama barang wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -54,13 +58,14 @@ export function StockPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.stock.items = d.stock.items.filter((s) => s.id !== confirmDel.id); });
     toast('Barang dihapus', 'success');
     setConfirmDel(null);
   }
 
   function addTransaction() {
+    if (!canCreate) return;
     if (!txForm.itemId || txForm.quantity <= 0) { toast('Lengkapi data transaksi', 'error'); return; }
     const item = db.stock.items.find((s) => s.id === txForm.itemId);
     if (!item) return;
@@ -93,10 +98,10 @@ export function StockPage() {
     { key: 'price', header: 'Harga', sortable: true, sortValue: (s) => s.price, render: (s) => <span className="text-ink-muted">{formatCurrency(s.price)}</span> },
     { key: 'actions', header: 'Aksi', render: (s) => (
       <div className="flex gap-1">
-        <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>
-        <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-amber-400 hover:bg-amber-500/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>
-        {canCreate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
+        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>}
+        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-amber-400 hover:bg-amber-500/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+        {canDelete && <button onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
     ) },
   ];

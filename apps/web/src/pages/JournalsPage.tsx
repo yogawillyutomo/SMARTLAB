@@ -20,6 +20,7 @@ export function JournalsPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('journals', 'create');
+  const canUpdate = usePermission('journals', 'update');
   const canDelete = usePermission('journals', 'delete');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Journal | null>(null);
@@ -35,17 +36,20 @@ export function JournalsPage() {
   }), [db.journals]);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ date: new Date().toISOString().split('T')[0], laboratoryId: db.labs[0]?.id, teacherName: user?.name ?? '', hours: 3, presentCount: 30, absentCount: 2, status: 'Draft', source: 'manual' });
     setOpen(true);
   }
   function openEdit(j: Journal) {
+    if (!canUpdate) return;
     setEditing(j);
     setForm(j);
     setOpen(true);
   }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.laboratoryId || !form.teacherName || !form.subject) {
       toast('Lengkapi field wajib', 'error');
       return;
@@ -64,7 +68,7 @@ export function JournalsPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.journals = d.journals.filter((j) => j.id !== confirmDel.id); });
     toast('Jurnal dihapus', 'success');
     setConfirmDel(null);
@@ -117,7 +121,7 @@ export function JournalsPage() {
                   <td className="px-4 py-3"><StatusBadge status={j.status} /></td>
                   <td className="px-4 py-3"><div className="flex gap-1">
                     <button onClick={() => setDetail(j)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Eye className="h-4 w-4" /></button>
-                    {canCreate && <button onClick={() => openEdit(j)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+                    {canUpdate && <button onClick={() => openEdit(j)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
                     {canDelete && <button onClick={() => setConfirmDel(j)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
                   </div></td>
                 </tr>

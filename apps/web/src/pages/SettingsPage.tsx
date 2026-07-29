@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Settings as SettingsIcon, Download, Upload, Trash2, RefreshCw, Palette, Database, Bell, Monitor, Moon, Sun, Save } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore, type ThemeMode, type AccentColor } from '@/stores/uiStore';
+import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -20,6 +21,8 @@ const TABS = [
 
 export function SettingsPage() {
   const { db, reset, exportDB, importDB } = useAppData();
+  const canUpdate = usePermission('settings', 'update');
+  const canManage = usePermission('settings', 'manage');
   const { theme, setTheme, accent, setAccent, compactTable, setCompactTable, academicYear, setAcademicYear, semester, setSemester } = useUIStore();
   const [tab, setTab] = useState('general');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -28,6 +31,7 @@ export function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   function handleReset() {
+    if (!canManage) return;
     reset();
     toast('Data demo direset ke kondisi awal', 'success');
     setConfirmReset(false);
@@ -35,6 +39,7 @@ export function SettingsPage() {
   }
 
   function handleClear() {
+    if (!canManage) return;
     clearAllStorage();
     toast('Semua data lokal dihapus', 'success');
     setConfirmClear(false);
@@ -42,11 +47,13 @@ export function SettingsPage() {
   }
 
   function handleExport() {
+    if (!canManage) return;
     downloadJSON('smartlab-backup.json', JSON.parse(exportDB()));
     toast('Backup data berhasil diunduh', 'success');
   }
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!canManage) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -63,6 +70,7 @@ export function SettingsPage() {
   }
 
   function saveGeneral() {
+    if (!canUpdate) return;
     setAcademicYear(schoolForm.year);
     setSemester(schoolForm.semester);
     toast('Pengaturan disimpan', 'success');
@@ -97,7 +105,7 @@ export function SettingsPage() {
                     <Input label="Tahun Ajaran" value={schoolForm.year} onChange={(e) => setSchoolForm({ ...schoolForm, year: e.target.value })} />
                     <Select label="Semester" value={schoolForm.semester} onChange={(e) => setSchoolForm({ ...schoolForm, semester: e.target.value })} options={[{ value: 'Gasal', label: 'Gasal' }, { value: 'Genap', label: 'Genap' }]} />
                   </div>
-                  <Button size="sm" icon={<Save className="h-4 w-4" />} onClick={saveGeneral}>Simpan</Button>
+                  <Button size="sm" icon={<Save className="h-4 w-4" />} onClick={saveGeneral} disabled={!canUpdate}>Simpan</Button>
                 </CardContent>
               </Card>
               <Card>
@@ -155,8 +163,8 @@ export function SettingsPage() {
                 <CardContent className="space-y-3">
                   <p className="text-sm text-ink-muted">Ekspor seluruh data lokal sebagai file JSON untuk backup, atau impor kembali untuk memulihkan.</p>
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>Export JSON</Button>
-                    <Button variant="secondary" size="sm" icon={<Upload className="h-4 w-4" />} onClick={() => fileRef.current?.click()}>Import JSON</Button>
+                    <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport} disabled={!canManage}>Export JSON</Button>
+                    <Button variant="secondary" size="sm" icon={<Upload className="h-4 w-4" />} onClick={() => fileRef.current?.click()} disabled={!canManage}>Import JSON</Button>
                     <input ref={fileRef} type="file" accept="application/json" onChange={handleImport} className="hidden" />
                   </div>
                 </CardContent>
@@ -171,8 +179,8 @@ export function SettingsPage() {
                     <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3"><p className="text-lg font-bold text-ink-primary">{db.incidents.length}</p><p className="text-xs text-ink-muted">Incident</p></div>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    <Button variant="warning" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setConfirmReset(true)}>Reset Data Demo</Button>
-                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)}>Hapus Semua Data</Button>
+                    <Button variant="warning" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setConfirmReset(true)} disabled={!canManage}>Reset Data Demo</Button>
+                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)} disabled={!canManage}>Hapus Semua Data</Button>
                   </div>
                 </CardContent>
               </Card>

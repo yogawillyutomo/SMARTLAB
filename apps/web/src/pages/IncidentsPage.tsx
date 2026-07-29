@@ -25,8 +25,10 @@ export function IncidentsPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('incidents', 'create');
+  const canUpdate = usePermission('incidents', 'update');
   const canDelete = usePermission('incidents', 'delete');
   const canAssign = usePermission('incidents', 'assign');
+  const canCreateWorkOrder = usePermission('work-orders', 'create');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Incident | null>(null);
   const [confirmDel, setConfirmDel] = useState<Incident | null>(null);
@@ -42,11 +44,13 @@ export function IncidentsPage() {
   }), [db.incidents, filters]);
 
   function openCreate() {
+    if (!canCreate) return;
     setForm({ reporterName: user?.name ?? '', laboratoryId: db.labs[0]?.id, date: new Date().toISOString(), category: 'hardware', priority: 'Normal', blocksPracticum: false });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.title || !form.description) { toast('Judul dan deskripsi wajib diisi', 'error'); return; }
     // Duplicate detection
     const dup = db.incidents.find((i) => i.title.toLowerCase() === form.title?.toLowerCase() && i.status !== 'Ditutup');
@@ -67,6 +71,7 @@ export function IncidentsPage() {
   }
 
   function updateStatus(inc: Incident, status: Incident['status']) {
+    if (!canUpdate) return;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
       if (idx >= 0) {
@@ -80,6 +85,7 @@ export function IncidentsPage() {
   }
 
   function assignTechnician(inc: Incident, tech: string) {
+    if (!canAssign) return;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
       if (idx >= 0) { d.incidents[idx].assignedTechnician = tech; d.incidents[idx].status = 'Ditugaskan'; d.incidents[idx].timeline.push({ status: 'Ditugaskan', at: new Date().toISOString(), by: user?.name ?? 'Admin' }); }
@@ -89,7 +95,7 @@ export function IncidentsPage() {
   }
 
   function addComment() {
-    if (!detail || !commentText.trim()) return;
+    if (!canUpdate || !detail || !commentText.trim()) return;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === detail.id);
       if (idx >= 0) d.incidents[idx].comments.push({ at: new Date().toISOString(), by: user?.name ?? 'User', text: commentText });
@@ -99,6 +105,7 @@ export function IncidentsPage() {
   }
 
   function convertToWO(inc: Incident) {
+    if (!canUpdate || !canCreateWorkOrder) return;
     mutate((d) => {
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
@@ -114,7 +121,7 @@ export function IncidentsPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.incidents = d.incidents.filter((i) => i.id !== confirmDel.id); });
     toast('Tiket dihapus', 'success');
     setConfirmDel(null);
@@ -211,10 +218,10 @@ export function IncidentsPage() {
                 ))}
                 {detail.comments.length === 0 && <p className="text-xs text-ink-muted">Belum ada komentar</p>}
               </div>
-              <div className="mt-2 flex gap-2">
+              {canUpdate && <div className="mt-2 flex gap-2">
                 <Input placeholder="Tambah komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addComment()} />
                 <Button size="sm" icon={<MessageSquare className="h-4 w-4" />} onClick={addComment}>Kirim</Button>
-              </div>
+              </div>}
             </div>
 
             <div className="space-y-2 border-t border-base-700 pt-4">
@@ -223,8 +230,8 @@ export function IncidentsPage() {
                 {canAssign && (
                   <Select value="" onChange={(e) => e.target.value && assignTechnician(detail, e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: `Assign ke ${t}` }))} placeholder="Assign Teknisi" />
                 )}
-                <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />
-                {canAssign && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
+                {canUpdate && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />}
+                {canUpdate && canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
                 {canDelete && <Button variant="danger" size="sm" onClick={() => { setConfirmDel(detail); setDetail(null); }}>Hapus</Button>}
               </div>
             </div>
