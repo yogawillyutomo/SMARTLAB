@@ -3,9 +3,9 @@ const VERSION_KEY = `${PREFIX}version`;
 const DATA_KEY = `${PREFIX}data`;
 const CURRENT_VERSION = '1.0.0';
 
-export function readStorage<T>(key: string, fallback: T): T {
+function readFromStorage<T>(storage: Storage, key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(`${PREFIX}${key}`);
+    const raw = storage.getItem(`${PREFIX}${key}`);
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
   } catch {
@@ -13,16 +13,44 @@ export function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeStorage<T>(key: string, value: T): void {
+function writeToStorage<T>(storage: Storage, key: string, value: T): void {
   try {
-    localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+    storage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
   } catch (e) {
     console.error('Failed to write storage', e);
   }
 }
 
+function removeFromStorage(storage: Storage, key: string): void {
+  try {
+    storage.removeItem(`${PREFIX}${key}`);
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
+export function readStorage<T>(key: string, fallback: T): T {
+  return readFromStorage(localStorage, key, fallback);
+}
+
+export function writeStorage<T>(key: string, value: T): void {
+  writeToStorage(localStorage, key, value);
+}
+
+export function readSessionStorage<T>(key: string, fallback: T): T {
+  return readFromStorage(sessionStorage, key, fallback);
+}
+
+export function writeSessionStorage<T>(key: string, value: T): void {
+  writeToStorage(sessionStorage, key, value);
+}
+
 export function removeStorage(key: string): void {
-  localStorage.removeItem(`${PREFIX}${key}`);
+  removeFromStorage(localStorage, key);
+}
+
+export function removeSessionStorage(key: string): void {
+  removeFromStorage(sessionStorage, key);
 }
 
 export function clearAllStorage(): void {

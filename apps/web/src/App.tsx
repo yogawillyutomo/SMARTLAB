@@ -7,7 +7,9 @@ import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { MonitoringPage } from '@/pages/MonitoringPage';
 import { Toaster } from '@/components/ui/Toaster';
+import { useAuthStore } from '@/stores/authStore';
 import { useUIStore, applyTheme } from '@/stores/uiStore';
+import { useAppData } from '@/hooks/useAppData';
 
 // Pages
 import { LaboratoriesPage, LaboratoryDetailPage, LaboratoryLayoutPage } from '@/pages/LaboratoriesPage';
@@ -77,18 +79,44 @@ function AppRoutes() {
   );
 }
 
-export default function App() {
-  const hydrate = useUIStore((s) => s.hydrate);
-  useEffect(() => {
-    hydrate();
-    applyTheme('dark');
-  }, [hydrate]);
+function AppBootstrap() {
+  const { db, ready } = useAppData();
+  const hydrateAuth = useAuthStore((state) => state.hydrate);
+  const isAuthHydrated = useAuthStore((state) => state.isHydrated);
+  const hydrateUI = useUIStore((state) => state.hydrate);
 
+  useEffect(() => {
+    hydrateUI();
+    applyTheme('dark');
+  }, [hydrateUI]);
+
+  useEffect(() => {
+    if (ready && !isAuthHydrated) {
+      hydrateAuth(db.users);
+    }
+  }, [db.users, hydrateAuth, isAuthHydrated, ready]);
+
+  if (!ready || !isAuthHydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-base-900 text-sm text-ink-muted">
+        Memuat SmartLab...
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <AppRoutes />
+      <Toaster />
+    </>
+  );
+}
+
+export default function App() {
   return (
     <AppDataProvider>
       <BrowserRouter>
-        <AppRoutes />
-        <Toaster />
+        <AppBootstrap />
       </BrowserRouter>
     </AppDataProvider>
   );
