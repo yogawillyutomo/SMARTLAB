@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Play, Square, Plus, AlertTriangle, Download, Clock } from 'lucide-react';
+import { BookOpen, Play, Square, Plus, AlertTriangle, Download } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';

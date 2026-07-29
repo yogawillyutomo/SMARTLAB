@@ -3,7 +3,7 @@ import { generateSeedData } from '@/data/seed';
 import { STORAGE_KEYS, getStoredVersion, readStorage, setStoredVersion, writeStorage } from './storage';
 
 // App database stored in localStorage as a single blob for simplicity of backup/restore
-export interface AppDB extends SeedData {}
+export type AppDB = SeedData;
 
 const DB_KEY = 'db';
 

@@ -14,6 +14,7 @@ export function RoleGuard({ roles, children, fallback = null }: { roles: string[
   return <>{children}</>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Permission hooks stay next to the guards that expose the same permission behavior.
 export function usePermission(module: ModuleKey, action: PermissionAction = 'view'): boolean {
   const user = useAuthStore((s) => s.user);
   return user ? can(user.role, module, action) : false;

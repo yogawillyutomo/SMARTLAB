@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ShieldCheck, Plus, Pencil, Trash2, Play, Download, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
-import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -20,7 +19,6 @@ const CONDITIONS: AssetCondition[] = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'R
 
 export function MaintenancePage() {
   const { db, mutate } = useAppData();
-  const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('maintenance', 'create');
   const [tab, setTab] = useState<'plans' | 'executions'>('plans');
   const [open, setOpen] = useState(false);

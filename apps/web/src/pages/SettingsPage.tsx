@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Settings as SettingsIcon, Download, Upload, Trash2, RefreshCw, Palette, Database, Bell, Monitor, Moon, Sun, Save, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, Download, Upload, Trash2, RefreshCw, Palette, Database, Bell, Monitor, Moon, Sun, Save } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore, type ThemeMode, type AccentColor } from '@/stores/uiStore';
 import { PageHeader } from '@/components/common/PageHeader';

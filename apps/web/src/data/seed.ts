@@ -100,7 +100,7 @@ function generateDevices(): Device[] {
 
       // Deterministic status distribution
       let status: Device['status'] = 'Online';
-      const r = rng();
+      rng();
       if (labIdx === 0) {
         if (n === 5) status = 'Critical';
         else if (n === 12) status = 'Warning';

@@ -58,6 +58,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- The provider and its consumer hook form one intentionally shared context module.
 export function useAppData() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useAppData must be used within AppDataProvider');

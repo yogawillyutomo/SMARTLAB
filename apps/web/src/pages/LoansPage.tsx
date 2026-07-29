@@ -7,13 +7,13 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import { Badge, StatusBadge, ConditionBadge } from '@/components/ui/Badge';
+import { StatusBadge, ConditionBadge } from '@/components/ui/Badge';
 import { FormDialog } from '@/components/forms/FormDialog';
 import { Drawer } from '@/components/ui/Drawer';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';
-import { downloadCSV, relativeTime } from '@/utils';
+import { downloadCSV } from '@/utils';
 import type { Loan, AssetCondition } from '@/types';
 
 const CONDITIONS: AssetCondition[] = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'];

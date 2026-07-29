@@ -12,8 +12,6 @@ import {
   Pie,
   Cell,
   Legend,
-  BarChart,
-  Bar,
 } from 'recharts';
 import {
   FlaskConical,
@@ -27,12 +25,8 @@ import {
   RefreshCw,
   Download,
   Plus,
-  TrendingUp,
-  Clock,
   Wrench,
   AlertCircle,
-  ChevronRight,
-  CheckCircle2,
 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
@@ -45,17 +39,6 @@ import { Button } from '@/components/ui/Button';
 import { LoadingState, EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { relativeTime, cn, downloadCSV } from '@/utils';
-import type { DeviceStatus } from '@/types';
-
-const STATUS_COLORS: Record<DeviceStatus, string> = {
-  Online: '#10B981',
-  Offline: '#64748B',
-  Warning: '#F59E0B',
-  Critical: '#EF4444',
-  Maintenance: '#F97316',
-  Reserved: '#3B82F6',
-};
-
 export function DashboardPage() {
   const { db, ready } = useAppData();
   const user = useAuthStore((s) => s.user);

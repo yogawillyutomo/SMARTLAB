@@ -6,12 +6,10 @@ import {
   Bell,
   Calendar,
   ChevronDown,
-  User,
   Users,
   LogOut,
   Settings,
   RefreshCw,
-  Download,
   Plus,
   Monitor,
   FlaskConical,
@@ -114,7 +112,7 @@ function useGlobalSearch() {
 }
 
 export function AppTopbar() {
-  const { setMobileSidebar, activeLabId, setActiveLab, academicYear, semester, setCommandOpen, commandOpen } = useUIStore();
+  const { setMobileSidebar, activeLabId, setActiveLab, academicYear, semester, setCommandOpen } = useUIStore();
   const { user, switchRole, logout } = useAuthStore();
   const { db, refresh } = useAppData();
   const navigate = useNavigate();
@@ -132,7 +130,6 @@ export function AppTopbar() {
   const searchResults = searchOpen ? searchFn(searchQuery) : [];
 
   const unreadNotifs = db.notifications.filter((n) => !n.read);
-  const activeLab = db.labs.find((l) => l.id === activeLabId);
 
   // Cmd+K shortcut
   useEffect(() => {
