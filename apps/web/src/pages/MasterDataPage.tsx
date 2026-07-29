@@ -15,6 +15,7 @@ import { cn } from '@/utils';
 export function MasterDataPage() {
   const { db } = useAppData();
   const canCreate = usePermission('master-data', 'create');
+  const canUpdate = usePermission('master-data', 'update');
   const canDelete = usePermission('master-data', 'delete');
   const [tab, setTab] = useState('kategori aset');
 
@@ -45,10 +46,11 @@ export function MasterDataPage() {
   const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState<{ name: string; code?: string }>({ name: '' });
 
-  function openCreate() { setEditing(null); setForm({ name: '' }); setOpen(true); }
-  function openEdit(item: { id: string; name: string; code?: string }) { setEditing(item); setForm(item); setOpen(true); }
+  function openCreate() { if (!canCreate) return; setEditing(null); setForm({ name: '' }); setOpen(true); }
+  function openEdit(item: { id: string; name: string; code?: string }) { if (!canUpdate) return; setEditing(item); setForm(item); setOpen(true); }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name) { toast('Nama wajib diisi', 'error'); return; }
     toast(editing ? 'Data diperbarui (demo)' : 'Data ditambahkan (demo)', 'success');
     setOpen(false);
@@ -87,7 +89,7 @@ export function MasterDataPage() {
                     {item.code && <p className="text-xs text-ink-muted">{item.code}</p>}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    {canCreate && <button onClick={() => openEdit(item)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-3.5 w-3.5" /></button>}
+                    {canUpdate && <button onClick={() => openEdit(item)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-3.5 w-3.5" /></button>}
                     {canDelete && <button onClick={() => setConfirmDel(item)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>}
                   </div>
                 </div>

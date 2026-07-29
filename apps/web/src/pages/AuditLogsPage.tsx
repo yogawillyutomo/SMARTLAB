@@ -35,6 +35,7 @@ export function AuditLogsPage() {
   }), [db.auditLogs, filters]);
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('audit-log.csv', filtered.map((a) => ({ Waktu: a.at, Pengguna: a.userName, Role: a.role, Modul: a.module, Aksi: a.action, Objek: a.object, NilaiLama: a.oldValue ?? '', NilaiBaru: a.newValue ?? '', Device: a.device })));
     toast('Audit log berhasil diexport', 'success');
   }

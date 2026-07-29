@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { canView, type ModuleKey } from '@/lib/permissions';
+import { usePermissionStore } from '@/stores/permissionStore';
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isHydrated } = useAuthStore();
@@ -21,7 +22,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 export function RequirePermission({ module, children }: { module: ModuleKey; children: ReactNode }) {
   const { user } = useAuthStore();
-  if (!user || !canView(user.role, module)) {
+  const permissions = usePermissionStore((s) => s.permissions);
+  if (!user || !canView(permissions, user.role, module)) {
     return <NoAccess />;
   }
   return <>{children}</>;

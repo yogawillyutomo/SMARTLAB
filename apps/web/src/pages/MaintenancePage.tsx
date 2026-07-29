@@ -20,6 +20,9 @@ const CONDITIONS: AssetCondition[] = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'R
 export function MaintenancePage() {
   const { db, mutate } = useAppData();
   const canCreate = usePermission('maintenance', 'create');
+  const canUpdate = usePermission('maintenance', 'update');
+  const canDelete = usePermission('maintenance', 'delete');
+  const canExport = usePermission('maintenance', 'export');
   const [tab, setTab] = useState<'plans' | 'executions'>('plans');
   const [open, setOpen] = useState(false);
   const [execOpen, setExecOpen] = useState(false);
@@ -42,13 +45,15 @@ export function MaintenancePage() {
   }, [db.maintenance]);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ assetCategory: 'Komputer', laboratoryId: db.labs[0]?.id, frequency: 'bulanan', technician: 'Andi Wijaya', status: 'active', checklist: [], nextSchedule: new Date().toISOString().split('T')[0] });
     setOpen(true);
   }
-  function openEdit(p: MaintenancePlan) { setEditing(p); setForm(p); setOpen(true); }
+  function openEdit(p: MaintenancePlan) { if (!canUpdate) return; setEditing(p); setForm(p); setOpen(true); }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name) { toast('Nama rencana wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -63,18 +68,20 @@ export function MaintenancePage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.maintenance.plans = d.maintenance.plans.filter((p) => p.id !== confirmDel.id); });
     toast('Rencana dihapus', 'success');
     setConfirmDel(null);
   }
 
   function openExecution(plan?: MaintenancePlan) {
+    if (!canCreate) return;
     setExecForm({ laboratoryId: plan?.laboratoryId ?? db.labs[0]?.id, technician: plan?.technician ?? 'Andi Wijaya', date: new Date().toISOString().split('T')[0], checklist: plan?.checklist.map((item) => ({ item, done: false })) ?? [], conditionBefore: 'Baik', conditionAfter: 'Baik', nextSchedule: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], planId: plan?.id });
     setExecOpen(true);
   }
 
   function saveExecution() {
+    if (!canCreate) return;
     if (!execForm.laboratoryId) { toast('Pilih lab', 'error'); return; }
     mutate((d) => {
       d.maintenance.executions.unshift({ ...execForm, id: `me-${Date.now()}`, assetCode: execForm.assetCode ?? '', findings: execForm.findings ?? '', action: execForm.action ?? '', spareParts: [] } as MaintenanceExecution);
@@ -88,6 +95,7 @@ export function MaintenancePage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('maintenance-plans.csv', db.maintenance.plans.map((p) => ({ Nama: p.name, Lab: db.labs.find((l) => l.id === p.laboratoryId)?.name, Frekuensi: p.frequency, Teknisi: p.technician, Jadwal: p.nextSchedule, Status: p.status })));
   }
 
@@ -101,7 +109,7 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader title="Preventive Maintenance" description="Rencana dan eksekusi maintenance berkala" icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && tab === 'plans' && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Rencana Baru</Button>}
           {canCreate && tab === 'executions' && <Button size="sm" icon={<Play className="h-4 w-4" />} onClick={() => openExecution()}>Eksekusi Baru</Button>}
         </>}
@@ -143,9 +151,9 @@ export function MaintenancePage() {
                     <div className="space-y-1">{p.checklist.slice(0, 3).map((c, i) => <div key={i} className="flex items-center gap-2 text-xs text-ink-secondary"><CheckCircle2 className="h-3 w-3 text-ink-muted" />{c}</div>)}</div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-base-700/60">
-                    <Button size="sm" variant="success" className="flex-1" icon={<Play className="h-3.5 w-3.5" />} onClick={() => openExecution(p)}>Eksekusi</Button>
-                    {canCreate && <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => openEdit(p)} />}
-                    {canCreate && <Button size="sm" variant="ghost" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setConfirmDel(p)} />}
+                    {canCreate && <Button size="sm" variant="success" className="flex-1" icon={<Play className="h-3.5 w-3.5" />} onClick={() => openExecution(p)}>Eksekusi</Button>}
+                    {canUpdate && <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => openEdit(p)} />}
+                    {canDelete && <Button size="sm" variant="ghost" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setConfirmDel(p)} />}
                   </div>
                 </CardContent>
               </Card>

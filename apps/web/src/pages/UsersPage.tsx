@@ -21,7 +21,9 @@ const ROLES: RoleName[] = ['Super Admin', 'Admin Lab', 'Kepala Lab', 'Teknisi', 
 export function UsersPage() {
   const { db, mutate } = useAppData();
   const canCreate = usePermission('users', 'create');
+  const canUpdate = usePermission('users', 'update');
   const canDelete = usePermission('users', 'delete');
+  const canExport = usePermission('users', 'export');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<User | null>(null);
   const [confirmDel, setConfirmDel] = useState<User | null>(null);
@@ -32,13 +34,15 @@ export function UsersPage() {
   const filtered = db.users.filter((u) => filterRole === 'all' || u.role === filterRole);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ role: 'Siswa', status: 'active' });
     setOpen(true);
   }
-  function openEdit(u: User) { setEditing(u); setForm(u); setOpen(true); }
+  function openEdit(u: User) { if (!canUpdate) return; setEditing(u); setForm(u); setOpen(true); }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name || !form.email) { toast('Nama dan email wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -53,22 +57,25 @@ export function UsersPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.users = d.users.filter((u) => u.id !== confirmDel.id); });
     toast('Pengguna dihapus', 'success');
     setConfirmDel(null);
   }
 
   function toggleStatus(u: User) {
+    if (!canUpdate) return;
     mutate((d) => { const idx = d.users.findIndex((x) => x.id === u.id); if (idx >= 0) d.users[idx].status = d.users[idx].status === 'active' ? 'inactive' : 'active'; });
     toast('Status pengguna diubah', 'success');
   }
 
   function resetPassword(u: User) {
+    if (!canUpdate) return;
     toast(`Password ${u.name} direset ke default (demo)`, 'info');
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('pengguna.csv', db.users.map((u) => ({ Nama: u.name, Email: u.email, Role: u.role, Unit: u.unit ?? '', Status: u.status })));
   }
 
@@ -86,9 +93,9 @@ export function UsersPage() {
     { key: 'lastLogin', header: 'Terakhir Login', render: (u) => u.lastLogin ? relativeTime(u.lastLogin) : '-' },
     { key: 'actions', header: 'Aksi', render: (u) => (
       <div className="flex gap-1">
-        {canCreate && <button onClick={() => openEdit(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => resetPassword(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Reset Password"><KeyRound className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => toggleStatus(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Aktif/Nonaktif"><Power className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => openEdit(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => resetPassword(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Reset Password"><KeyRound className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => toggleStatus(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Aktif/Nonaktif"><Power className="h-4 w-4" /></button>}
         {canDelete && <button onClick={() => setConfirmDel(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
     ) },
@@ -100,7 +107,7 @@ export function UsersPage() {
     <div className="space-y-6">
       <PageHeader title="Pengguna" description="Manajemen pengguna sistem" icon={<UsersIcon className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Pengguna</Button>}
         </>}
       />

@@ -22,6 +22,7 @@ export function BookingsPage() {
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('bookings', 'create');
   const canApprove = usePermission('bookings', 'approve');
+  const canExport = usePermission('bookings', 'export');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [rejectOpen, setRejectOpen] = useState<Booking | null>(null);
@@ -106,6 +107,7 @@ export function BookingsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('booking-lab.csv', db.bookings.map((b) => ({
       Pemohon: b.requesterName, Lab: db.labs.find((l) => l.id === b.laboratoryId)?.name, Tanggal: b.date, Jam: `${b.startTime}-${b.endTime}`, Kegiatan: b.activity, Status: b.status,
     })));
@@ -121,7 +123,7 @@ export function BookingsPage() {
         icon={<CalendarClock className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Booking Baru</Button>}
           </>
         }

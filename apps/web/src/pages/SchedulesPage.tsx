@@ -21,7 +21,9 @@ export function SchedulesPage() {
   const { db, mutate } = useAppData();
   const { academicYear, semester } = useUIStore();
   const canCreate = usePermission('schedules', 'create');
+  const canUpdate = usePermission('schedules', 'update');
   const canDelete = usePermission('schedules', 'delete');
+  const canExport = usePermission('schedules', 'export');
   const [view, setView] = useState<'week' | 'day' | 'list'>('week');
   const [weekOffset, setWeekOffset] = useState(0);
   const [filters, setFilters] = useState({ lab: 'all', className: 'all', teacher: 'all', subject: 'all' });
@@ -45,11 +47,13 @@ export function SchedulesPage() {
   const subjects = [...new Set(db.schedules.map((s) => s.subject))];
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ day: 'Senin', startTime: '07:00', endTime: '09:30', lessonHours: 3, laboratoryId: db.labs[0]?.id, activityType: 'Praktikum', status: 'Tetap', semester });
     setOpen(true);
   }
   function openEdit(s: Schedule) {
+    if (!canUpdate) return;
     setEditing(s);
     setForm(s);
     setOpen(true);
@@ -70,6 +74,7 @@ export function SchedulesPage() {
   }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.laboratoryId || !form.className || !form.teacherName || !form.subject) {
       toast('Lengkapi semua field wajib', 'error');
       return;
@@ -92,6 +97,7 @@ export function SchedulesPage() {
   }
 
   function duplicate(s: Schedule) {
+    if (!canCreate) return;
     mutate((d) => {
       d.schedules.push({ ...s, id: `sch-${Date.now()}`, day: s.day, status: 'Pengganti' });
     });
@@ -99,7 +105,7 @@ export function SchedulesPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => {
       d.schedules = d.schedules.filter((s) => s.id !== confirmDel.id);
     });
@@ -108,6 +114,7 @@ export function SchedulesPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('jadwal-lab.csv', filtered.map((s) => ({
       Hari: s.day, Tanggal: s.date, Jam: `${s.startTime}-${s.endTime}`, Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status,
     })));
@@ -121,8 +128,8 @@ export function SchedulesPage() {
         icon={<CalendarDays className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
-            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
+            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal</Button>}
           </>
         }
@@ -174,7 +181,7 @@ export function SchedulesPage() {
                     <td className="px-4 py-3 text-ink-secondary">{s.subject}</td>
                     <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
                     <td className="px-4 py-3"><div className="flex gap-1">
-                      {canCreate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-3.5 w-3.5" /></button>}
+                      {canUpdate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-3.5 w-3.5" /></button>}
                       {canCreate && <button onClick={() => duplicate(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Copy className="h-3.5 w-3.5" /></button>}
                       {canDelete && <button onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>}
                     </div></td>
@@ -196,7 +203,7 @@ export function SchedulesPage() {
                     <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
                   ) : (
                     daySchedules.map((s) => (
-                      <button key={s.id} onClick={() => canCreate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-blue/40">
+                      <button key={s.id} onClick={() => canUpdate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-blue/40">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-ink-primary">{s.startTime} - {s.endTime}</span>
                           <StatusBadge status={s.status} />

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { BarChart3, Download, Printer, FileText, TrendingUp, Activity, Wrench, Package } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useAppData } from '@/hooks/useAppData';
+import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +25,7 @@ const REPORT_CATS = [
 
 export function ReportsPage() {
   const { db } = useAppData();
+  const canExport = usePermission('reports', 'export');
   const [active, setActive] = useState('usage');
   const [dateFrom, setDateFrom] = useState('2026-07-01');
   const [dateTo, setDateTo] = useState('2026-07-31');
@@ -57,6 +59,7 @@ export function ReportsPage() {
   }, [db.workOrders]);
 
   function exportCSV() {
+    if (!canExport) return;
     const data: Record<string, unknown>[] = [];
     if (active === 'usage') usageData.forEach((d) => data.push(d));
     else if (active === 'incidents') db.incidents.forEach((i) => data.push({ Tiket: i.ticketNumber, Judul: i.title, Status: i.status, Prioritas: i.priority }));
@@ -77,8 +80,8 @@ export function ReportsPage() {
     <div className="space-y-6">
       <PageHeader title="Laporan dan Analitik" description="Pusat laporan laboratorium" icon={<BarChart3 className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export CSV</Button>
-          <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export CSV</Button>}
+          {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
         </>}
       />
 

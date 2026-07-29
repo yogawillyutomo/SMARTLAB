@@ -18,32 +18,61 @@ import type { WorkOrder, WorkOrderStatus, Priority, WorkOrderSparePart } from '@
 
 const STATUSES: WorkOrderStatus[] = ['Draft', 'Assigned', 'In Progress', 'On Hold', 'Waiting Part', 'Completed', 'Verified', 'Cancelled'];
 const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
+type WorkOrderTransitionPermission = 'assign' | 'update' | 'approve';
+type WorkOrderPermissions = Record<WorkOrderTransitionPermission, boolean>;
+
+const WORK_ORDER_TRANSITIONS: Record<WorkOrderStatus, Partial<Record<WorkOrderStatus, WorkOrderTransitionPermission>>> = {
+  Draft: { Assigned: 'assign', Cancelled: 'update' },
+  Assigned: { 'In Progress': 'update', Cancelled: 'update' },
+  'In Progress': { 'On Hold': 'update', 'Waiting Part': 'update', Completed: 'update', Cancelled: 'update' },
+  'On Hold': { 'In Progress': 'update', 'Waiting Part': 'update', Cancelled: 'update' },
+  'Waiting Part': { 'In Progress': 'update', Completed: 'update', Cancelled: 'update' },
+  Completed: { Verified: 'approve' },
+  Verified: {},
+  Cancelled: {},
+};
+
+function canTransitionToStatus(workOrder: WorkOrder, target: WorkOrderStatus, permissions: WorkOrderPermissions) {
+  const requiredPermission = WORK_ORDER_TRANSITIONS[workOrder.status][target];
+  return requiredPermission ? permissions[requiredPermission] : false;
+}
 
 export function WorkOrdersPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('work-orders', 'create');
+  const canUpdate = usePermission('work-orders', 'update');
+  const canAssignWorkOrder = usePermission('work-orders', 'assign');
+  const canApproveWorkOrder = usePermission('work-orders', 'approve');
+  const canExport = usePermission('work-orders', 'export');
+  // Spare parts mutate stock, so this intentionally requires stock.create in addition to work-orders.update.
+  const canUseSparePart = usePermission('stock', 'create');
   const [view, setView] = useState<'table' | 'board' | 'calendar'>('table');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<WorkOrder | null>(null);
   const [partOpen, setPartOpen] = useState<WorkOrder | null>(null);
+  const [assignmentOpen, setAssignmentOpen] = useState<WorkOrder | null>(null);
+  const [assignmentTechnician, setAssignmentTechnician] = useState('');
   const [partForm, setPartForm] = useState<{ stockItemId: string; name: string; quantity: number }>({ stockItemId: '', name: '', quantity: 1 });
   const [form, setForm] = useState<Partial<WorkOrder>>({});
+  const workflowPermissions: WorkOrderPermissions = { assign: canAssignWorkOrder, update: canUpdate, approve: canApproveWorkOrder };
 
   function openCreate() {
-    setForm({ laboratoryId: db.labs[0]?.id, technician: 'Andi Wijaya', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
+    if (!canCreate) return;
+    setForm({ laboratoryId: db.labs[0]?.id, technician: '', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.laboratoryId) { toast('Pilih lab', 'error'); return; }
     mutate((d) => {
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
-        id: `wo-${Date.now()}`, woNumber: num, laboratoryId: form.laboratoryId ?? '', technician: form.technician ?? 'Andi Wijaya',
+        id: `wo-${Date.now()}`, woNumber: num, laboratoryId: form.laboratoryId ?? '', technician: '',
         priority: form.priority ?? 'Normal', diagnosis: form.diagnosis ?? '', action: form.action ?? '', scheduledDate: form.scheduledDate ?? '',
-        spareParts: [], cost: form.cost ?? 0, status: form.status ?? 'Draft', notes: form.notes, assetCode: form.assetCode,
-        timeline: [{ status: form.status ?? 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
+        spareParts: [], cost: form.cost ?? 0, status: 'Draft', notes: form.notes, assetCode: form.assetCode,
+        timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
       });
     });
     toast('Work order dibuat', 'success');
@@ -51,27 +80,61 @@ export function WorkOrdersPage() {
   }
 
   function updateStatus(wo: WorkOrder, status: WorkOrderStatus) {
+    if (status === 'Assigned' || !canTransitionToStatus(wo, status, workflowPermissions)) return;
+    let changed = false;
     mutate((d) => {
       const idx = d.workOrders.findIndex((w) => w.id === wo.id);
-      if (idx >= 0) {
-        d.workOrders[idx].status = status;
-        d.workOrders[idx].timeline.push({ status, at: new Date().toISOString(), by: user?.name ?? 'Admin' });
-        if (status === 'In Progress' && !d.workOrders[idx].startTime) d.workOrders[idx].startTime = new Date().toISOString();
-        if ((status === 'Completed' || status === 'Verified') && !d.workOrders[idx].endTime) d.workOrders[idx].endTime = new Date().toISOString();
+      if (idx >= 0 && canTransitionToStatus(d.workOrders[idx], status, workflowPermissions)) {
+        const updated = d.workOrders[idx];
+        const at = new Date().toISOString();
+        updated.status = status;
+        updated.timeline.push({ status, at, by: user?.name ?? 'Admin' });
+        if (status === 'In Progress' && !updated.startTime) updated.startTime = at;
+        if ((status === 'Completed' || status === 'Verified') && !updated.endTime) updated.endTime = at;
         // Update asset condition when completed
-        if (status === 'Verified' && d.workOrders[idx].assetCode) {
-          const aIdx = d.assets.findIndex((a) => a.assetCode === d.workOrders[idx].assetCode);
+        if (status === 'Verified' && updated.assetCode) {
+          const aIdx = d.assets.findIndex((a) => a.assetCode === updated.assetCode);
           if (aIdx >= 0) { d.assets[aIdx].condition = 'Baik'; d.assets[aIdx].status = 'Aktif'; }
-          const dvIdx = d.devices.findIndex((dv) => dv.assetCode === d.workOrders[idx].assetCode);
+          const dvIdx = d.devices.findIndex((dv) => dv.assetCode === updated.assetCode);
           if (dvIdx >= 0) { d.devices[dvIdx].status = 'Online'; d.devices[dvIdx].lastHeartbeat = new Date().toISOString(); }
         }
+        changed = true;
       }
     });
+    if (!changed) return;
     setDetail((d) => d && d.id === wo.id ? { ...d, status } : d);
     toast(`Status diubah menjadi ${status}`, 'success');
   }
 
+  function openAssignment(wo: WorkOrder) {
+    if (!canTransitionToStatus(wo, 'Assigned', workflowPermissions)) return;
+    setAssignmentOpen(wo);
+    setAssignmentTechnician('');
+  }
+
+  function assignWorkOrder() {
+    if (!assignmentOpen || !assignmentTechnician.trim() || !canAssignWorkOrder) return;
+    let changed = false;
+    const assignedAt = new Date().toISOString();
+    mutate((d) => {
+      const idx = d.workOrders.findIndex((w) => w.id === assignmentOpen.id);
+      if (idx >= 0 && canTransitionToStatus(d.workOrders[idx], 'Assigned', workflowPermissions)) {
+        const updated = d.workOrders[idx];
+        updated.technician = assignmentTechnician;
+        updated.status = 'Assigned';
+        updated.timeline.push({ status: 'Assigned', at: assignedAt, by: user?.name ?? 'Admin' });
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    setDetail((d) => d && d.id === assignmentOpen.id ? { ...d, technician: assignmentTechnician, status: 'Assigned', timeline: [...d.timeline, { status: 'Assigned', at: assignedAt, by: user?.name ?? 'Admin' }] } : d);
+    setAssignmentOpen(null);
+    setAssignmentTechnician('');
+    toast(`Work order ditugaskan ke ${assignmentTechnician}`, 'success');
+  }
+
   function useSparePart() {
+    if (!canUpdate || !canUseSparePart) return;
     if (!partOpen || !partForm.stockItemId || partForm.quantity <= 0) { toast('Lengkapi data spare part', 'error'); return; }
     const item = db.stock.items.find((s) => s.id === partForm.stockItemId);
     if (!item) return;
@@ -95,6 +158,7 @@ export function WorkOrdersPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('work-order.csv', db.workOrders.map((w) => ({ WO: w.woNumber, Lab: db.labs.find((l) => l.id === w.laboratoryId)?.name, Teknisi: w.technician, Prioritas: w.priority, Status: w.status, Biaya: w.cost })));
   }
 
@@ -109,12 +173,15 @@ export function WorkOrdersPage() {
   ];
 
   const boardColumns = STATUSES.filter((s) => db.workOrders.some((w) => w.status === s));
+  const availableStatusOptions = detail
+    ? STATUSES.filter((status) => status !== detail.status && status !== 'Assigned' && canTransitionToStatus(detail, status, workflowPermissions)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
+    : [];
 
   return (
     <div className="space-y-6">
       <PageHeader title="Work Order Teknisi" description="Manajemen pekerjaan perbaikan teknisi" icon={<Wrench className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>WO Baru</Button>}
         </>}
       />
@@ -185,10 +252,10 @@ export function WorkOrdersPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
           <Input label="Aset (opsional)" value={form.assetCode ?? ''} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
-          <Select label="Teknisi" value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: t }))} />
+          <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted">Teknisi ditentukan saat assignment.</div>
           <Select label="Prioritas" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} options={PRIORITIES.map((p) => ({ value: p, label: p }))} />
           <Input label="Jadwal" type="date" value={form.scheduledDate ?? ''} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
-          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })} options={STATUSES.map((s) => ({ value: s, label: s }))} />
+          <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted"><span className="block text-xs text-ink-muted">Status awal</span><span className="font-medium text-ink-primary">Draft</span></div>
           <div className="sm:col-span-2"><Textarea label="Diagnosis" value={form.diagnosis ?? ''} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} /></div>
           <div className="sm:col-span-2"><Textarea label="Tindakan" value={form.action ?? ''} onChange={(e) => setForm({ ...form, action: e.target.value })} /></div>
         </div>
@@ -228,12 +295,13 @@ export function WorkOrdersPage() {
             <div className="space-y-2 border-t border-base-700 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi</p>
               <div className="flex flex-wrap gap-2">
-                {detail.status === 'Assigned' && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} onClick={() => updateStatus(detail, 'In Progress')}>Mulai</Button>}
-                {detail.status === 'In Progress' && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
-                <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>
-                {!['Completed', 'Verified', 'Cancelled'].includes(detail.status) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
-                {detail.status === 'Completed' && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
-                <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />
+                {canTransitionToStatus(detail, 'Assigned', workflowPermissions) && <Button size="sm" variant="secondary" onClick={() => openAssignment(detail)}>Assign Teknisi</Button>}
+                {canTransitionToStatus(detail, 'In Progress', workflowPermissions) && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} onClick={() => updateStatus(detail, 'In Progress')}>Mulai</Button>}
+                {canTransitionToStatus(detail, 'On Hold', workflowPermissions) && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
+                {canUpdate && canUseSparePart && <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>}
+                {canTransitionToStatus(detail, 'Completed', workflowPermissions) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
+                {canTransitionToStatus(detail, 'Verified', workflowPermissions) && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
+                {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={availableStatusOptions} placeholder="Ubah Status" />}
               </div>
             </div>
           </div>
@@ -245,6 +313,10 @@ export function WorkOrdersPage() {
           <Select label="Spare Part" value={partForm.stockItemId} onChange={(e) => setPartForm({ ...partForm, stockItemId: e.target.value })} options={db.stock.items.map((s) => ({ value: s.id, label: `${s.name} (stok: ${s.quantity} ${s.unit})` }))} />
           <Input label="Jumlah" type="number" value={partForm.quantity} onChange={(e) => setPartForm({ ...partForm, quantity: Number(e.target.value) })} />
         </div>
+      </FormDialog>
+
+      <FormDialog open={Boolean(assignmentOpen)} onClose={() => setAssignmentOpen(null)} title="Assign Teknisi" onSubmit={assignWorkOrder} size="md" submitLabel="Assign">
+        <Select label="Teknisi" value={assignmentTechnician} onChange={(e) => setAssignmentTechnician(e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((technician) => ({ value: technician, label: technician }))} placeholder="Pilih Teknisi" />
       </FormDialog>
     </div>
   );

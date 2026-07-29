@@ -22,7 +22,9 @@ export function AssetsPage() {
   const { db, mutate } = useAppData();
   const navigate = useNavigate();
   const canCreate = usePermission('assets', 'create');
+  const canUpdate = usePermission('assets', 'update');
   const canDelete = usePermission('assets', 'delete');
+  const canExport = usePermission('assets', 'export');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [confirmDel, setConfirmDel] = useState<Asset | null>(null);
@@ -46,17 +48,20 @@ export function AssetsPage() {
   const totalValue = db.assets.reduce((sum, a) => sum + a.price, 0);
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ category: 'Komputer', condition: 'Baik', status: 'Aktif', yearAcquired: 2026, fundingSource: 'BOS', price: 0, purchaseDate: new Date().toISOString().split('T')[0], laboratoryId: db.labs[0]?.id });
     setOpen(true);
   }
   function openEdit(a: Asset) {
+    if (!canUpdate) return;
     setEditing(a);
     setForm(a);
     setOpen(true);
   }
 
   function save() {
+    if (editing ? !canUpdate : !canCreate) return;
     if (!form.name || !form.assetCode) { toast('Nama dan kode aset wajib diisi', 'error'); return; }
     mutate((d) => {
       if (editing) {
@@ -71,13 +76,14 @@ export function AssetsPage() {
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.assets = d.assets.filter((a) => a.id !== confirmDel.id); });
     toast('Aset dihapus', 'success');
     setConfirmDel(null);
   }
 
   function doTransfer() {
+    if (!canUpdate) return;
     if (!transferOpen || !transferForm.toLabId) { toast('Pilih lokasi tujuan', 'error'); return; }
     mutate((d) => {
       const idx = d.assets.findIndex((a) => a.id === transferOpen.id);
@@ -96,6 +102,7 @@ export function AssetsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('inventaris-aset.csv', filtered.map((a) => ({
       Kode: a.assetCode, Nama: a.name, Kategori: a.category, Brand: a.brand, Serial: a.serialNumber, Lab: db.labs.find((l) => l.id === a.laboratoryId)?.name, Posisi: a.position, Kondisi: a.condition, Status: a.status, Harga: a.price,
     })));
@@ -122,8 +129,8 @@ export function AssetsPage() {
     { key: 'actions', header: 'Aksi', render: (a) => (
       <div className="flex gap-1">
         <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
-        {canCreate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => { setTransferOpen(a); setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' }); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => { setTransferOpen(a); setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' }); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
         {canDelete && <button onClick={() => setConfirmDel(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
     ) },
@@ -138,8 +145,8 @@ export function AssetsPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" icon={<ScanLine className="h-4 w-4" />} onClick={() => setOpnameOpen(true)}>Stock Opname</Button>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
-            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
+            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Aset</Button>}
           </>
         }
@@ -217,7 +224,7 @@ export function AssetsPage() {
             </div>
             <p className="font-semibold text-ink-primary">{qrOpen.assetCode}</p>
             <p className="text-sm text-ink-muted">{qrOpen.name}</p>
-            <Button variant="secondary" size="sm" className="mt-4" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Label</Button>
+            {canExport && <Button variant="secondary" size="sm" className="mt-4" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Label</Button>}
           </div>
         )}
       </Modal>

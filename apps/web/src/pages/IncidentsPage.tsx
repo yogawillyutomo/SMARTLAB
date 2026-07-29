@@ -20,19 +20,43 @@ import type { Incident, IncidentCategory, Priority } from '@/types';
 const CATEGORIES: IncidentCategory[] = ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas', 'kebersihan', 'keamanan', 'lainnya'];
 const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
 const STATUSES: Incident['status'][] = ['Dilaporkan', 'Diverifikasi', 'Ditugaskan', 'Diproses', 'Menunggu Spare Part', 'Selesai', 'Diuji', 'Ditutup', 'Ditolak'];
+type IncidentTransitionPermission = 'assign' | 'update' | 'approve';
+type IncidentPermissions = Record<IncidentTransitionPermission, boolean>;
+
+const INCIDENT_TRANSITIONS: Record<Incident['status'], Partial<Record<Incident['status'], IncidentTransitionPermission>>> = {
+  Dilaporkan: { Diverifikasi: 'approve', Ditolak: 'approve' },
+  Diverifikasi: { Ditugaskan: 'assign' },
+  Ditugaskan: { Diproses: 'update' },
+  Diproses: { 'Menunggu Spare Part': 'update', Selesai: 'update' },
+  'Menunggu Spare Part': { Diproses: 'update', Selesai: 'update' },
+  Selesai: { Diuji: 'approve' },
+  Diuji: { Ditutup: 'approve' },
+  Ditutup: {},
+  Ditolak: {},
+};
+
+function canTransitionToStatus(incident: Incident, target: Incident['status'], permissions: IncidentPermissions) {
+  const requiredPermission = INCIDENT_TRANSITIONS[incident.status][target];
+  return requiredPermission ? permissions[requiredPermission] : false;
+}
 
 export function IncidentsPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('incidents', 'create');
+  const canUpdate = usePermission('incidents', 'update');
   const canDelete = usePermission('incidents', 'delete');
   const canAssign = usePermission('incidents', 'assign');
+  const canApproveIncident = usePermission('incidents', 'approve');
+  const canExport = usePermission('incidents', 'export');
+  const canCreateWorkOrder = usePermission('work-orders', 'create');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Incident | null>(null);
   const [confirmDel, setConfirmDel] = useState<Incident | null>(null);
   const [commentText, setCommentText] = useState('');
   const [filters, setFilters] = useState({ status: 'all', priority: 'all', category: 'all' });
   const [form, setForm] = useState<Partial<Incident>>({});
+  const workflowPermissions: IncidentPermissions = { assign: canAssign, update: canUpdate, approve: canApproveIncident };
 
   const filtered = useMemo(() => db.incidents.filter((i) => {
     if (filters.status !== 'all' && i.status !== filters.status) return false;
@@ -42,11 +66,13 @@ export function IncidentsPage() {
   }), [db.incidents, filters]);
 
   function openCreate() {
+    if (!canCreate) return;
     setForm({ reporterName: user?.name ?? '', laboratoryId: db.labs[0]?.id, date: new Date().toISOString(), category: 'hardware', priority: 'Normal', blocksPracticum: false });
     setOpen(true);
   }
 
   function save() {
+    if (!canCreate) return;
     if (!form.title || !form.description) { toast('Judul dan deskripsi wajib diisi', 'error'); return; }
     // Duplicate detection
     const dup = db.incidents.find((i) => i.title.toLowerCase() === form.title?.toLowerCase() && i.status !== 'Ditutup');
@@ -67,29 +93,43 @@ export function IncidentsPage() {
   }
 
   function updateStatus(inc: Incident, status: Incident['status']) {
+    if (status === 'Ditugaskan' || !canTransitionToStatus(inc, status, workflowPermissions)) return;
+    let changed = false;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) {
-        d.incidents[idx].status = status;
-        d.incidents[idx].timeline.push({ status, at: new Date().toISOString(), by: user?.name ?? 'Admin' });
-        if (status === 'Ditugaskan' && !d.incidents[idx].assignedTechnician) d.incidents[idx].assignedTechnician = 'Andi Wijaya';
+      if (idx >= 0 && canTransitionToStatus(d.incidents[idx], status, workflowPermissions)) {
+        const updated = d.incidents[idx];
+        updated.status = status;
+        updated.timeline.push({ status, at: new Date().toISOString(), by: user?.name ?? 'Admin' });
+        changed = true;
       }
     });
+    if (!changed) return;
     setDetail((d) => d && d.id === inc.id ? { ...d, status } : d);
     toast(`Status diubah menjadi ${status}`, 'success');
   }
 
   function assignTechnician(inc: Incident, tech: string) {
+    if (!tech.trim() || !canTransitionToStatus(inc, 'Ditugaskan', workflowPermissions)) return;
+    let changed = false;
+    const assignedAt = new Date().toISOString();
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) { d.incidents[idx].assignedTechnician = tech; d.incidents[idx].status = 'Ditugaskan'; d.incidents[idx].timeline.push({ status: 'Ditugaskan', at: new Date().toISOString(), by: user?.name ?? 'Admin' }); }
+      if (idx >= 0 && canTransitionToStatus(d.incidents[idx], 'Ditugaskan', workflowPermissions)) {
+        const updated = d.incidents[idx];
+        updated.assignedTechnician = tech;
+        updated.status = 'Ditugaskan';
+        updated.timeline.push({ status: 'Ditugaskan', at: assignedAt, by: user?.name ?? 'Admin' });
+        changed = true;
+      }
     });
+    if (!changed) return;
     toast(`Tiket ditugaskan ke ${tech}`, 'success');
     setDetail(null);
   }
 
   function addComment() {
-    if (!detail || !commentText.trim()) return;
+    if (!canUpdate || !detail || !commentText.trim()) return;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === detail.id);
       if (idx >= 0) d.incidents[idx].comments.push({ at: new Date().toISOString(), by: user?.name ?? 'User', text: commentText });
@@ -99,28 +139,36 @@ export function IncidentsPage() {
   }
 
   function convertToWO(inc: Incident) {
+    if (!canCreateWorkOrder) return;
+    let changed = false;
+    const workOrderId = `wo-${Date.now()}`;
+    const createdAt = new Date().toISOString();
     mutate((d) => {
+      const incident = d.incidents.find((item) => item.id === inc.id);
+      if (!incident || incident.workOrderId) return;
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
-        id: `wo-${Date.now()}`, woNumber: num, incidentId: inc.id, assetCode: inc.assetCode, laboratoryId: inc.laboratoryId,
-        technician: 'Andi Wijaya', priority: inc.priority, diagnosis: '', action: '', scheduledDate: new Date().toISOString().split('T')[0],
-        spareParts: [], cost: 0, status: 'Draft', timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
+        id: workOrderId, woNumber: num, incidentId: inc.id, assetCode: inc.assetCode, laboratoryId: inc.laboratoryId,
+        technician: '', priority: inc.priority, diagnosis: '', action: '', scheduledDate: new Date().toISOString().split('T')[0],
+        spareParts: [], cost: 0, status: 'Draft', timeline: [{ status: 'Draft', at: createdAt, by: user?.name ?? 'Admin' }],
       });
-      const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) { d.incidents[idx].workOrderId = d.workOrders[0].id; d.incidents[idx].status = 'Ditugaskan'; }
+      incident.workOrderId = workOrderId;
+      changed = true;
     });
+    if (!changed) return;
     toast('Incident dikonversi menjadi Work Order', 'success');
     setDetail(null);
   }
 
   function remove() {
-    if (!confirmDel) return;
+    if (!confirmDel || !canDelete) return;
     mutate((d) => { d.incidents = d.incidents.filter((i) => i.id !== confirmDel.id); });
     toast('Tiket dihapus', 'success');
     setConfirmDel(null);
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('laporan-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
   }
 
@@ -133,12 +181,15 @@ export function IncidentsPage() {
     { key: 'status', header: 'Status', render: (i) => <StatusBadge status={i.status} /> },
     { key: 'date', header: 'Tanggal', sortable: true, render: (i) => relativeTime(i.date) },
   ];
+  const availableStatusOptions = detail
+    ? STATUSES.filter((status) => status !== detail.status && status !== 'Ditugaskan' && canTransitionToStatus(detail, status, workflowPermissions)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
+    : [];
 
   return (
     <div className="space-y-6">
       <PageHeader title="Laporan Kerusakan" description="Tiket kerusakan dan incident laboratorium" icon={<AlertTriangle className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Lapor Kerusakan</Button>}
         </>}
       />
@@ -211,20 +262,20 @@ export function IncidentsPage() {
                 ))}
                 {detail.comments.length === 0 && <p className="text-xs text-ink-muted">Belum ada komentar</p>}
               </div>
-              <div className="mt-2 flex gap-2">
+              {canUpdate && <div className="mt-2 flex gap-2">
                 <Input placeholder="Tambah komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addComment()} />
                 <Button size="sm" icon={<MessageSquare className="h-4 w-4" />} onClick={addComment}>Kirim</Button>
-              </div>
+              </div>}
             </div>
 
             <div className="space-y-2 border-t border-base-700 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi</p>
               <div className="flex flex-wrap gap-2">
-                {canAssign && (
+                {canTransitionToStatus(detail, 'Ditugaskan', workflowPermissions) && (
                   <Select value="" onChange={(e) => e.target.value && assignTechnician(detail, e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: `Assign ke ${t}` }))} placeholder="Assign Teknisi" />
                 )}
-                <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />
-                {canAssign && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
+                {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={availableStatusOptions} placeholder="Ubah Status" />}
+                {canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
                 {canDelete && <Button variant="danger" size="sm" onClick={() => { setConfirmDel(detail); setDetail(null); }}>Hapus</Button>}
               </div>
             </div>

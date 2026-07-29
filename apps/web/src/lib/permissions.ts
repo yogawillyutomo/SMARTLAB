@@ -9,6 +9,8 @@ export interface PermissionDef {
 export const PERMISSION_ACTIONS = ['view', 'create', 'update', 'delete', 'approve', 'assign', 'export', 'manage'] as const;
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
 
+export const ROLE_NAMES = ['Super Admin', 'Admin Lab', 'Kepala Lab', 'Teknisi', 'Guru', 'Ketua Kelas', 'Siswa', 'Pimpinan'] as const;
+
 // Module list aligned with sidebar groups
 export const MODULES = [
   'dashboard',
@@ -35,6 +37,8 @@ export const MODULES = [
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number];
+
+export type PermissionMatrix = Record<RoleName, Record<ModuleKey, PermissionAction[]>>;
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   dashboard: 'Dashboard',
@@ -169,15 +173,49 @@ export const ROLE_PERMISSIONS: Record<RoleName, Partial<Record<ModuleKey, Permis
   },
 };
 
-export function can(role: RoleName, module: ModuleKey, action: PermissionAction): boolean {
-  const perms = ROLE_PERMISSIONS[role]?.[module];
+function isPermissionAction(value: unknown): value is PermissionAction {
+  return typeof value === 'string' && (PERMISSION_ACTIONS as readonly string[]).includes(value);
+}
+
+function isRoleName(value: string): value is RoleName {
+  return (ROLE_NAMES as readonly string[]).includes(value);
+}
+
+function isModuleKey(value: string): value is ModuleKey {
+  return (MODULES as readonly string[]).includes(value);
+}
+
+export function createDefaultPermissionMatrix(): PermissionMatrix {
+  return Object.fromEntries(ROLE_NAMES.map((role) => [
+    role,
+    Object.fromEntries(MODULES.map((module) => [module, [...(ROLE_PERMISSIONS[role]?.[module] ?? [])]])),
+  ])) as PermissionMatrix;
+}
+
+export function sanitizePermissionMatrix(value: unknown): PermissionMatrix {
+  const matrix = createDefaultPermissionMatrix();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return matrix;
+
+  for (const [role, rawModules] of Object.entries(value)) {
+    if (!isRoleName(role) || !rawModules || typeof rawModules !== 'object' || Array.isArray(rawModules)) continue;
+    for (const [module, rawActions] of Object.entries(rawModules)) {
+      if (!isModuleKey(module) || !Array.isArray(rawActions)) continue;
+      matrix[role][module] = [...new Set(rawActions.filter(isPermissionAction))];
+    }
+  }
+
+  return matrix;
+}
+
+export function can(permissions: PermissionMatrix, role: RoleName, module: ModuleKey, action: PermissionAction): boolean {
+  const perms = permissions[role]?.[module];
   return perms ? perms.includes(action) : false;
 }
 
-export function canView(role: RoleName, module: ModuleKey): boolean {
-  return can(role, module, 'view');
+export function canView(permissions: PermissionMatrix, role: RoleName, module: ModuleKey): boolean {
+  return can(permissions, role, module, 'view');
 }
 
-export function roleMenuItems(role: RoleName): ModuleKey[] {
-  return MODULES.filter((m) => canView(role, m));
+export function roleMenuItems(permissions: PermissionMatrix, role: RoleName): ModuleKey[] {
+  return MODULES.filter((m) => canView(permissions, role, m));
 }
