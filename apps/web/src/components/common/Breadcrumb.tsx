@@ -31,6 +31,7 @@ export function Breadcrumb({ items, className }: { items: BreadcrumbItem[]; clas
 }
 
 // Hook helper to build breadcrumb from route
+// eslint-disable-next-line react-refresh/only-export-components -- This hook is intentionally co-located with the breadcrumb component it supports.
 export function useAutoBreadcrumb() {
   const navigate = useNavigate();
   return { navigate };

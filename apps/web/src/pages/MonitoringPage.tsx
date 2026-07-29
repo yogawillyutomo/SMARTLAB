@@ -14,28 +14,23 @@ import {
   WifiOff,
   AlertTriangle,
   Wrench,
-  Lock,
   Activity,
   Map,
-  Settings2,
   Server,
   Tag,
-  History,
   XCircle,
-  CircleDot,
 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore } from '@/stores/uiStore';
 import { deviceRepository } from '@/services/repositories';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Input, Select } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusBadge, ConditionBadge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
-import { EmptyState, LoadingState } from '@/components/ui/States';
+import { EmptyState } from '@/components/ui/States';
 import { PCIconCard, PCStatusLegend } from '@/components/common/PCIconCard';
-import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { Tabs } from '@/components/ui/Tabs';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';

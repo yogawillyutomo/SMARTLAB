@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, Download, Printer, Copy, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore } from '@/stores/uiStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -8,7 +7,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
-import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/Badge';
 import { FormDialog } from '@/components/forms/FormDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/States';
@@ -21,7 +20,6 @@ const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
 export function SchedulesPage() {
   const { db, mutate } = useAppData();
   const { academicYear, semester } = useUIStore();
-  const navigate = useNavigate();
   const canCreate = usePermission('schedules', 'create');
   const canDelete = usePermission('schedules', 'delete');
   const [view, setView] = useState<'week' | 'day' | 'list'>('week');

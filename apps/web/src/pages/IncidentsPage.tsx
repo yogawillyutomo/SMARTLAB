@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Plus, Pencil, Trash2, Download, MessageSquare, ArrowRight, Filter } from 'lucide-react';
+import { AlertTriangle, Plus, Download, MessageSquare, ArrowRight } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -12,7 +12,6 @@ import { FormDialog } from '@/components/forms/FormDialog';
 import { Drawer } from '@/components/ui/Drawer';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, relativeTime } from '@/utils';

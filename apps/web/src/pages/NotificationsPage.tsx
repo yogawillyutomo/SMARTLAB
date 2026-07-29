@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, Trash2, Filter } from 'lucide-react';
+import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input, Select } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';

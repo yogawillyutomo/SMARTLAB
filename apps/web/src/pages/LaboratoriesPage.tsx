@@ -1,30 +1,27 @@
-import { useMemo, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   FlaskConical,
   Plus,
   Map as MapIcon,
   Monitor,
-  CalendarDays,
   Pencil,
   Power,
   Eye,
   Users,
-  MonitorX,
   Activity,
 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
-import { useAuthStore } from '@/stores/authStore';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusBadge, ConditionBadge } from '@/components/ui/Badge';
-import { Input, Select, Textarea } from '@/components/ui/Input';
+import { Input, Select } from '@/components/ui/Input';
 import { FormDialog } from '@/components/forms/FormDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState, LoadingState } from '@/components/ui/States';
+import { EmptyState } from '@/components/ui/States';
 import { Tabs } from '@/components/ui/Tabs';
-import { DataTable, type Column } from '@/components/ui/DataTable';
+import { DataTable } from '@/components/ui/DataTable';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { cn } from '@/utils';
@@ -232,7 +229,6 @@ export function LaboratoryDetailPage() {
   const assets = db.assets.filter((a) => a.laboratoryId === lab.id);
   const schedules = db.schedules.filter((s) => s.laboratoryId === lab.id);
   const journals = db.journals.filter((j) => j.laboratoryId === lab.id);
-  const incidents = db.incidents.filter((i) => i.laboratoryId === lab.id);
   const maintenance = db.maintenance.executions.filter((m) => m.laboratoryId === lab.id);
   const auditLogs = db.auditLogs.filter((a) => a.module === 'laboratories');
 
@@ -292,7 +288,7 @@ export function LaboratoryDetailPage() {
             rowKey={(d) => d.id}
             searchable
             searchKeys={(d) => `${d.positionCode} ${d.hostname} ${d.ipAddress}`}
-            onRowClick={(d) => navigate('/monitoring')}
+            onRowClick={() => navigate('/monitoring')}
           />
         </Card>
       )}

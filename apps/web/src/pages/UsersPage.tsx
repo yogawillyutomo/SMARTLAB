@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Users as UsersIcon, Plus, Pencil, Trash2, Download, KeyRound, Power, Mail, Phone } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -11,7 +11,6 @@ import { FormDialog } from '@/components/forms/FormDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Drawer } from '@/components/ui/Drawer';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, initials, relativeTime } from '@/utils';

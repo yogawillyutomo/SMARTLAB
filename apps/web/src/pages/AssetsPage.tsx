@@ -102,7 +102,12 @@ export function AssetsPage() {
   }
 
   function toggleSelect(id: string) {
-    setSelected((s) => { const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   const columns: Column<Asset>[] = [
@@ -279,7 +284,6 @@ export function AssetDetailPage() {
 
   const incidents = db.incidents.filter((i) => i.assetCode === asset.assetCode);
   const maintenance = db.maintenance.executions.filter((m) => m.assetCode === asset.assetCode);
-  const loans = db.loans.filter((l) => l.itemName.includes(asset.name));
   const auditLogs = db.auditLogs.filter((a) => a.object === asset.assetCode);
 
   const tabs = [
