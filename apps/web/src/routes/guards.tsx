@@ -4,8 +4,15 @@ import { useAuthStore } from '@/stores/authStore';
 import { canView, type ModuleKey } from '@/lib/permissions';
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isHydrated } = useAuthStore();
   const location = useLocation();
+  if (!isHydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-base-900 text-sm text-ink-muted">
+        Memuat sesi...
+      </div>
+    );
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }

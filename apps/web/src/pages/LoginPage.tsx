@@ -33,7 +33,7 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     setTimeout(() => {
-      const result = login(email, password, db.users);
+      const result = login(email, password, db.users, remember);
       setLoading(false);
       if (result.ok) {
         toast('Selamat datang di SmartLab PPLG', 'success');
@@ -51,7 +51,7 @@ export function LoginPage() {
     setPassword('password');
     setLoading(true);
     setTimeout(() => {
-      loginAs(user);
+      loginAs(user, remember);
       setLoading(false);
       toast(`Masuk sebagai ${user.role}`, 'success');
       navigate('/dashboard');
