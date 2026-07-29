@@ -20,8 +20,25 @@ import type { Incident, IncidentCategory, Priority } from '@/types';
 const CATEGORIES: IncidentCategory[] = ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas', 'kebersihan', 'keamanan', 'lainnya'];
 const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
 const STATUSES: Incident['status'][] = ['Dilaporkan', 'Diverifikasi', 'Ditugaskan', 'Diproses', 'Menunggu Spare Part', 'Selesai', 'Diuji', 'Ditutup', 'Ditolak'];
-const OPERATIONAL_STATUSES: Incident['status'][] = ['Diproses', 'Menunggu Spare Part', 'Selesai'];
-const APPROVAL_STATUSES: Incident['status'][] = ['Diverifikasi', 'Diuji', 'Ditutup', 'Ditolak'];
+type IncidentTransitionPermission = 'assign' | 'update' | 'approve';
+type IncidentPermissions = Record<IncidentTransitionPermission, boolean>;
+
+const INCIDENT_TRANSITIONS: Record<Incident['status'], Partial<Record<Incident['status'], IncidentTransitionPermission>>> = {
+  Dilaporkan: { Diverifikasi: 'approve', Ditolak: 'approve' },
+  Diverifikasi: { Ditugaskan: 'assign' },
+  Ditugaskan: { Diproses: 'update' },
+  Diproses: { 'Menunggu Spare Part': 'update', Selesai: 'update' },
+  'Menunggu Spare Part': { Diproses: 'update', Selesai: 'update' },
+  Selesai: { Diuji: 'approve' },
+  Diuji: { Ditutup: 'approve' },
+  Ditutup: {},
+  Ditolak: {},
+};
+
+function canTransitionToStatus(incident: Incident, target: Incident['status'], permissions: IncidentPermissions) {
+  const requiredPermission = INCIDENT_TRANSITIONS[incident.status][target];
+  return requiredPermission ? permissions[requiredPermission] : false;
+}
 
 export function IncidentsPage() {
   const { db, mutate } = useAppData();
@@ -39,12 +56,7 @@ export function IncidentsPage() {
   const [commentText, setCommentText] = useState('');
   const [filters, setFilters] = useState({ status: 'all', priority: 'all', category: 'all' });
   const [form, setForm] = useState<Partial<Incident>>({});
-
-  function canTransitionToStatus(status: Incident['status']) {
-    if (status === 'Ditugaskan') return canAssign;
-    if (APPROVAL_STATUSES.includes(status)) return canApproveIncident;
-    return OPERATIONAL_STATUSES.includes(status) && canUpdate;
-  }
+  const workflowPermissions: IncidentPermissions = { assign: canAssign, update: canUpdate, approve: canApproveIncident };
 
   const filtered = useMemo(() => db.incidents.filter((i) => {
     if (filters.status !== 'all' && i.status !== filters.status) return false;
@@ -81,25 +93,37 @@ export function IncidentsPage() {
   }
 
   function updateStatus(inc: Incident, status: Incident['status']) {
-    if (!canTransitionToStatus(status)) return;
+    if (status === 'Ditugaskan' || !canTransitionToStatus(inc, status, workflowPermissions)) return;
+    let changed = false;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) {
-        d.incidents[idx].status = status;
-        d.incidents[idx].timeline.push({ status, at: new Date().toISOString(), by: user?.name ?? 'Admin' });
-        if (status === 'Ditugaskan' && !d.incidents[idx].assignedTechnician) d.incidents[idx].assignedTechnician = 'Andi Wijaya';
+      if (idx >= 0 && canTransitionToStatus(d.incidents[idx], status, workflowPermissions)) {
+        const updated = d.incidents[idx];
+        updated.status = status;
+        updated.timeline.push({ status, at: new Date().toISOString(), by: user?.name ?? 'Admin' });
+        changed = true;
       }
     });
+    if (!changed) return;
     setDetail((d) => d && d.id === inc.id ? { ...d, status } : d);
     toast(`Status diubah menjadi ${status}`, 'success');
   }
 
   function assignTechnician(inc: Incident, tech: string) {
-    if (!canAssign) return;
+    if (!tech.trim() || !canTransitionToStatus(inc, 'Ditugaskan', workflowPermissions)) return;
+    let changed = false;
+    const assignedAt = new Date().toISOString();
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) { d.incidents[idx].assignedTechnician = tech; d.incidents[idx].status = 'Ditugaskan'; d.incidents[idx].timeline.push({ status: 'Ditugaskan', at: new Date().toISOString(), by: user?.name ?? 'Admin' }); }
+      if (idx >= 0 && canTransitionToStatus(d.incidents[idx], 'Ditugaskan', workflowPermissions)) {
+        const updated = d.incidents[idx];
+        updated.assignedTechnician = tech;
+        updated.status = 'Ditugaskan';
+        updated.timeline.push({ status: 'Ditugaskan', at: assignedAt, by: user?.name ?? 'Admin' });
+        changed = true;
+      }
     });
+    if (!changed) return;
     toast(`Tiket ditugaskan ke ${tech}`, 'success');
     setDetail(null);
   }
@@ -115,17 +139,23 @@ export function IncidentsPage() {
   }
 
   function convertToWO(inc: Incident) {
-    if (!canUpdate || !canCreateWorkOrder || !canAssign) return;
+    if (!canCreateWorkOrder) return;
+    let changed = false;
+    const workOrderId = `wo-${Date.now()}`;
+    const createdAt = new Date().toISOString();
     mutate((d) => {
+      const incident = d.incidents.find((item) => item.id === inc.id);
+      if (!incident || incident.workOrderId) return;
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
-        id: `wo-${Date.now()}`, woNumber: num, incidentId: inc.id, assetCode: inc.assetCode, laboratoryId: inc.laboratoryId,
-        technician: 'Andi Wijaya', priority: inc.priority, diagnosis: '', action: '', scheduledDate: new Date().toISOString().split('T')[0],
-        spareParts: [], cost: 0, status: 'Draft', timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
+        id: workOrderId, woNumber: num, incidentId: inc.id, assetCode: inc.assetCode, laboratoryId: inc.laboratoryId,
+        technician: '', priority: inc.priority, diagnosis: '', action: '', scheduledDate: new Date().toISOString().split('T')[0],
+        spareParts: [], cost: 0, status: 'Draft', timeline: [{ status: 'Draft', at: createdAt, by: user?.name ?? 'Admin' }],
       });
-      const idx = d.incidents.findIndex((i) => i.id === inc.id);
-      if (idx >= 0) { d.incidents[idx].workOrderId = d.workOrders[0].id; d.incidents[idx].status = 'Ditugaskan'; }
+      incident.workOrderId = workOrderId;
+      changed = true;
     });
+    if (!changed) return;
     toast('Incident dikonversi menjadi Work Order', 'success');
     setDetail(null);
   }
@@ -152,7 +182,7 @@ export function IncidentsPage() {
     { key: 'date', header: 'Tanggal', sortable: true, render: (i) => relativeTime(i.date) },
   ];
   const availableStatusOptions = detail
-    ? STATUSES.filter((status) => status !== detail.status && canTransitionToStatus(status)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
+    ? STATUSES.filter((status) => status !== detail.status && status !== 'Ditugaskan' && canTransitionToStatus(detail, status, workflowPermissions)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
     : [];
 
   return (
@@ -241,11 +271,11 @@ export function IncidentsPage() {
             <div className="space-y-2 border-t border-base-700 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi</p>
               <div className="flex flex-wrap gap-2">
-                {canAssign && (
+                {canTransitionToStatus(detail, 'Ditugaskan', workflowPermissions) && (
                   <Select value="" onChange={(e) => e.target.value && assignTechnician(detail, e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: `Assign ke ${t}` }))} placeholder="Assign Teknisi" />
                 )}
                 {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={availableStatusOptions} placeholder="Ubah Status" />}
-                {canUpdate && canAssign && canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
+                {canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
                 {canDelete && <Button variant="danger" size="sm" onClick={() => { setConfirmDel(detail); setDetail(null); }}>Hapus</Button>}
               </div>
             </div>

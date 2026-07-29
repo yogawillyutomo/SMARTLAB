@@ -16,7 +16,7 @@ import { MODULES, MODULE_LABELS, PERMISSION_ACTIONS, type ModuleKey, type Permis
 const ROLES: RoleName[] = ['Super Admin', 'Admin Lab', 'Kepala Lab', 'Teknisi', 'Guru', 'Ketua Kelas', 'Siswa', 'Pimpinan'];
 
 export function RolesPage() {
-  const { db } = useAppData();
+  const { db, refresh } = useAppData();
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
   const setPermissions = usePermissionStore((s) => s.setPermissions);
@@ -51,6 +51,7 @@ export function RolesPage() {
     if (!canEdit) return;
     setPermissions(draftPermissions);
     auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'update', object: 'permission-matrix', newValue: 'Role permissions updated', device: 'Web' });
+    refresh();
     toast('Konfigurasi permission disimpan', 'success');
   }
 
@@ -58,6 +59,7 @@ export function RolesPage() {
     if (!canEdit) return;
     resetAll();
     auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: 'all-roles', newValue: 'All role permissions reset to defaults', device: 'Web' });
+    refresh();
     toast('Permission direset ke default', 'info');
   }
 
@@ -65,6 +67,7 @@ export function RolesPage() {
     if (!canEdit) return;
     resetRole(activeRole);
     auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: activeRole, newValue: `Role permissions reset to defaults: ${activeRole}`, device: 'Web' });
+    refresh();
     toast(`Permission ${activeRole} direset ke default`, 'info');
   }
 
