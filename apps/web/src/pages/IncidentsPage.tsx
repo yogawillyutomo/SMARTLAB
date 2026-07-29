@@ -20,6 +20,8 @@ import type { Incident, IncidentCategory, Priority } from '@/types';
 const CATEGORIES: IncidentCategory[] = ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas', 'kebersihan', 'keamanan', 'lainnya'];
 const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
 const STATUSES: Incident['status'][] = ['Dilaporkan', 'Diverifikasi', 'Ditugaskan', 'Diproses', 'Menunggu Spare Part', 'Selesai', 'Diuji', 'Ditutup', 'Ditolak'];
+const OPERATIONAL_STATUSES: Incident['status'][] = ['Diproses', 'Menunggu Spare Part', 'Selesai'];
+const APPROVAL_STATUSES: Incident['status'][] = ['Diverifikasi', 'Diuji', 'Ditutup', 'Ditolak'];
 
 export function IncidentsPage() {
   const { db, mutate } = useAppData();
@@ -28,6 +30,8 @@ export function IncidentsPage() {
   const canUpdate = usePermission('incidents', 'update');
   const canDelete = usePermission('incidents', 'delete');
   const canAssign = usePermission('incidents', 'assign');
+  const canApproveIncident = usePermission('incidents', 'approve');
+  const canExport = usePermission('incidents', 'export');
   const canCreateWorkOrder = usePermission('work-orders', 'create');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Incident | null>(null);
@@ -35,6 +39,12 @@ export function IncidentsPage() {
   const [commentText, setCommentText] = useState('');
   const [filters, setFilters] = useState({ status: 'all', priority: 'all', category: 'all' });
   const [form, setForm] = useState<Partial<Incident>>({});
+
+  function canTransitionToStatus(status: Incident['status']) {
+    if (status === 'Ditugaskan') return canAssign;
+    if (APPROVAL_STATUSES.includes(status)) return canApproveIncident;
+    return OPERATIONAL_STATUSES.includes(status) && canUpdate;
+  }
 
   const filtered = useMemo(() => db.incidents.filter((i) => {
     if (filters.status !== 'all' && i.status !== filters.status) return false;
@@ -71,7 +81,7 @@ export function IncidentsPage() {
   }
 
   function updateStatus(inc: Incident, status: Incident['status']) {
-    if (!canUpdate) return;
+    if (!canTransitionToStatus(status)) return;
     mutate((d) => {
       const idx = d.incidents.findIndex((i) => i.id === inc.id);
       if (idx >= 0) {
@@ -105,7 +115,7 @@ export function IncidentsPage() {
   }
 
   function convertToWO(inc: Incident) {
-    if (!canUpdate || !canCreateWorkOrder) return;
+    if (!canUpdate || !canCreateWorkOrder || !canAssign) return;
     mutate((d) => {
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
@@ -128,6 +138,7 @@ export function IncidentsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('laporan-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
   }
 
@@ -140,12 +151,15 @@ export function IncidentsPage() {
     { key: 'status', header: 'Status', render: (i) => <StatusBadge status={i.status} /> },
     { key: 'date', header: 'Tanggal', sortable: true, render: (i) => relativeTime(i.date) },
   ];
+  const availableStatusOptions = detail
+    ? STATUSES.filter((status) => status !== detail.status && canTransitionToStatus(status)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
+    : [];
 
   return (
     <div className="space-y-6">
       <PageHeader title="Laporan Kerusakan" description="Tiket kerusakan dan incident laboratorium" icon={<AlertTriangle className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Lapor Kerusakan</Button>}
         </>}
       />
@@ -230,8 +244,8 @@ export function IncidentsPage() {
                 {canAssign && (
                   <Select value="" onChange={(e) => e.target.value && assignTechnician(detail, e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: `Assign ke ${t}` }))} placeholder="Assign Teknisi" />
                 )}
-                {canUpdate && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />}
-                {canUpdate && canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
+                {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={availableStatusOptions} placeholder="Ubah Status" />}
+                {canUpdate && canAssign && canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
                 {canDelete && <Button variant="danger" size="sm" onClick={() => { setConfirmDel(detail); setDetail(null); }}>Hapus</Button>}
               </div>
             </div>

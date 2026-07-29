@@ -20,6 +20,7 @@ export function SessionsPage() {
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('sessions', 'create');
   const canUpdate = usePermission('sessions', 'update');
+  const canExport = usePermission('sessions', 'export');
   const [open, setOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState<Session | null>(null);
   const [detail, setDetail] = useState<Session | null>(null);
@@ -143,6 +144,7 @@ export function SessionsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('sesi-praktikum.csv', db.sessions.map((s) => ({
       Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status, Mulai: s.startTime, Selesai: s.endTime ?? '',
     })));
@@ -156,7 +158,7 @@ export function SessionsPage() {
         icon={<BookOpen className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Sesi Baru</Button>}
           </>
         }

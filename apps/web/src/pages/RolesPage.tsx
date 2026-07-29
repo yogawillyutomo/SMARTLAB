@@ -24,6 +24,7 @@ export function RolesPage() {
   const resetAll = usePermissionStore((s) => s.resetAll);
   const canUpdate = usePermission('roles', 'update');
   const canManage = usePermission('roles', 'manage');
+  const canExport = usePermission('roles', 'export');
   const canEdit = canUpdate || canManage;
   const [draftPermissions, setDraftPermissions] = useState<PermissionMatrix>(permissions);
   const [activeRole, setActiveRole] = useState<RoleName>('Admin Lab');
@@ -56,16 +57,19 @@ export function RolesPage() {
   function reset() {
     if (!canEdit) return;
     resetAll();
+    auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: 'all-roles', newValue: 'All role permissions reset to defaults', device: 'Web' });
     toast('Permission direset ke default', 'info');
   }
 
   function resetActiveRole() {
     if (!canEdit) return;
     resetRole(activeRole);
+    auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: activeRole, newValue: `Role permissions reset to defaults: ${activeRole}`, device: 'Web' });
     toast(`Permission ${activeRole} direset ke default`, 'info');
   }
 
   function exportCSV() {
+    if (!canExport) return;
     const rows: Record<string, unknown>[] = [];
     ROLES.forEach((role) => {
       MODULES.forEach((mod) => {
@@ -91,7 +95,7 @@ export function RolesPage() {
         actions={<>
           <Button variant="secondary" size="sm" onClick={reset} disabled={!canEdit}>Reset</Button>
           <Button variant="secondary" size="sm" onClick={resetActiveRole} disabled={!canEdit}>Reset Role</Button>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           <Button size="sm" icon={<Save className="h-4 w-4" />} onClick={save} disabled={!canEdit}>Simpan</Button>
         </>}
       />

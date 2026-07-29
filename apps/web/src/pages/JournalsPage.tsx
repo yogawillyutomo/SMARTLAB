@@ -22,6 +22,7 @@ export function JournalsPage() {
   const canCreate = usePermission('journals', 'create');
   const canUpdate = usePermission('journals', 'update');
   const canDelete = usePermission('journals', 'delete');
+  const canExport = usePermission('journals', 'export');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Journal | null>(null);
   const [confirmDel, setConfirmDel] = useState<Journal | null>(null);
@@ -75,6 +76,7 @@ export function JournalsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('jurnal-praktikum.csv', db.journals.map((j) => ({
       No: j.journalNumber, Tanggal: j.date, Lab: db.labs.find((l) => l.id === j.laboratoryId)?.name, Guru: j.teacherName, Kelas: j.className, Mapel: j.subject, Materi: j.material, Hadir: j.presentCount, Absen: j.absentCount, Status: j.status, Sumber: j.source,
     })));
@@ -88,8 +90,8 @@ export function JournalsPage() {
         icon={<ClipboardList className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
-            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
+            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jurnal</Button>}
           </>
         }

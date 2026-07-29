@@ -18,12 +18,17 @@ import type { WorkOrder, WorkOrderStatus, Priority, WorkOrderSparePart } from '@
 
 const STATUSES: WorkOrderStatus[] = ['Draft', 'Assigned', 'In Progress', 'On Hold', 'Waiting Part', 'Completed', 'Verified', 'Cancelled'];
 const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
+const OPERATIONAL_STATUSES: WorkOrderStatus[] = ['In Progress', 'On Hold', 'Waiting Part', 'Completed', 'Cancelled'];
 
 export function WorkOrdersPage() {
   const { db, mutate } = useAppData();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('work-orders', 'create');
   const canUpdate = usePermission('work-orders', 'update');
+  const canAssignWorkOrder = usePermission('work-orders', 'assign');
+  const canApproveWorkOrder = usePermission('work-orders', 'approve');
+  const canExport = usePermission('work-orders', 'export');
+  // Spare parts mutate stock, so this intentionally requires stock.create in addition to work-orders.update.
   const canUseSparePart = usePermission('stock', 'create');
   const [view, setView] = useState<'table' | 'board' | 'calendar'>('table');
   const [open, setOpen] = useState(false);
@@ -32,9 +37,15 @@ export function WorkOrdersPage() {
   const [partForm, setPartForm] = useState<{ stockItemId: string; name: string; quantity: number }>({ stockItemId: '', name: '', quantity: 1 });
   const [form, setForm] = useState<Partial<WorkOrder>>({});
 
+  function canTransitionToStatus(status: WorkOrderStatus) {
+    if (status === 'Assigned') return canAssignWorkOrder;
+    if (status === 'Verified') return canApproveWorkOrder;
+    return OPERATIONAL_STATUSES.includes(status) && canUpdate;
+  }
+
   function openCreate() {
     if (!canCreate) return;
-    setForm({ laboratoryId: db.labs[0]?.id, technician: 'Andi Wijaya', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
+    setForm({ laboratoryId: db.labs[0]?.id, technician: canAssignWorkOrder ? 'Andi Wijaya' : '', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
     setOpen(true);
   }
 
@@ -44,10 +55,10 @@ export function WorkOrdersPage() {
     mutate((d) => {
       const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
       d.workOrders.unshift({
-        id: `wo-${Date.now()}`, woNumber: num, laboratoryId: form.laboratoryId ?? '', technician: form.technician ?? 'Andi Wijaya',
+        id: `wo-${Date.now()}`, woNumber: num, laboratoryId: form.laboratoryId ?? '', technician: canAssignWorkOrder ? (form.technician ?? 'Andi Wijaya') : '',
         priority: form.priority ?? 'Normal', diagnosis: form.diagnosis ?? '', action: form.action ?? '', scheduledDate: form.scheduledDate ?? '',
-        spareParts: [], cost: form.cost ?? 0, status: form.status ?? 'Draft', notes: form.notes, assetCode: form.assetCode,
-        timeline: [{ status: form.status ?? 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
+        spareParts: [], cost: form.cost ?? 0, status: 'Draft', notes: form.notes, assetCode: form.assetCode,
+        timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
       });
     });
     toast('Work order dibuat', 'success');
@@ -55,7 +66,7 @@ export function WorkOrdersPage() {
   }
 
   function updateStatus(wo: WorkOrder, status: WorkOrderStatus) {
-    if (!canUpdate) return;
+    if (!canTransitionToStatus(status)) return;
     mutate((d) => {
       const idx = d.workOrders.findIndex((w) => w.id === wo.id);
       if (idx >= 0) {
@@ -101,6 +112,7 @@ export function WorkOrdersPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('work-order.csv', db.workOrders.map((w) => ({ WO: w.woNumber, Lab: db.labs.find((l) => l.id === w.laboratoryId)?.name, Teknisi: w.technician, Prioritas: w.priority, Status: w.status, Biaya: w.cost })));
   }
 
@@ -115,12 +127,15 @@ export function WorkOrdersPage() {
   ];
 
   const boardColumns = STATUSES.filter((s) => db.workOrders.some((w) => w.status === s));
+  const availableStatusOptions = detail
+    ? STATUSES.filter((status) => status !== detail.status && canTransitionToStatus(status)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
+    : [];
 
   return (
     <div className="space-y-6">
       <PageHeader title="Work Order Teknisi" description="Manajemen pekerjaan perbaikan teknisi" icon={<Wrench className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>WO Baru</Button>}
         </>}
       />
@@ -191,10 +206,10 @@ export function WorkOrdersPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
           <Input label="Aset (opsional)" value={form.assetCode ?? ''} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
-          <Select label="Teknisi" value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: t }))} />
+          {canAssignWorkOrder ? <Select label="Teknisi" value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: t }))} /> : <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted">Teknisi ditentukan saat assignment.</div>}
           <Select label="Prioritas" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} options={PRIORITIES.map((p) => ({ value: p, label: p }))} />
           <Input label="Jadwal" type="date" value={form.scheduledDate ?? ''} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
-          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })} options={STATUSES.map((s) => ({ value: s, label: s }))} />
+          <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted"><span className="block text-xs text-ink-muted">Status awal</span><span className="font-medium text-ink-primary">Draft</span></div>
           <div className="sm:col-span-2"><Textarea label="Diagnosis" value={form.diagnosis ?? ''} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} /></div>
           <div className="sm:col-span-2"><Textarea label="Tindakan" value={form.action ?? ''} onChange={(e) => setForm({ ...form, action: e.target.value })} /></div>
         </div>
@@ -238,8 +253,8 @@ export function WorkOrdersPage() {
                 {canUpdate && detail.status === 'In Progress' && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
                 {canUpdate && canUseSparePart && <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>}
                 {canUpdate && !['Completed', 'Verified', 'Cancelled'].includes(detail.status) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
-                {canUpdate && detail.status === 'Completed' && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
-                {canUpdate && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={STATUSES.filter((s) => s !== detail.status).map((s) => ({ value: s, label: `Ubah ke ${s}` }))} placeholder="Ubah Status" />}
+                {canApproveWorkOrder && detail.status === 'Completed' && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
+                {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={availableStatusOptions} placeholder="Ubah Status" />}
               </div>
             </div>
           </div>

@@ -23,6 +23,7 @@ export function UsersPage() {
   const canCreate = usePermission('users', 'create');
   const canUpdate = usePermission('users', 'update');
   const canDelete = usePermission('users', 'delete');
+  const canExport = usePermission('users', 'export');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<User | null>(null);
   const [confirmDel, setConfirmDel] = useState<User | null>(null);
@@ -74,6 +75,7 @@ export function UsersPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('pengguna.csv', db.users.map((u) => ({ Nama: u.name, Email: u.email, Role: u.role, Unit: u.unit ?? '', Status: u.status })));
   }
 
@@ -105,7 +107,7 @@ export function UsersPage() {
     <div className="space-y-6">
       <PageHeader title="Pengguna" description="Manajemen pengguna sistem" icon={<UsersIcon className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Pengguna</Button>}
         </>}
       />

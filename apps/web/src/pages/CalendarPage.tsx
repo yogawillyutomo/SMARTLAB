@@ -35,6 +35,7 @@ export function CalendarPage() {
   const canCreate = usePermission('calendar', 'create');
   const canUpdate = usePermission('calendar', 'update');
   const canDelete = usePermission('calendar', 'delete');
+  const canExport = usePermission('calendar', 'export');
   const [view, setView] = useState<'month' | 'week' | 'agenda'>('month');
   const [current, setCurrent] = useState(new Date());
   const [open, setOpen] = useState(false);
@@ -98,6 +99,7 @@ export function CalendarPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('kalender-akademik.csv', db.calendarEvents.map((e) => ({ Judul: e.title, Tanggal: e.date, Selesai: e.endDate ?? '', Kategori: e.category, Deskripsi: e.description ?? '' })));
   }
 
@@ -107,7 +109,7 @@ export function CalendarPage() {
     <div className="space-y-6">
       <PageHeader title="Kalender Akademik" description="Tahun Ajaran 2026/2027" icon={<CalendarRange className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => openCreate()}>Tambah Event</Button>}
         </>}
       />

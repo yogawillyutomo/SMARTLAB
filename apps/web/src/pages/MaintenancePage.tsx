@@ -22,6 +22,7 @@ export function MaintenancePage() {
   const canCreate = usePermission('maintenance', 'create');
   const canUpdate = usePermission('maintenance', 'update');
   const canDelete = usePermission('maintenance', 'delete');
+  const canExport = usePermission('maintenance', 'export');
   const [tab, setTab] = useState<'plans' | 'executions'>('plans');
   const [open, setOpen] = useState(false);
   const [execOpen, setExecOpen] = useState(false);
@@ -94,6 +95,7 @@ export function MaintenancePage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('maintenance-plans.csv', db.maintenance.plans.map((p) => ({ Nama: p.name, Lab: db.labs.find((l) => l.id === p.laboratoryId)?.name, Frekuensi: p.frequency, Teknisi: p.technician, Jadwal: p.nextSchedule, Status: p.status })));
   }
 
@@ -107,7 +109,7 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader title="Preventive Maintenance" description="Rencana dan eksekusi maintenance berkala" icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && tab === 'plans' && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Rencana Baru</Button>}
           {canCreate && tab === 'executions' && <Button size="sm" icon={<Play className="h-4 w-4" />} onClick={() => openExecution()}>Eksekusi Baru</Button>}
         </>}

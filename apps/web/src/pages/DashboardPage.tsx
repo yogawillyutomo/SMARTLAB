@@ -31,6 +31,7 @@ import {
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
+import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -43,6 +44,7 @@ export function DashboardPage() {
   const { db, ready } = useAppData();
   const user = useAuthStore((s) => s.user);
   const { activeLabId } = useUIStore();
+  const canExport = usePermission('dashboard', 'export');
 
   const stats = useMemo(() => {
     const activeLabs = db.labs.filter((l) => l.status === 'active').length;
@@ -99,6 +101,7 @@ export function DashboardPage() {
   const pendingJournals = db.journals.filter((j) => j.status === 'Draft' || j.status === 'Perlu Perbaikan');
 
   function handleExport() {
+    if (!canExport) return;
     downloadCSV('dashboard-stats.csv', [
       { metric: 'Laboratorium Aktif', value: stats.activeLabs },
       { metric: 'PC Online', value: stats.onlinePCs },
@@ -128,9 +131,9 @@ export function DashboardPage() {
             <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => window.location.reload()}>
               Refresh
             </Button>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
               Export
-            </Button>
+            </Button>}
             <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
               Lapor Kerusakan
             </Button>

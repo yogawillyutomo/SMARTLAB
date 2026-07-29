@@ -24,6 +24,7 @@ export function AssetsPage() {
   const canCreate = usePermission('assets', 'create');
   const canUpdate = usePermission('assets', 'update');
   const canDelete = usePermission('assets', 'delete');
+  const canExport = usePermission('assets', 'export');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [confirmDel, setConfirmDel] = useState<Asset | null>(null);
@@ -101,6 +102,7 @@ export function AssetsPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('inventaris-aset.csv', filtered.map((a) => ({
       Kode: a.assetCode, Nama: a.name, Kategori: a.category, Brand: a.brand, Serial: a.serialNumber, Lab: db.labs.find((l) => l.id === a.laboratoryId)?.name, Posisi: a.position, Kondisi: a.condition, Status: a.status, Harga: a.price,
     })));
@@ -143,8 +145,8 @@ export function AssetsPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" icon={<ScanLine className="h-4 w-4" />} onClick={() => setOpnameOpen(true)}>Stock Opname</Button>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
-            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
+            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Aset</Button>}
           </>
         }
@@ -222,7 +224,7 @@ export function AssetsPage() {
             </div>
             <p className="font-semibold text-ink-primary">{qrOpen.assetCode}</p>
             <p className="text-sm text-ink-muted">{qrOpen.name}</p>
-            <Button variant="secondary" size="sm" className="mt-4" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Label</Button>
+            {canExport && <Button variant="secondary" size="sm" className="mt-4" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Label</Button>}
           </div>
         )}
       </Modal>

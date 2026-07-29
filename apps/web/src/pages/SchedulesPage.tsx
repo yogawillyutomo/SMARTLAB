@@ -23,6 +23,7 @@ export function SchedulesPage() {
   const canCreate = usePermission('schedules', 'create');
   const canUpdate = usePermission('schedules', 'update');
   const canDelete = usePermission('schedules', 'delete');
+  const canExport = usePermission('schedules', 'export');
   const [view, setView] = useState<'week' | 'day' | 'list'>('week');
   const [weekOffset, setWeekOffset] = useState(0);
   const [filters, setFilters] = useState({ lab: 'all', className: 'all', teacher: 'all', subject: 'all' });
@@ -113,6 +114,7 @@ export function SchedulesPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('jadwal-lab.csv', filtered.map((s) => ({
       Hari: s.day, Tanggal: s.date, Jam: `${s.startTime}-${s.endTime}`, Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status,
     })));
@@ -126,8 +128,8 @@ export function SchedulesPage() {
         icon={<CalendarDays className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
-            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
+            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal</Button>}
           </>
         }

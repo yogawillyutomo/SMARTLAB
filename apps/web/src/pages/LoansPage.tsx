@@ -24,6 +24,7 @@ export function LoansPage() {
   const canCreate = usePermission('loans', 'create');
   const canUpdate = usePermission('loans', 'update');
   const canApprove = usePermission('loans', 'approve');
+  const canExport = usePermission('loans', 'export');
   const canCreateIncident = usePermission('incidents', 'create');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Loan | null>(null);
@@ -115,6 +116,7 @@ export function LoansPage() {
   }
 
   function exportCSV() {
+    if (!canExport) return;
     downloadCSV('peminjaman.csv', db.loans.map((l) => ({ Peminjam: l.borrowerName, Barang: l.itemName, Jumlah: l.quantity, Pinjam: l.borrowDate, RencanaKembali: l.plannedReturn, Status: l.status })));
   }
 
@@ -122,7 +124,7 @@ export function LoansPage() {
     <div className="space-y-6">
       <PageHeader title="Peminjaman dan Serah Terima" description="Manajemen peminjaman barang laboratorium" icon={<HandHelping className="h-5 w-5" />}
         actions={<>
-          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Pinjam Baru</Button>}
         </>}
       />
@@ -205,7 +207,7 @@ export function LoansPage() {
               {canApprove && detail.status === 'Diajukan' && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => approve(detail)}>Setujui</Button>}
               {canApprove && detail.status === 'Disetujui' && <Button size="sm" onClick={() => handover(detail)}>Serahkan</Button>}
               {canUpdate && detail.status === 'Dipinjam' && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={() => openReturn(detail)}>Kembalikan</Button>}
-              <Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Cetak Bukti</Button>
+              {canExport && <Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Cetak Bukti</Button>}
             </div>
           </div>
         )}
