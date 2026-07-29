@@ -84,6 +84,34 @@ export interface Laboratory {
   layoutCols: number;
 }
 
+export type MasterDataCategoryKey =
+  | 'asset-category'
+  | 'asset-model'
+  | 'asset-condition'
+  | 'asset-status'
+  | 'class'
+  | 'teacher'
+  | 'subject'
+  | 'lesson-hour'
+  | 'academic-year'
+  | 'semester'
+  | 'incident-category'
+  | 'supplier'
+  | 'stock-unit'
+  | 'stock-location';
+
+export interface MasterDataItem {
+  id: ID;
+  category: MasterDataCategoryKey;
+  name: string;
+  code?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type MasterDataCollection = Record<MasterDataCategoryKey, MasterDataItem[]>;
+
 export type AssetCondition =
   | 'Baik'
   | 'Rusak Ringan'
@@ -435,14 +463,6 @@ export interface AuditLog {
   oldValue?: string;
   newValue?: string;
   device: string;
-}
-
-export interface MasterDataItem {
-  id: ID;
-  type: string;
-  name: string;
-  code?: string;
-  description?: string;
 }
 
 export interface Permission {

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { loadDB, saveDB, type AppDB } from '@/lib/db';
+import { loadDB, normalizeDB, saveDB, type AppDB } from '@/lib/db';
 import { generateSeedData } from '@/data/seed';
 
 interface AppDataCtx {
@@ -43,8 +43,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const parsed = JSON.parse(raw) as AppDB;
       if (!parsed || typeof parsed !== 'object') return false;
       if (!parsed.labs || !parsed.devices) return false;
-      saveDB(parsed);
-      setDb({ ...parsed });
+      const normalized = normalizeDB(parsed);
+      saveDB(normalized);
+      setDb({ ...normalized });
       return true;
     } catch {
       return false;
