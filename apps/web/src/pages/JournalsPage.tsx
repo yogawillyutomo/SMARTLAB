@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList, Plus, Pencil, Trash2, Download, Printer, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, ClipboardList, Plus, Pencil, Trash2, Download, Printer, Eye } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -18,11 +19,13 @@ import type { Journal } from '@/types';
 
 export function JournalsPage() {
   const { db, mutate } = useAppData();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('journals', 'create');
   const canUpdate = usePermission('journals', 'update');
   const canDelete = usePermission('journals', 'delete');
   const canExport = usePermission('journals', 'export');
+  const canViewSessions = usePermission('sessions', 'view');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Journal | null>(null);
   const [confirmDel, setConfirmDel] = useState<Journal | null>(null);
@@ -85,17 +88,24 @@ export function JournalsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Jurnal Praktikum"
-        description="Catatan kegiatan praktikum laboratorium"
+        title="Riwayat & Laporan Pelaksanaan"
+        description="Jurnal praktikum dan laporan kegiatan yang berasal dari Pelaksanaan Lab."
         icon={<ClipboardList className="h-5 w-5" />}
         actions={
           <>
+            {canViewSessions && <Button variant="secondary" size="sm" icon={<BookOpen className="h-4 w-4" />} onClick={() => navigate('/sessions')}>Kembali ke Pelaksanaan Lab</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jurnal</Button>}
+            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jurnal/Laporan</Button>}
           </>
         }
       />
+
+      <Card>
+        <CardContent>
+          <p className="text-sm text-ink-secondary">Halaman ini tetap tersedia selama proses penyatuan workflow. Data jurnal lama dan laporan manual tidak dihapus.</p>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{stats.total}</p><p className="text-xs text-ink-muted">Total Jurnal</p></CardContent></Card>

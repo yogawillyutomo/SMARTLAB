@@ -53,7 +53,7 @@ function useGlobalSearch() {
     db.devices.forEach((d) => {
       if (results.length >= limit) return;
       if (d.hostname.toLowerCase().includes(query) || d.positionCode.toLowerCase().includes(query)) {
-        results.push({ label: d.hostname, sub: `PC · ${d.positionCode}`, to: `/monitoring`, icon: Monitor });
+        results.push({ label: d.hostname, sub: `Perangkat · ${d.positionCode}`, to: `/monitoring`, icon: Monitor });
       }
     });
     db.assets.forEach((a) => {
@@ -65,31 +65,31 @@ function useGlobalSearch() {
     db.incidents.forEach((i) => {
       if (results.length >= limit) return;
       if (i.title.toLowerCase().includes(query) || i.ticketNumber.toLowerCase().includes(query)) {
-        results.push({ label: i.title, sub: `Incident · ${i.ticketNumber}`, to: '/incidents', icon: AlertTriangle });
+        results.push({ label: i.title, sub: `Tiket Kerusakan · ${i.ticketNumber}`, to: '/incidents', icon: AlertTriangle });
       }
     });
     db.workOrders.forEach((w) => {
       if (results.length >= limit) return;
       if (w.woNumber.toLowerCase().includes(query)) {
-        results.push({ label: w.woNumber, sub: `Work Order · ${w.status}`, to: '/work-orders', icon: Wrench });
+        results.push({ label: w.woNumber, sub: `Tugas Perbaikan · ${w.status}`, to: '/work-orders', icon: Wrench });
       }
     });
     db.journals.forEach((j) => {
       if (results.length >= limit) return;
       if (j.journalNumber.toLowerCase().includes(query) || j.material.toLowerCase().includes(query)) {
-        results.push({ label: j.material, sub: `Jurnal · ${j.journalNumber}`, to: '/journals', icon: ClipboardList });
+        results.push({ label: j.material, sub: `Jurnal/Laporan · ${j.journalNumber}`, to: '/journals', icon: ClipboardList });
       }
     });
     db.bookings.forEach((b) => {
       if (results.length >= limit) return;
       if (b.activity.toLowerCase().includes(query)) {
-        results.push({ label: b.activity, sub: `Booking · ${b.date}`, to: '/bookings', icon: CalendarClock });
+        results.push({ label: b.activity, sub: `Reservasi Lab · ${b.date}`, to: '/bookings', icon: CalendarClock });
       }
     });
     db.loans.forEach((l) => {
       if (results.length >= limit) return;
       if (l.itemName.toLowerCase().includes(query) || l.borrowerName.toLowerCase().includes(query)) {
-        results.push({ label: l.itemName, sub: `Peminjaman · ${l.borrowerName}`, to: '/loans', icon: HandHelping });
+        results.push({ label: l.itemName, sub: `Peminjaman Barang · ${l.borrowerName}`, to: '/loans', icon: HandHelping });
       }
     });
     db.users.forEach((u) => {
@@ -292,7 +292,7 @@ export function AppTopbar() {
           className="hidden items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 sm:flex"
         >
           <Plus className="h-4 w-4" />
-          <span className="hidden md:inline">Lapor Kerusakan</span>
+          <span className="hidden md:inline">Buat Tiket</span>
         </button>
 
         {/* Profile */}
@@ -416,22 +416,22 @@ function buildCrumbs(path: string): { label: string; to?: string }[] {
   const labelMap: Record<string, string> = {
     dashboard: 'Dashboard',
     laboratories: 'Laboratorium',
-    schedules: 'Jadwal Lab',
-    bookings: 'Booking Lab',
-    sessions: 'Sesi Praktikum',
-    journals: 'Jurnal Praktikum',
-    monitoring: 'Monitoring PC',
-    assets: 'Inventaris',
-    stock: 'Persediaan',
-    incidents: 'Laporan Kerusakan',
-    'work-orders': 'Work Order',
-    maintenance: 'Maintenance',
-    loans: 'Peminjaman',
+    schedules: 'Jadwal Reguler',
+    bookings: 'Reservasi Lab',
+    sessions: 'Pelaksanaan Lab',
+    journals: 'Riwayat & Laporan Pelaksanaan',
+    monitoring: 'Monitoring Perangkat',
+    assets: 'Aset Tetap',
+    stock: 'Stok & Spare Part',
+    incidents: 'Tiket Kerusakan',
+    'work-orders': 'Tugas Perbaikan',
+    maintenance: 'Pemeliharaan Berkala',
+    loans: 'Peminjaman Barang',
     calendar: 'Kalender Akademik',
-    reports: 'Laporan dan Analitik',
+    reports: 'Laporan & Analitik',
     notifications: 'Notifikasi',
     users: 'Pengguna',
-    roles: 'Role dan Permission',
+    roles: 'Hak Akses',
     'master-data': 'Master Data',
     'audit-logs': 'Audit Log',
     settings: 'Pengaturan',

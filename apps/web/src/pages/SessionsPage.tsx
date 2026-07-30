@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { BookOpen, Play, Square, Plus, AlertTriangle, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, ClipboardList, Play, Square, Plus, AlertTriangle, Download } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -17,10 +18,12 @@ import type { Session } from '@/types';
 
 export function SessionsPage() {
   const { db, mutate } = useAppData();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('sessions', 'create');
   const canUpdate = usePermission('sessions', 'update');
   const canExport = usePermission('sessions', 'export');
+  const canViewJournals = usePermission('journals', 'view');
   const [open, setOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState<Session | null>(null);
   const [detail, setDetail] = useState<Session | null>(null);
@@ -54,7 +57,7 @@ export function SessionsPage() {
         status: 'Belum Dimulai',
       });
     });
-    toast('Sesi praktikum dibuat', 'success');
+    toast('Pelaksanaan Lab dibuat', 'success');
     setOpen(false);
   }
 
@@ -139,7 +142,7 @@ export function SessionsPage() {
         }
       }
     });
-    toast('Sesi selesai. Jurnal otomatis dibuat' + (finishForm.brokenPCsAfter?.length ? ` dan ${finishForm.brokenPCsAfter.length} incident dibuat` : ''), 'success');
+    toast('Pelaksanaan selesai. Jurnal otomatis dibuat' + (finishForm.brokenPCsAfter?.length ? ` dan ${finishForm.brokenPCsAfter.length} tiket kerusakan dibuat` : ''), 'success');
     setFinishOpen(null);
   }
 
@@ -153,16 +156,23 @@ export function SessionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sesi Praktikum"
-        description="Kelola sesi penggunaan laboratorium"
+        title="Pelaksanaan Lab"
+        description="Kelola kegiatan laboratorium dari mulai pelaksanaan, kondisi perangkat, hingga penyelesaian laporan."
         icon={<BookOpen className="h-5 w-5" />}
         actions={
           <>
+            {canViewJournals && <Button variant="secondary" size="sm" icon={<ClipboardList className="h-4 w-4" />} onClick={() => navigate('/journals')}>Riwayat & Laporan</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Sesi Baru</Button>}
+            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Pelaksanaan Baru</Button>}
           </>
         }
       />
+
+      <Card>
+        <CardContent>
+          <p className="text-sm text-ink-secondary">Pelaksanaan dan laporan merupakan satu rangkaian. Setelah kegiatan diakhiri, laporan atau jurnal harus dilengkapi sebelum pelaksanaan dinyatakan tuntas. Frontend saat ini masih menggunakan layar sesi dan jurnal terpisah selama masa transisi.</p>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {['Belum Dimulai', 'Berlangsung', 'Selesai', 'Dibatalkan'].map((st) => (
@@ -180,7 +190,7 @@ export function SessionsPage() {
               <th className="px-4 py-3 font-medium">Lab</th><th className="px-4 py-3 font-medium">Kelas</th><th className="px-4 py-3 font-medium">Guru</th><th className="px-4 py-3 font-medium">Mapel</th><th className="px-4 py-3 font-medium">Peserta</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Aksi</th>
             </tr></thead>
             <tbody>
-              {db.sessions.length === 0 ? <tr><td colSpan={7}><EmptyState title="Belum ada sesi" className="py-10" /></td></tr> : db.sessions.map((s) => (
+              {db.sessions.length === 0 ? <tr><td colSpan={7}><EmptyState title="Belum ada pelaksanaan" className="py-10" /></td></tr> : db.sessions.map((s) => (
                 <tr key={s.id} className="border-b border-base-700/40 hover:bg-base-700/30 cursor-pointer" onClick={() => setDetail(s)}>
                   <td className="px-4 py-3 text-ink-primary">{db.labs.find((l) => l.id === s.laboratoryId)?.name}</td>
                   <td className="px-4 py-3 text-ink-secondary">{s.className}</td>
@@ -201,7 +211,7 @@ export function SessionsPage() {
         </div>
       </Card>
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title="Sesi Praktikum Baru" onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title="Pelaksanaan Lab Baru" onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Laboratorium" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
           <Input label="Guru" value={form.teacherName ?? ''} onChange={(e) => setForm({ ...form, teacherName: e.target.value })} />
@@ -214,7 +224,7 @@ export function SessionsPage() {
         </div>
       </FormDialog>
 
-      <FormDialog open={Boolean(finishOpen)} onClose={() => setFinishOpen(null)} title="Selesaikan Sesi" description="Jurnal akan dibuat otomatis" onSubmit={finishSession} size="lg" submitLabel="Selesai & Buat Jurnal">
+      <FormDialog open={Boolean(finishOpen)} onClose={() => setFinishOpen(null)} title="Akhiri Pelaksanaan" description="Jurnal akan dibuat otomatis" onSubmit={finishSession} size="lg" submitLabel="Selesai & Buat Jurnal">
         {finishOpen && (
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Materi" value={finishForm.finalMaterial ?? ''} onChange={(e) => setFinishForm({ ...finishForm, finalMaterial: e.target.value })} />

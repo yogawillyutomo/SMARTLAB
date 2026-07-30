@@ -90,7 +90,7 @@ export function MaintenancePage() {
         if (idx >= 0) d.maintenance.plans[idx].nextSchedule = execForm.nextSchedule ?? '';
       }
     });
-    toast('Eksekusi maintenance tersimpan', 'success');
+    toast('Eksekusi pemeliharaan tersimpan', 'success');
     setExecOpen(false);
   }
 
@@ -107,10 +107,10 @@ export function MaintenancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Preventive Maintenance" description="Rencana dan eksekusi maintenance berkala" icon={<ShieldCheck className="h-5 w-5" />}
+      <PageHeader title="Pemeliharaan Berkala" description="Rencanakan dan catat pekerjaan preventif untuk menjaga kondisi perangkat dan fasilitas." icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          {canCreate && tab === 'plans' && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Rencana Baru</Button>}
+          {canCreate && tab === 'plans' && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Rencana Pemeliharaan</Button>}
           {canCreate && tab === 'executions' && <Button size="sm" icon={<Play className="h-4 w-4" />} onClick={() => openExecution()}>Eksekusi Baru</Button>}
         </>}
       />
@@ -124,8 +124,8 @@ export function MaintenancePage() {
       </div>
 
       <div className="flex gap-2 border-b border-base-700">
-        <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Maintenance Plan</button>
-        <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Maintenance Execution</button>
+        <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Rencana Pemeliharaan</button>
+        <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Riwayat Pemeliharaan</button>
       </div>
 
       {tab === 'plans' ? (
@@ -186,7 +186,7 @@ export function MaintenancePage() {
         </Card>
       )}
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Rencana' : 'Rencana Maintenance'} onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Rencana Pemeliharaan' : 'Rencana Pemeliharaan'} onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><Input label="Nama Rencana" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
@@ -213,7 +213,7 @@ export function MaintenancePage() {
         </div>
       </FormDialog>
 
-      <FormDialog open={execOpen} onClose={() => setExecOpen(false)} title="Eksekusi Maintenance" onSubmit={saveExecution} size="lg">
+      <FormDialog open={execOpen} onClose={() => setExecOpen(false)} title="Eksekusi Pemeliharaan" onSubmit={saveExecution} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Lab" value={execForm.laboratoryId} onChange={(e) => setExecForm({ ...execForm, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
           <Input label="Aset" value={execForm.assetCode ?? ''} onChange={(e) => setExecForm({ ...execForm, assetCode: e.target.value })} />

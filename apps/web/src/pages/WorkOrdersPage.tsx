@@ -75,7 +75,7 @@ export function WorkOrdersPage() {
         timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
       });
     });
-    toast('Work order dibuat', 'success');
+    toast('Tugas perbaikan dibuat', 'success');
     setOpen(false);
   }
 
@@ -130,7 +130,7 @@ export function WorkOrdersPage() {
     setDetail((d) => d && d.id === assignmentOpen.id ? { ...d, technician: assignmentTechnician, status: 'Assigned', timeline: [...d.timeline, { status: 'Assigned', at: assignedAt, by: user?.name ?? 'Admin' }] } : d);
     setAssignmentOpen(null);
     setAssignmentTechnician('');
-    toast(`Work order ditugaskan ke ${assignmentTechnician}`, 'success');
+    toast(`Tugas perbaikan ditugaskan ke ${assignmentTechnician}`, 'success');
   }
 
   function useSparePart() {
@@ -179,10 +179,10 @@ export function WorkOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Work Order Teknisi" description="Manajemen pekerjaan perbaikan teknisi" icon={<Wrench className="h-5 w-5" />}
+      <PageHeader title="Tugas Perbaikan" description="Kelola penugasan teknisi, diagnosis, tindakan perbaikan, spare part, dan verifikasi." icon={<Wrench className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>WO Baru</Button>}
+          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tugas Baru</Button>}
         </>}
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -248,7 +248,7 @@ export function WorkOrdersPage() {
         </CardContent></Card>
       )}
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title="Work Order Baru" onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title="Tugas Perbaikan Baru" onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
           <Input label="Aset (opsional)" value={form.assetCode ?? ''} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />

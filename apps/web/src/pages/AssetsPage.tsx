@@ -139,8 +139,8 @@ export function AssetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Inventaris Aset"
-        description="Manajemen aset tetap laboratorium"
+        title="Aset Tetap"
+        description="Kelola identitas, kondisi, lokasi, dan riwayat aset tetap laboratorium."
         icon={<Boxes className="h-5 w-5" />}
         actions={
           <>
