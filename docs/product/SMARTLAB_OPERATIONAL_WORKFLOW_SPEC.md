@@ -1,6 +1,6 @@
-# SmartLab Operational Workflow Specification
+# Spesifikasi Workflow Operasional SmartLab
 
-**Status:** Approved Product Direction
+**Status:** Arah Produk Disetujui
 
 **Version:** 1.0
 
@@ -8,245 +8,406 @@
 
 **Product:** SmartLab PPLG
 
-**Audience:** product owner, school laboratory leadership, curriculum staff, teachers, technicians, administrators, designers, and engineering teams.
+**Audiens:** pemilik produk, pimpinan sekolah, Kepala Lab, Admin Lab, guru, teknisi, pengembang, perancang, dan peninjau operasional.
 
-This document is the source of truth for approved operational workflow direction. **Current implementation** is demonstrable behavior in the React frontend; **Approved target behavior** is the agreed direction; **Future implementation** needs a focused PR; **Out of scope** is not authorized by this document. It does not rename routes, migrate data, change permissions, or replace contracts.
+Dokumen ini adalah sumber kebenaran untuk arah workflow operasional SmartLab. Ia menetapkan keputusan produk, bukan perubahan kode, route, kontrak, skema, konfigurasi, atau data. Setiap perubahan implementasi tetap memerlukan PR terfokus dan persetujuan manusia sebelum digabungkan.
 
-## 1. Product purpose and technical boundary
-
-SmartLab coordinates safe laboratory use, practical-learning records, device and asset operations, maintenance, and accountable administration for PPLG: plan a room, run an activity, record its result, report a problem against a stable asset, repair it, and retain history.
-
-The target architecture is React web/PWA with Capacitor mobile delivery, Laravel REST API, PostgreSQL, Redis, a Go Windows PC agent, and `packages/contracts` as the HTTP/realtime contract source. The current web app uses repository abstractions backed by browser storage as a frontend prototype; it is not the future system of record.
-
-**Out of scope:** remote desktop control, keylogging, screenshots, personal-file collection, a full academic-information system, procurement end-to-end, and backend/API/schema change in this documentation PR.
-
-## 2. Approved information architecture and terminology
-
-Approved target labels clarify scope. Existing routes remain unchanged until focused route and permission migration work is approved; existing session and journal records must never be deleted as a terminology change.
-
-| Current label | Approved target label | Purpose | What it is not | Current route | Planned implementation notes |
-| --- | --- | --- | --- | --- | --- |
-| Dashboard | Dashboard | Operational summary and exceptions. | Transaction source of truth. | `/dashboard` | Later use real aggregates. |
-| Laboratorium | Laboratorium | Room identity, capacity, status, layout. | Device inventory list. | `/laboratories` | Add safe lifecycle later. |
-| Jadwal Lab | Jadwal Reguler | Recurring teaching allocation. | One-off request. | `/schedules` | Feed shared availability. |
-| Booking Lab | Reservasi Lab | Requested date-specific use outside regular allocation. | Recurring timetable or priority override. | `/bookings` | Approval + shared availability. |
-| Sesi Praktikum | Pelaksanaan Lab | Dated execution and activity record. | Calendar entry alone. | `/sessions` | Unify experience with journal. |
-| Jurnal Praktikum | Incorporated into Pelaksanaan Lab | Evidence/report for completed execution. | Separate allocation source. | `/journals` | Preserve data; migrate experience later. |
-| Monitoring PC | Monitoring Perangkat | Managed-device health, identity, status, alerts. | Fixed-asset registration. | `/monitoring` | Replace simulation incrementally. |
-| Inventaris | Aset Tetap | Individually accountable durable assets. | Consumable stock. | `/assets` | Stable device/asset link. |
-| Persediaan | Stok & Spare Part | Quantified consumables and repair parts. | Individually registered fixed asset. | `/stock` | Backend transactions later. |
-| Laporan Kerusakan | Tiket Kerusakan | Issue, impact, triage, resolution evidence. | Repair assignment itself. | `/incidents` | Require stable references when applicable. |
-| Work Order | Tugas Perbaikan | Assigned corrective work, diagnosis, parts, verification. | Preventive plan. | `/work-orders` | May originate from incident. |
-| Maintenance | Pemeliharaan Berkala | Planned preventive work and checklist. | Reactive incident or corrective queue alone. | `/maintenance` | Creates availability closures. |
-| Peminjaman | Peminjaman Barang | Equipment custody and return. | Room reservation. | `/loans` | Keep handover history. |
-| Kalender Akademik | Kalender Akademik | Academic dates and closures. | Allocation engine. | `/calendar` | Supplies closures/exceptions. |
-| Laporan dan Analitik | Laporan & Analitik | Filters, exports, decision summaries. | Live operational editing. | `/reports` | Use validated data. |
-| Notifikasi | Notifikasi | Recipient action/inbox items. | Immutable audit trail. | `/notifications` | Valid deep links/delivery state. |
-| Pengguna | Pengguna | Login-capable accounts. | Complete teacher master. | `/users` | Teacher may lack login; technician/admin may lack teacher record. |
-| Role dan Permission | Hak Akses | Role and granular access administration. | Security boundary by itself. | `/roles` | Laravel policies authoritative. |
-| Master Data | Master Data | Controlled reference and academic masters. | User accounts. | `/master-data` | Import later. |
-| Audit Log | Audit Log | Append-oriented material-change evidence. | Notification/task list. | `/audit-logs` | Backend coverage later. |
-| Pengaturan | Pengaturan | School/product configuration. | Policy bypass. | `/settings` | Tenant-aware backend later. |
-
-| Target navigation group | Items |
+| Daftar isi | Bagian |
 | --- | --- |
-| Operasional | Dashboard; Laboratorium; Jadwal Reguler; Reservasi Lab; Pelaksanaan Lab |
-| Aset dan Pemeliharaan | Monitoring Perangkat; Aset Tetap; Stok & Spare Part; Tiket Kerusakan; Tugas Perbaikan; Pemeliharaan Berkala; Peminjaman Barang |
-| Informasi | Kalender Akademik; Laporan & Analitik; Notifikasi |
-| Administrasi | Pengguna; Hak Akses; Master Data; Audit Log; Pengaturan |
+| 1 | [Tujuan dan batas teknis](#1-tujuan-dan-batas-teknis) |
+| 2 | [Terminologi dan navigasi](#2-terminologi-dan-navigasi) |
+| 3 | [Peran dan tanggung jawab](#3-peran-dan-tanggung-jawab) |
+| 4 | [Ketersediaan, jadwal, reservasi, dan prioritas](#4-ketersediaan-jadwal-reservasi-dan-prioritas) |
+| 5 | [Pelaksanaan Lab dan laporan](#5-pelaksanaan-lab-dan-laporan) |
+| 6 | [Denah laboratorium](#6-denah-laboratorium) |
+| 7 | [Tema tampilan](#7-tema-tampilan) |
+| 8 | [Master Data dan import Excel](#8-master-data-dan-import-excel) |
+| 9 | [Perangkat, aset, incident, dan perbaikan](#9-perangkat-aset-incident-dan-perbaikan) |
+| 10 | [Kesenjangan implementasi saat ini](#10-kesenjangan-implementasi-saat-ini) |
+| 11 | [Roadmap](#11-roadmap-implementasi) |
+| 12 | [Definition of Done](#12-definition-of-done-pr-masa-depan) |
+| 13 | [Log keputusan](#13-log-keputusan) |
+| 14 | [Pertanyaan terbuka](#14-pertanyaan-terbuka) |
 
-These distinctions are deliberate: regular schedule vs reservation; execution vs report; monitoring vs fixed asset; fixed asset vs stock; incident vs work order vs preventive maintenance; notification vs audit log; and teacher master vs user. Future focused PRs will migrate labels, routes, and permissions while preserving links and data.
+## Konvensi status
 
-## 3. Planning, availability, and priority events
+Setiap bagian memakai arti berikut agar rencana tidak dianggap sudah tersedia di aplikasi.
 
-### 3.1 Allocation sources
+| Istilah | Arti |
+| --- | --- |
+| **Implementasi saat ini** | Perilaku yang dapat diamati pada frontend React saat ini. |
+| **Perilaku target yang disetujui** | Hasil produk yang telah disepakati, tetapi belum otomatis diimplementasikan. |
+| **Implementasi masa depan** | Pekerjaan dalam PR terfokus, lengkap dengan kontrak, migrasi, dan otorisasi bila diperlukan. |
+| **Di luar scope PR dokumentasi** | Pekerjaan yang tidak boleh dilakukan hanya karena dokumen ini berubah. |
 
-The approved model has three sources: **Jadwal Reguler** (recurring curriculum allocation), **Reservasi Lab** (requested, approved/rejected date-specific allocation), and **Kegiatan Prioritas** (authorized high-priority date-specific activities: TKA, ANBK, examinations, certification, LKS, workshops, or another authorized activity).
+## 1. Tujuan dan batas teknis
+
+SmartLab membantu sekolah merencanakan penggunaan laboratorium, menjalankan kegiatan, mencatat laporan, menautkan kerusakan pada perangkat/aset yang stabil, menangani perbaikan, dan menyimpan jejak operasional yang dapat dipertanggungjawabkan.
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | `apps/web` adalah frontend React dengan abstraksi repository dan persistensi browser lokal untuk prototipe. |
+| Perilaku target yang disetujui | React web/PWA dengan shell Capacitor, Laravel REST API, PostgreSQL, Redis, Go Windows PC Agent, serta `packages/contracts` sebagai sumber kontrak HTTP dan realtime. |
+| Implementasi masa depan | Backend menjadi sumber data dan otorisasi utama secara bertahap melalui vertical slice. |
+| Di luar scope PR dokumentasi | Remote desktop, keylogging, screenshot, pengumpulan file pribadi, sistem akademik lengkap, pengadaan end-to-end, serta perubahan backend/API/skema. |
+
+## 2. Terminologi dan navigasi
+
+Istilah target memperjelas domain tanpa menghapus route atau catatan historis yang ada. Migrasi label, route, dan permission harus dilakukan dalam PR terfokus dengan redirect/deep link yang aman. Data sesi dan jurnal saat ini tidak boleh dihapus akibat perubahan istilah.
+
+| Label saat ini | Label target disetujui | Tujuan | Bukan | Route saat ini | Catatan implementasi |
+| --- | --- | --- | --- | --- | --- |
+| Dashboard | Dashboard | Ringkasan operasional dan pengecualian. | Sumber transaksi utama. | `/dashboard` | Gunakan agregasi nyata pada tahap pelaporan. |
+| Laboratorium | Laboratorium | Identitas, kapasitas, status, dan denah ruang. | Daftar inventaris perangkat. | `/laboratories` | Tambahkan lifecycle aman. |
+| Jadwal Lab | Jadwal Reguler | Alokasi pembelajaran berulang. | Permohonan satu kali. | `/schedules` | Masukan ke layanan ketersediaan. |
+| Booking Lab | Reservasi Lab | Permohonan penggunaan bertanggal di luar jadwal reguler. | Jadwal berulang atau override prioritas. | `/bookings` | Memiliki persetujuan. |
+| Sesi Praktikum | Pelaksanaan Lab | Pelaksanaan pada tanggal tertentu dan rekam kegiatannya. | Entri kalender saja. | `/sessions` | Menyatukan pengalaman jurnal. |
+| Jurnal Praktikum | Bagian dari Pelaksanaan Lab | Bukti/laporan satu pelaksanaan selesai. | Sumber alokasi ruang. | `/journals` | Data lama dipertahankan. |
+| Monitoring PC | Monitoring Perangkat | Kesehatan, identitas, status, dan alert perangkat. | Registrasi aset tetap. | `/monitoring` | Beralih dari simulasi ke telemetry yang disetujui. |
+| Inventaris | Aset Tetap | Aset tahan lama per unit. | Stok habis pakai. | `/assets` | Tautan perangkat/aset stabil. |
+| Persediaan | Stok & Spare Part | Kuantitas bahan habis pakai dan suku cadang. | Aset tetap per unit. | `/stock` | Transaksi backend kemudian. |
+| Laporan Kerusakan | Tiket Kerusakan | Isu, dampak, triage, dan riwayat penyelesaian. | Tugas perbaikan. | `/incidents` | Tautkan perangkat/aset bila relevan. |
+| Work Order | Tugas Perbaikan | Pekerjaan korektif yang ditugaskan. | Rencana pemeliharaan berkala. | `/work-orders` | Dapat berasal dari tiket. |
+| Maintenance | Pemeliharaan Berkala | Pekerjaan preventif dan checklist. | Tiket reaktif. | `/maintenance` | Menjadi sumber penutupan ketersediaan. |
+| Peminjaman | Peminjaman Barang | Penyerahan, penguasaan, dan pengembalian barang. | Reservasi ruang. | `/loans` | Pertahankan riwayat serah-terima. |
+| Kalender Akademik | Kalender Akademik | Tanggal akademik dan penutupan. | Mesin alokasi laboratorium. | `/calendar` | Memberi closure/exception. |
+| Laporan dan Analitik | Laporan & Analitik | Filter, ekspor, dan ringkasan keputusan. | Penyuntingan operasional langsung. | `/reports` | Berdasar data tervalidasi. |
+| Notifikasi | Notifikasi | Pesan tindakan untuk penerima. | Audit log yang tidak dapat diubah. | `/notifications` | Deep link harus valid. |
+| Pengguna | Pengguna | Akun yang dapat login. | Seluruh master guru. | `/users` | Guru dapat tanpa akun; teknisi/admin dapat tanpa data guru. |
+| Role dan Permission | Hak Akses | Administrasi role dan permission. | Batas keamanan tunggal. | `/roles` | Laravel Policies tetap utama. |
+| Master Data | Master Data | Referensi terkontrol dan master akademik. | Akun pengguna. | `/master-data` | Import bertahap. |
+| Audit Log | Audit Log | Bukti perubahan material yang append-oriented. | Kotak masuk notifikasi. | `/audit-logs` | Perlu cakupan backend. |
+| Pengaturan | Pengaturan | Konfigurasi sekolah dan produk. | Jalan pintas kebijakan operasional. | `/settings` | Menjadi konfigurasi tenant-aware. |
+
+| Kelompok navigasi target | Menu |
+| --- | --- |
+| Operasional | Dashboard, Laboratorium, Jadwal Reguler, Reservasi Lab, Pelaksanaan Lab |
+| Aset dan Pemeliharaan | Monitoring Perangkat, Aset Tetap, Stok & Spare Part, Tiket Kerusakan, Tugas Perbaikan, Pemeliharaan Berkala, Peminjaman Barang |
+| Informasi | Kalender Akademik, Laporan & Analitik, Notifikasi |
+| Administrasi | Pengguna, Hak Akses, Master Data, Audit Log, Pengaturan |
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Label dan route masih mengikuti tabel kolom pertama. |
+| Perilaku target yang disetujui | Jadwal Reguler berbeda dari Reservasi Lab; pelaksanaan berbeda dari laporan; monitoring berbeda dari aset; aset tetap berbeda dari stok; tiket berbeda dari tugas perbaikan dan pemeliharaan; notifikasi berbeda dari audit. |
+| Implementasi masa depan | PR navigasi memigrasikan label, permission, dan deep link tanpa menghapus data. |
+| Di luar scope PR dokumentasi | Mengganti route, menghapus menu, atau menghapus sesi/jurnal. |
+
+## 3. Peran dan tanggung jawab
+
+Role aktual SmartLab adalah **Super Admin, Admin Lab, Kepala Lab, Teknisi, Guru, Ketua Kelas, Siswa,** dan **Pimpinan**. Matriks ini adalah arah operasional; nama permission granular selain proposal yang disebutkan belum final.
+
+Keterangan: **Ya** = pelaku utama; **Terbatas** = hanya data/ruang miliknya atau melalui alur; **Read-only** = melihat tanpa mengubah; **Tidak** = tidak diberi tindakan; **Proposed / perlu finalisasi** = kebijakan belum dikunci.
+
+| Tindakan | Super Admin | Admin Lab | Kepala Lab | Teknisi | Guru | Ketua Kelas | Siswa | Pimpinan |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Melihat jadwal | Ya | Ya | Ya | Ya | Ya | Ya | Ya | Read-only |
+| Membuat Jadwal Reguler | Ya | Ya | Ya | Tidak | Terbatas | Tidak | Tidak | Tidak |
+| Mengajukan Reservasi Lab | Ya | Ya | Ya | Terbatas | Ya | Terbatas | Terbatas | Tidak |
+| Menyetujui Reservasi Lab | Ya | Ya | Ya | Tidak | Tidak | Tidak | Tidak | Tidak |
+| Menyetujui override kegiatan prioritas | Ya | Proposed / perlu finalisasi | Proposed / perlu finalisasi | Tidak | Tidak | Tidak | Tidak | Read-only |
+| Memulai Pelaksanaan Lab | Ya | Ya | Ya | Terbatas | Ya | Terbatas | Tidak | Tidak |
+| Mengakhiri Pelaksanaan Lab | Ya | Ya | Ya | Terbatas | Ya | Terbatas | Tidak | Tidak |
+| Mengisi dan mengajukan laporan | Ya | Ya | Ya | Terbatas | Ya | Terbatas | Tidak | Tidak |
+| Memverifikasi laporan | Ya | Ya | Ya | Tidak | Tidak | Tidak | Tidak | Read-only |
+| Membuat Tiket Kerusakan | Ya | Ya | Ya | Ya | Ya | Ya | Terbatas | Tidak |
+| Menugaskan teknisi | Ya | Ya | Ya | Tidak | Tidak | Tidak | Tidak | Tidak |
+| Mengerjakan Tugas Perbaikan | Ya | Terbatas | Terbatas | Ya | Tidak | Tidak | Tidak | Tidak |
+| Mengelola denah | Ya | Ya | Ya | Terbatas | Tidak | Tidak | Tidak | Read-only |
+| Import Master Data | Ya | Ya | Terbatas | Tidak | Tidak | Tidak | Tidak | Tidak |
+| Import jadwal | Ya | Ya | Ya | Tidak | Terbatas | Tidak | Tidak | Tidak |
+| Mengubah preferensi tema pribadi | Ya | Ya | Ya | Ya | Ya | Ya | Ya | Ya |
+| Mengubah pengaturan global | Ya | Ya | Terbatas | Tidak | Tidak | Tidak | Tidak | Read-only |
+
+Proposal permission `reservations.override` hanya contoh untuk override prioritas dan harus difinalisasi bersama kontrak. **Laravel Policies dan validasi server adalah batas keamanan yang otoritatif; guard frontend hanya membantu pengalaman pengguna.**
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Frontend memiliki role aktual di atas dan matriks permission tersimpan untuk menu, halaman, serta aksi. |
+| Perilaku target yang disetujui | Tindakan sensitif mengikuti matriks dan kebijakan sekolah, terutama persetujuan override. |
+| Implementasi masa depan | Finalisasi permission granular, kebijakan backend, dan audit otorisasi. |
+| Di luar scope PR dokumentasi | Mengubah role, permission, atau kebijakan aplikasi saat ini. |
+
+## 4. Ketersediaan, jadwal, reservasi, dan prioritas
+
+Jadwal Reguler dan Reservasi Lab tetap domain terpisah: yang pertama alokasi berulang pembelajaran, yang kedua permohonan bertanggal. Kegiatan prioritas adalah aktivitas bertanggal yang disetujui, misalnya TKA, ANBK, ujian, sertifikasi, LKS, workshop, atau kegiatan lain yang diotorisasi.
 
 ```mermaid
 flowchart TD
-  A[Planning source] --> B[Availability evaluation]
-  B --> C{Conflict?}
-  C -- No --> D[Approved dated occurrence]
-  C -- Yes --> E[Approval required]
-  E --> F[Explicit resolution]
+  A[Sumber perencanaan] --> B[Evaluasi ketersediaan]
+  B --> C{Ada konflik?}
+  C -- Tidak --> D[Occurrence bertanggal disetujui]
+  C -- Ya --> E[Persetujuan berwenang]
+  E --> F[Resolusi eksplisit]
   F --> D
   D --> G[Pelaksanaan Lab]
-  G --> H[Report required]
-  H --> I[Verification]
-  I --> J[Complete]
+  G --> H[Laporan wajib]
+  H --> I[Verifikasi]
+  I --> J[Selesai]
 ```
 
-### 3.2 Unified availability engine
+Layanan ketersediaan terpadu mengevaluasi jadwal berulang, reservasi, kegiatan prioritas, penutupan pemeliharaan, penutupan laboratorium, dan `ScheduleException`. Ia mendeteksi tumpang tindih laboratorium/guru/kelas, occurrence ganda, lab tidak aktif, ketidaksesuaian kapasitas, penutupan pemeliharaan, dan konflik reservasi yang disetujui.
 
-**Approved target behavior:** one engine evaluates schedules, reservations, priority events, maintenance closures, academic closures, and exceptions. It detects laboratory/teacher/class overlaps, duplicate usage, inactive lab, capacity, maintenance closure, and approved-reservation conflict.
+Override prioritas selalu bertanggal; jadwal berulang tidak pernah dihapus. Setiap occurrence terdampak dipratinjau, disetujui pihak berwenang, memiliki resolusi eksplisit, mengirim notifikasi, dan tercatat di audit. Pembatalan mengembalikan perilaku occurrence normal bila memungkinkan. Pilihan resolusi: membatalkan tanggal terdampak saja, memindahkan laboratorium, menjadwalkan ulang tanggal/waktu, mengganti dengan kegiatan prioritas, atau mempertahankan bila tidak ada konflik sumber daya nyata. Pemohon tidak dapat meng-override alokasi.
 
-**Current implementation:** schedules and bookings are separate frontend collections; booking validates only other bookings on its own screen. A shared target engine does not exist.
+`SpecialEvent` secara konseptual memiliki ID stabil, jenis, judul, waktu, lab, pemohon, status persetujuan, alasan, dan referensi audit. `ScheduleException` memiliki ID stabil, ID jadwal, tanggal occurrence, resolusi, pengganti bila ada, penyetuju, alasan, dan referensi audit.
 
-**Future implementation:** focused availability-domain work and Laravel contract/API ownership.
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Jadwal dan booking tersimpan sebagai koleksi frontend terpisah; pemeriksaan booking hanya membandingkan booking lain pada layar tersebut. |
+| Perilaku target yang disetujui | Satu layanan ketersediaan memutuskan semua konflik tanpa mengaburkan domain Jadwal Reguler dan Reservasi Lab. |
+| Implementasi masa depan | Domain availability di API dengan validasi transaksi, `SpecialEvent`, dan `ScheduleException`. |
+| Di luar scope PR dokumentasi | Menganggap validasi browser sebagai jaminan konkurensi atau otorisasi. |
 
-**Out of scope now:** treating client-side checks as concurrency or authorization guarantees.
+## 5. Pelaksanaan Lab dan laporan
 
-### 3.3 Priority override
+Prinsip yang dikunci: **satu menu, satu workflow pengguna, dua entitas domain terkait, satu laporan wajib.** Secara konseptual relasinya adalah `Session 1 — 1 ActivityReport`. Pelaksanaan yang dibatalkan boleh tidak memiliki laporan.
 
-A priority event is date/time-specific and never deletes a recurring schedule. It previews affected occurrences, requires authorized approval, records an explicit resolution, notifies affected parties, writes audit evidence, and restores the underlying allocation on cancellation. Resolution is move to another lab, move to another time, cancel the affected occurrence, or retain it when no conflict exists. Requesters cannot override allocations. The target permission is `reservations.override` or an equivalent finalized in the future contract.
-
-Conceptual `SpecialEvent`: stable ID, type, title, date/time, lab, requester, approval, reason, audit references. Conceptual `ScheduleException`: stable ID, schedule ID, occurrence date, resolution, replacement details, approver, reason, audit references. These are target concepts, not current schema instructions.
-
-## 4. Pelaksanaan Lab and activity reporting
-
-The approved experience combines Sesi Praktikum and Jurnal Praktikum into **Pelaksanaan Lab**. Conceptually it retains separate `Session` and `ActivityReport` records in a 1:1 relationship; a cancelled execution has no report. Current journal/session data is retained; any migration is explicit and audited.
-
-Target tabs: **Hari Ini**, **Sedang Berlangsung**, **Menunggu Laporan**, **Riwayat & Laporan**. Statuses: **Planned → In Progress → Awaiting Report → Submitted → Verified / Returned**, with **Cancelled** before completion.
+Tab target: **Hari Ini**, **Sedang Berlangsung**, **Menunggu Laporan**, dan **Riwayat & Laporan**. Status target: **Terjadwal**, **Belum Dimulai**, **Berlangsung**, **Menunggu Laporan**, **Laporan Draft**, **Laporan Diajukan**, **Perlu Perbaikan**, **Terverifikasi**, dan **Dibatalkan**.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Planned
-  Planned --> In_Progress: start
-  Planned --> Cancelled: cancel with reason
-  In_Progress --> Awaiting_Report: finish execution
-  Awaiting_Report --> Submitted: submit report
-  Submitted --> Verified: verify
-  Submitted --> Returned: return with feedback
-  Returned --> Submitted: revise and resubmit
+  [*] --> Terjadwal
+  Terjadwal --> Belum_Dimulai
+  Belum_Dimulai --> Berlangsung: mulai
+  Belum_Dimulai --> Dibatalkan: batalkan dengan alasan
+  Berlangsung --> Menunggu_Laporan: akhiri pelaksanaan
+  Menunggu_Laporan --> Laporan_Draft: buat atau tautkan draft
+  Laporan_Draft --> Laporan_Diajukan: ajukan
+  Laporan_Diajukan --> Terverifikasi: verifikasi
+  Laporan_Diajukan --> Perlu_Perbaikan: kembalikan
+  Perlu_Perbaikan --> Laporan_Draft: perbaiki
 ```
 
-Reports have autosaved drafts while editable; reminder behavior is configurable, not fixed here. Manual reports are only for authorized backfill, migration, emergency, or legacy cases, with reason and source. No silent deletion or false execution linkage is allowed.
+Ketika pelaksanaan diakhiri, sistem mencatat waktu akhir aktual, mengubah status ke Menunggu Laporan, membuat atau menautkan draft, membawa pengguna ke formulir, dan memungkinkan draft disimpan/dilanjutkan. Pelaksanaan belum sepenuhnya selesai sampai kebijakan pelengkapan/verifikasi laporan terpenuhi. Waktu pengingat tetap dapat dikonfigurasi dan masih terbuka.
 
-| Variant | Required target content |
+| Varian laporan | Bagian bersama dan khusus |
 | --- | --- |
-| Praktikum Reguler | objective, subject/topic, class, teacher, attendance, material/software, steps, initial/final condition, issues, incident references, attachments, reflection, verification |
-| TKA/ANBK/Ujian | event type, participant/class, schedule, proctor/technician, device readiness, attendance, incident/continuity record, accommodations, evidence, verification |
-| Workshop/Pelatihan | organizer, participants, agenda, facilitator, resources, attendance, outputs, issues, attachments, verification |
-| Kegiatan umum | classification, requester/owner, purpose, participants, equipment/room use, outcome, issues, attachments, verification |
+| Jurnal Praktikum | Tujuan, mapel/topik, kelas, guru, kehadiran, bahan/perangkat lunak, langkah, kondisi awal/akhir, kendala, referensi tiket, lampiran, refleksi, verifikasi. |
+| Laporan Pelaksanaan TKA/ANBK/Ujian | Jenis kegiatan, peserta/kelas, jadwal, proktor/teknisi, kesiapan perangkat, kehadiran, keberlanjutan/incident, akomodasi, bukti, verifikasi. |
+| Laporan Workshop/Pelatihan | Penyelenggara, peserta, agenda, fasilitator, sumber daya, kehadiran, keluaran, kendala, lampiran, verifikasi. |
+| Laporan Kegiatan Umum | Klasifikasi, pemilik kegiatan, tujuan, peserta, penggunaan ruang/peralatan, hasil, kendala, lampiran, verifikasi. |
 
-## 5. Device, asset, incident, and maintenance chain
+Laporan manual hanya untuk backfill, migrasi, darurat, atau data legacy yang diizinkan; alasan dan sumber wajib dicatat. Tidak boleh ada penghapusan diam-diam atau tautan palsu ke pelaksanaan.
 
-A device or layout position resolves to stable device ID and, when mapped, stable asset ID. Incident records source, impact, evidence, and execution context. Triage may create corrective work orders; work records diagnosis, action, spare parts, cost, test result, assignee, verification. Preventive maintenance is independent and can create a corrective incident on failure.
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Sesi Praktikum dan Jurnal Praktikum adalah menu/route terpisah; menyelesaikan sesi dapat membuat jurnal draft. |
+| Perilaku target yang disetujui | Pengguna mengalami satu workflow Pelaksanaan Lab dengan laporan wajib dan verifikasi. |
+| Implementasi masa depan | Antarmuka terpadu, migrasi terkontrol, status, draft, notifikasi terkonfigurasi, dan kebijakan verifikasi. |
+| Di luar scope PR dokumentasi | Menghapus jurnal/sesi lama atau menetapkan SLA pengingat yang belum disetujui. |
+
+## 6. Denah laboratorium
+
+Jenis denah yang didukung tepatnya: **Grid Klasik, Perimeter + Center Island, U-Shape, Facing Rows,** dan **Custom**. Tipe elemen persisten: `student_pc`, `teacher_pc`, `teacher_desk`, `projector`, `printer`, `network_switch`, `access_point`, `door`, `window`, `wall`, `aisle`, `label`, dan `empty`.
+
+Model konseptual:
+
+| `LaboratoryLayout` | `LayoutElement` |
+| --- | --- |
+| `id`, `laboratoryId`, `name`, `layoutType`, `rows`, `columns`, `version`, `isActive`, `status` | `id`, `layoutId`, `type`, `referenceId`, `label`, `row`, `column`, `rowSpan`, `columnSpan`, `rotation`, `movable`, `swappable`, `fixed` |
+
+Aturan perpindahan yang dikunci:
+
+| Sumber dan target | Perilaku target |
+| --- | --- |
+| `student_pc` ke `empty` | Pindahkan; sumber menjadi `empty`. |
+| `student_pc` ke `student_pc` | Lakukan **atomic swap langsung saat drop**; kedua posisi bertukar dan koordinat duplikat tidak boleh ada. |
+| `student_pc` ke elemen non-PC | Tolak dengan pesan jelas. |
+| Elemen non-PC yang dapat dipindah ke `empty` | Izinkan bila konfigurasi elemen mengizinkan. |
+| Elemen non-PC ke slot terisi | Tolak; tidak ada auto-swap. |
+| Elemen fixed | Tidak dapat dipindah. |
+| `teacher_pc` | Berbeda dari `student_pc`; boleh ke slot kosong yang kompatibel, tidak otomatis bertukar dengan PC siswa. |
+
+Syarat integritas: posisi terisi unik; satu elemen aktif per sel kecuali spanning yang disengaja; referensi perangkat stabil; perpindahan tidak mengubah identitas perangkat/aset; penyimpanan atomik; collision ditolak; audit dicatat; migrasi dari koordinat grid saat ini direncanakan; dan mode monitoring hanya-baca.
+
+Contoh berikut konseptual, bukan rekreasi pixel-perfect. Ia menunjukkan PC Guru di kiri atas, pintu masuk di kanan atas, PC-1 s.d. PC-9 pada tepi kanan, PC-10 s.d. PC-18 di tengah kanan, PC-19 s.d. PC-27 di tengah kiri, PC-28 s.d. PC-36 pada tepi kiri, dengan lorong jelas antarkelompok.
+
+```text
+[PC Guru] [Meja Guru]                 [Pintu Masuk]
+
+[PC-28]    [PC-19][PC-20][PC-21]      [PC-10][PC-11][PC-12]    [PC-1]
+[PC-29]    [PC-22][PC-23][PC-24]      [PC-13][PC-14][PC-15]    [PC-2]
+[PC-30]    [PC-25][PC-26][PC-27]      [PC-16][PC-17][PC-18]    [PC-3]
+[PC-31]          lorong lebar dan jelas                            [PC-4]
+[PC-32]                                                       [PC-5]
+[PC-33]  [Printer] [Switch] [Access Point]                    [PC-6]
+[PC-34]                                                       [PC-7]
+[PC-35]  [Projector/Display]                                  [PC-8]
+[PC-36]                                                       [PC-9]
+```
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Denah memakai dimensi grid dan pembaruan posisi perangkat; elemen non-PC belum menjadi model persisten penuh. |
+| Perilaku target yang disetujui | Multi-template, elemen persisten, aturan drop di atas, integritas posisi, dan monitoring read-only. |
+| Implementasi masa depan | Model data, migrasi koordinat, editor, atomic save, audit, serta pengujian collision dan swap. |
+| Di luar scope PR dokumentasi | Mengubah editor denah atau perilaku drag-drop saat ini. |
+
+## 7. Tema tampilan
+
+Tema target mencakup **Light, Dark,** dan **System**. Preferensi persisten per pengguna/perangkat yang sesuai; startup tidak memaksa Dark; System mengikuti preferensi OS dan mendengarkan perubahan OS tanpa reload. Topbar memiliki toggle cepat Light/Dark, sedangkan Pengaturan menyediakan pilihan lengkap Light/Dark/System.
+
+Tema diterapkan sebelum render normal untuk mencegah flash tema salah. Sidebar, topbar, kartu, formulir, tabel, modal, drawer, toast, login, empty state, loading state, scrollbar, dan hasil cetak mendukung kedua tema. Chart tidak boleh memakai warna tooltip, grid, axis, atau label hard-coded hanya untuk Dark. Fokus terlihat dan kontras harus aksesibel.
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | UI store mendukung `light`, `dark`, dan `system`, serta menyimpan preferensi; namun bootstrap aplikasi menjalankan `applyTheme('dark')` setelah hidrasi. Listener perubahan tema OS dan toggle cepat topbar belum ada. |
+| Perilaku target yang disetujui | Preferensi dihormati sejak awal render; System responsif terhadap OS; seluruh komponen dan chart sadar tema. |
+| Implementasi masa depan | PR `feat/complete-theme-support` mengatur bootstrap bebas flash, listener `matchMedia`, token chart/print, toggle topbar, dan regresi aksesibilitas. |
+| Di luar scope PR dokumentasi | Mengubah CSS, bootstrap, chart, atau pengaturan aplikasi pada PR ini. |
+
+## 8. Master Data dan import Excel
+
+### 8.1 Master Data
+
+Master referensi sederhana: **Kategori Aset, Model Aset, Kondisi Aset, Status Aset, Kategori Incident, Supplier, Satuan,** dan **Lokasi Stok**. Bidang umum: `code`, `name`, dan status aktif.
+
+| Master akademik | Bidang target |
+| --- | --- |
+| Guru | kode/NIP, nama, email, telepon, program/unit, status aktif |
+| Kelas | kode, nama, tingkat, program, wali kelas, jumlah siswa, status aktif |
+| Mata Pelajaran | kode, nama, kelompok, program, status aktif |
+| Jam Pelajaran | kode, urutan, jam mulai, jam selesai, jenis KBM/istirahat, status aktif |
+| Tahun Ajaran | kode, nama, tanggal mulai, tanggal selesai, status aktif |
+| Semester | tahun ajaran, nama, tanggal mulai, tanggal selesai, status aktif |
+| Laboratorium | kode, nama, lokasi, kapasitas, kepala lab, teknisi, jumlah PC, tipe denah, baris, kolom, status |
+
+Bidang import jadwal: tahun ajaran, semester, hari, tanggal occurrence opsional, JP mulai, JP selesai, jam mulai, jam selesai, kode lab, kode kelas, kode/NIP guru, kode mapel, jenis kegiatan, dan status jadwal.
+
+**Prasyarat dikunci:** import jadwal tidak boleh diimplementasikan sampai master akademik memiliki identifier/kode stabil.
+
+### 8.2 Workflow import Excel
 
 ```mermaid
 flowchart LR
-  A[Device or layout position] --> B[Stable device ID]
-  B --> C[Stable asset ID]
+  A[Unduh template berversi] --> B[Isi workbook]
+  B --> C[Unggah]
+  C --> D[Pilih jenis data atau sheet]
+  D --> E[Petakan kolom]
+  E --> F[Pratinjau]
+  F --> G[Validasi: Valid Warning Error]
+  G --> H[Pilih Insert Update Upsert]
+  H --> I[Konfirmasi]
+  I --> J[Simpan atomik]
+  J --> K[Audit dan laporan hasil]
+```
+
+Perilaku wajib: template berversi; pencocokan kode stabil; validasi bidang wajib, duplikasi, referensi asing, tanggal/waktu, dan konflik jadwal; kesalahan per baris; laporan kesalahan yang dapat diunduh; hitungan inserted/updated/skipped/failed; riwayat import; audit log; retry/idempotensi aman; kebijakan rollback; serta tidak ada penghapusan diam-diam. Mode yang tersedia adalah **Insert**, **Update**, dan **Upsert**.
+
+Import biasa tidak boleh dipakai untuk password, matriks permission, audit log, telemetry, transaksi stok, incident, atau work order.
+
+| Status | Keterangan |
+| --- | --- |
+| Implementasi saat ini | Master Data frontend ada untuk referensi tertentu, tetapi master akademik ber-ID stabil dan workflow Excel di atas belum tersedia. |
+| Perilaku target yang disetujui | Master akademik dan laboratorium menggunakan kode stabil; import tervalidasi, dapat ditinjau, atomik, dapat diulang aman, dan teraudit. |
+| Implementasi masa depan | Fondasi import, template, validasi API, penyimpanan hasil, dan kebijakan rollback/retensi. |
+| Di luar scope PR dokumentasi | Implementasi parser Excel, migrasi data, atau import kredensial/transaksi terlarang. |
+
+## 9. Perangkat, aset, incident, dan perbaikan
+
+Posisi denah harus ditelusuri ke ID perangkat stabil dan, bila dipetakan, ID aset stabil. Tiket Kerusakan mencatat sumber, dampak, bukti, serta konteks pelaksanaan. Triage dapat membuat Tugas Perbaikan yang memuat diagnosis, tindakan, spare part, biaya, hasil uji, teknisi, dan verifikasi. Pemeliharaan Berkala berdiri sendiri dan dapat membuat tiket korektif bila menemukan gangguan.
+
+```mermaid
+flowchart LR
+  A[Posisi denah atau perangkat] --> B[ID perangkat stabil]
+  B --> C[ID aset stabil]
   C --> D[Tiket Kerusakan]
   D --> E[Tugas Perbaikan]
-  E --> F[Parts / diagnosis / test]
-  F --> G[Verified resolution and asset history]
-  H[Pemeliharaan Berkala] -->|fault found| D
+  E --> F[Diagnosis, parts, dan uji]
+  F --> G[Verifikasi dan riwayat aset]
+  H[Pemeliharaan Berkala] -->|menemukan gangguan| D
 ```
 
-**Current implementation:** monitoring has simulated heartbeats/random changes and some relationships are frontend-only or free text. **Approved target:** no ambiguous broken-PC selection; layout, device, asset, incident, work order, and maintenance history trace by stable IDs. **Out of scope:** invasive agent surveillance.
-
-## 6. Laboratory layout model
-
-Target layout types: classroom/grid, perimeter plus center islands, rows, U-shape, custom. Required elements: entrance, exit, teacher desk, projector/display, network equipment, power/UPS, PC/workstation, printer, storage, safety equipment, aisles, and accessibility clearance.
-
-Conceptual 36-PC perimeter-and-islands arrangement (not a hard-coded grid/UI mandate):
-
-```text
-Entrance  [PC01][PC02][PC03][PC04][PC05][PC06]
-          [PC07]                         [PC08]
-          [PC09]  [PC13][PC14][PC15][PC16] [PC10]
-Teacher   [PC11]  [PC17][PC18][PC19][PC20] [PC12]
-Desk      [PC21]  [PC25][PC26][PC27][PC28] [PC22]
-          [PC23]  [PC29][PC30][PC31][PC32] [PC24]
-Exit      [PC33][PC34][PC35][PC36]  Projector / Display
-```
-
-Moves validate target cell, collision, permitted type, capacity/clearance, and stable reference. Explicit user-selected swap is allowed only for compatible movable workstations; otherwise collision rejects. Occupied coordinates are unique; device moves retain device/asset ID and create audit evidence. Conceptual layout fields: stable ID, laboratory ID, type, label, row/column or geometry, device ID, asset ID, movable flag, metadata, audit/version reference.
-
-**Current implementation:** grid dimensions and device-position updates exist. **Future implementation:** integrity and full element model; coordinates must never become device identity.
-
-## 7. Theme behavior
-
-Approved target supports **Light**, **Dark**, and **System**. The current UI store exposes all three, but application bootstrap applies dark after hydration and can override stored light/system preference. This records the defect only; a focused settings/UI PR fixes it with regression coverage.
-
-## 8. Academic master data and Excel import
-
-Future master data includes teachers, classes, subjects, academic years, semesters, laboratories, and controlled references. A teacher is an academic master separate from a login: a teacher may lack credentials, and an admin/technician account may lack a teacher record.
-
-Excel import flow: select template → map/validate columns → preview → choose mode → resolve row errors → confirm → audit result. Modes: **create only**, **update by stable code**, **upsert by stable code**. Stable code—not display name—is the match key. Required features: required-column checks, row-level errors, duplicate preview, confirmation, audit summary. Exclusions: silent deletion of absent rows, replacement of unrelated records, or user-access grants.
-
-## 9. Roles and authorization boundary
-
-| Role | Intended operational focus |
+| Status | Keterangan |
 | --- | --- |
-| Super Admin | Platform/school configuration and recovery. |
-| Kepala Sekolah | Executive visibility and oversight. |
-| Wakil Kurikulum | Curriculum scheduling coordination. |
-| Kepala Laboratorium | Allocation, verification, operational accountability. |
-| Teknisi | Device health, incidents, repair, maintenance. |
-| Guru | Assigned execution, reports, reservations, issue reporting. |
-| Operator | Authorized administration and coordination. |
-| Auditor | Read-only evidence and audit access. |
+| Implementasi saat ini | Monitoring masih memiliki simulasi heartbeat/perubahan metrik; sebagian asosiasi masih frontend atau teks bebas. |
+| Perilaku target yang disetujui | Tidak ada pemilihan PC rusak ambigu; perangkat, aset, tiket, tugas, dan pemeliharaan tertaut ID stabil. |
+| Implementasi masa depan | Kontrak dan vertical slice backend untuk perangkat–aset–incident–work order dengan transaksi stok. |
+| Di luar scope PR dokumentasi | Pengawasan invasif oleh PC Agent atau perubahan alur incident saat ini. |
 
-Permission keys/mappings remain conceptual until future contract alignment. Frontend guards are usability controls; Laravel policies and server validation are the security boundary.
+## 10. Kesenjangan implementasi saat ini
 
-## 10. Current capability gaps
+| Kesenjangan | Implementasi saat ini | Perilaku target | Risiko | Tahap rencana |
+| --- | --- | --- | --- | --- |
+| Cek jadwal/reservasi | Terpisah; booking mengecek booking lain. | Availability terpadu. | Bentrok nyata lolos. | 8 |
+| Override prioritas | Belum ada. | Exception bertanggal dan teraudit. | Alokasi diubah tidak konsisten. | 9 |
+| Sesi dan jurnal | Dua menu/flow. | Pelaksanaan Lab terpadu. | Entri dan status ganda. | 10 |
+| Referensi akademik jadwal | Guru/kelas/mapel masih berbasis teks. | ID/kode akademik stabil. | Salah rujuk/import. | 5 |
+| Posisi denah | Perpindahan grid dapat menghasilkan koordinat duplikat. | Save atomik dan collision rejection. | Tampilan/incident ambigu. | 3 |
+| Elemen non-PC | Bersifat demo/non-model penuh. | Elemen persisten multi-template. | Denah tidak merepresentasikan ruang. | 4 |
+| Penghapusan lab | Tidak seragam terhadap dependency guard aman. | Tidak mengorbankan riwayat. | Data ter-orphan/hilang. | 3 |
+| Startup tema | Bootstrap memaksa Dark. | Preferensi tanpa flash tema salah. | Preferensi diabaikan. | 2 |
+| Chart | Ada warna Dark hard-coded. | Token chart sadar tema. | Kontras buruk pada Light. | 2 |
+| Filter laporan | Belum memengaruhi seluruh dataset. | Filter konsisten dan tervalidasi. | Kesimpulan keliru. | 14 |
+| Dashboard/chart | Sebagian nilai simulasi. | Data operasional nyata. | Keputusan berdasar mock. | 14 |
+| Preferensi notifikasi | Duplikat dan belum benar-benar persisten. | Preferensi penerima yang disimpan. | Notifikasi tidak dapat dipercaya. | 13 |
+| Format nomor dokumen | Visual saja. | Sequence persisten dan format aktif. | Nomor ganda/tidak konsisten. | 12 |
+| Identitas sekolah | Hanya sebagian dipersistenkan. | Konfigurasi sekolah otoritatif. | Data tampilan tidak konsisten. | 12 |
+| Persistensi aplikasi | Browser-local. | Backend terotorisasi dan teraudit. | Data hilang/berbeda antar perangkat. | 12 |
 
-| Area | Current implementation | Approved direction/gap |
-| --- | --- | --- |
-| Availability | Separate schedule/booking checks; booking checks bookings only. | One authoritative cross-source engine. |
-| Priority | No special-event/exception model. | Date-specific authorized override with preview/audit. |
-| Execution/report | Separate menus/routes; finishing can create draft journal. | Unified experience, linked records, verification. |
-| Monitoring | Simulated heartbeats/random metrics. | Approved agent telemetry and stable linkage. |
-| Layout | Grid position editing. | Rich elements and collision/ID integrity. |
-| Asset and stock | Separate flows. | Keep distinct; backend transactional repair use. |
-| Reports | Screens/export, not validated analytics model. | Authoritative data-quality rules. |
-| Notifications | Read/delete/open in-app items. | Recipient delivery and valid deep links. |
-| Audit | Some frontend audit events. | Append-oriented backend coverage. |
-| Theme | UI store persists modes; bootstrap forces dark. | Honour stored Light/Dark/System. |
-| Lab deletion | Requires dependency-guard review. | Do not orphan operational history. |
-| Imports | No approved academic import. | Previewed code-matched auditable import. |
+## 11. Roadmap implementasi
 
-## 11. Delivery roadmap
+Tidak semua tahap adalah P0. Setiap tahap memerlukan scope, acceptance criteria, dan PR terfokus sendiri.
 
-| Stage | Purpose | Dependencies | Deliverable | Risk | Suggested branch |
+| Tahap | Tujuan | Dependensi | Deliverable | Risiko utama | Branch yang disarankan |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Terminology/navigation migration | This spec | Labels, redirect/deep-link plan | Broken links | `feat/operational-navigation` |
-| 2 | Academic master foundation | Contracts/data ownership | Teacher/class/subject/year/semester model | User-teacher confusion | `feat/academic-master-data` |
-| 3 | Import workflow | Stage 2 | Templates, preview, validation, audit | Overwrite | `feat/master-data-import` |
-| 4 | Availability domain | Stages 1–2 | Unified evaluation | Concurrency | `feat/lab-availability-engine` |
-| 5 | Regular schedules | Stage 4 | Recurrence and occurrences | Recurrence edges | `feat/regular-schedules` |
-| 6 | Reservations | Stage 4 | Approval lifecycle | Double booking | `feat/lab-reservations` |
-| 7 | Priority events/exceptions | Stages 4–6 | Preview, resolution, audit | Authority unclear | `feat/priority-event-overrides` |
-| 8 | Pelaksanaan Lab | Stages 5–7 | Execution queues | Legacy duplication | `feat/lab-execution` |
-| 9 | Activity reports | Stage 8 | Variants, drafts, verification | Evidence completeness | `feat/activity-reports` |
-| 10 | Device/asset integrity | Asset/contracts | Stable linkage | Legacy ambiguity | `feat/device-asset-integrity` |
-| 11 | Incident/work-order chain | Stage 10, stock | Triage, repair, parts | Stock consistency | `feat/incident-work-order-flow` |
-| 12 | Maintenance/layout | Stages 4, 10 | Closures/checklists/layout | Unsafe movement | `feat/maintenance-and-layout` |
-| 13 | Notifications/audit/reporting | Authoritative events | Delivery, audit, analytics | Misleading data | `feat/operational-observability` |
-| 14 | Hardening/rollout | Applicable stages | UAT, migration, backup, access review | Production migration | `chore/operational-rollout` |
+| 1. Terminologi dan kejelasan workflow | Menyelaraskan label dan alur tanpa merusak link/data. | Dokumen ini. | Rencana navigasi dan deep link. | Route lama rusak. | `feat/operational-terminology` |
+| 2. Complete Light/Dark/System theme | Preferensi tema lengkap dan aksesibel. | Token UI. | Bootstrap, listener OS, chart/print, toggle. | Flash/kontras buruk. | `feat/complete-theme-support` |
+| 3. Model data denah dan integritas posisi | Mengunci ID, collision, dan save atomik. | Aset/perangkat. | `LaboratoryLayout`/`LayoutElement`. | Migrasi koordinat. | `feat/layout-coordinate-integrity` |
+| 4. Editor denah multi-template | Menyunting Grid, Perimeter, U-Shape, Facing Rows, Custom. | Tahap 3. | Editor dan elemen non-PC. | Denah tidak aman digunakan. | `feat/multi-template-layout-editor` |
+| 5. Master akademik dengan stable ID | Menetapkan guru/kelas/mapel/JP/tahun/semester. | Pemilik data akademik. | Kode dan referensi stabil. | Identitas ganda. | `feat/academic-master-stable-ids` |
+| 6. Fondasi import Excel | Template, preview, validasi, audit. | Tahap 5 untuk referensi. | Mesin import yang dapat diulang aman. | Overwrite data. | `feat/excel-import-foundation` |
+| 7. Import Master Data | Memuat master sederhana/akademik/lab. | Tahap 5–6. | Template dan hasil import. | Referensi salah. | `feat/master-data-import` |
+| 8. Import jadwal dan unified availability | Import jadwal setelah kode stabil, cek semua sumber. | Tahap 5–7. | Schedule import dan layanan availability. | Bentrok/konkurensi. | `feat/schedule-import-availability` |
+| 9. Override kegiatan prioritas | Exception bertanggal yang disetujui. | Tahap 8, kebijakan approver. | Preview, resolusi, audit/notifikasi. | Otoritas tidak jelas. | `feat/priority-event-override` |
+| 10. Unified Pelaksanaan Lab dan laporan | Satu flow dan varian laporan. | Tahap 8–9. | Session/ActivityReport terpaut. | Data legacy ganda. | `feat/unified-lab-execution` |
+| 11. Integritas Device–Asset–Incident–Work Order | Tautan stabil dan perbaikan tertelusur. | Tahap 3, aset/stok. | Alur korektif end-to-end. | Riwayat ambigu. | `feat/device-asset-incident-integrity` |
+| 12. Laravel/PostgreSQL vertical-slice integration | Memindahkan domain ke sumber otoritatif. | Kontrak dan model domain. | API, policy, audit, migrasi. | Konsistensi migrasi. | `feat/laravel-operational-vertical-slices` |
+| 13. Realtime, PC Agent, PWA/mobile, offline sync | Operasi perangkat dan lapangan yang aman. | Tahap 12. | Telemetry disetujui dan sinkronisasi terbatas. | Privasi/ketahanan jaringan. | `feat/operational-realtime-offline` |
+| 14. Reporting, security hardening, staging, production rollout | Membuat layanan siap dipakai. | Tahap 12–13. | Analitik tervalidasi, UAT, rollout. | Keputusan dari data salah. | `chore/operational-production-readiness` |
 
-Not all stages are P0. Each must be scoped separately; no stage changes backend authority merely because it appears in this roadmap.
+## 12. Definition of Done PR masa depan
 
-## 12. Future PR done checklist
+Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 
-A future PR is done only with scope/dependency review; migration/contract notes where applicable; server validation and authorization; stable IDs and deletion/orphan handling; material-change audit; critical business/permission tests; deep links; loading/error/empty states; manual acceptance scenarios; lint/typecheck/build plus relevant backend checks; and no unrelated refactor. UI must retain SmartLab’s responsive operational design.
+- Scope disetujui dan acceptance criteria eksplisit.
+- Tidak ada refactor tidak terkait; tidak ada route/UI yang bekerja dihapus diam-diam.
+- Permission frontend dan Laravel Policies/backend diverifikasi.
+- Persistensi, kegagalan, retry bila relevan, dan audit perubahan material diverifikasi.
+- Tampilan desktop/mobile responsif, aksesibel, kontras/fokus memadai, dan tidak ada dead button.
+- `npm run lint`, `npm run typecheck`, `npm run build`, serta pemeriksaan backend yang relevan lulus.
+- Targeted tests dan browser smoke test menjalankan alur kritis.
+- Screenshot disertakan untuk perubahan UI utama.
+- Dampak API/kontrak/skema didokumentasikan; strategi migrasi dan rollback ada bila berlaku.
+- Risiko yang belum selesai diungkapkan; PR tetap draft sampai temuan review diselesaikan.
+- Persetujuan merge manusia dinyatakan eksplisit; tidak ada auto-merge dari checklist ini.
 
-## 13. Decision log
+## 13. Log keputusan
 
-| ID | Decision | Status | Rationale | Consequence | Dependency |
+| ID | Keputusan | Status | Rasional | Konsekuensi | Dependensi |
 | --- | --- | --- | --- | --- | --- |
-| DEC-001 | Approved labels without route changes here. | Approved | Clarify without breakage. | Route work separate. | Navigation PR. |
-| DEC-002 | Three planning sources. | Approved | Separates recurring/requested/priority use. | One engine evaluates all. | Availability. |
-| DEC-003 | Date-specific, non-destructive priority override. | Approved | Preserve history. | Exceptions/audit required. | Reservation model. |
-| DEC-004 | One availability engine. | Approved | Consistent conflicts. | Backend authority required. | Contracts/Laravel. |
-| DEC-005 | One execution/report experience. | Approved | Reduce duplicate teacher entry. | Linked records remain separate. | Execution/report work. |
-| DEC-006 | Manual reports exceptional and attributed. | Approved | Evidence integrity. | Reason/source/auth needed. | Report policy. |
-| DEC-007 | Stable device/asset identity. | Approved | Trace incidents/repairs. | Coordinates are not identity. | Device/asset model. |
-| DEC-008 | Separate incident, corrective, preventive work. | Approved | Different operational purpose. | Cross-link, do not merge. | Workflow contracts. |
-| DEC-009 | Teachers separate from users. | Approved | Login is not teaching identity. | Controlled optional link. | Academic master. |
-| DEC-010 | Imports match stable code; never silent delete. | Approved | Protect school data. | Preview/error/audit required. | Import service. |
-| DEC-011 | Laravel policies secure data. | Approved | Frontend guards bypassable. | UI guards supplemental. | Backend auth. |
-| DEC-012 | Light/Dark/System theme. | Approved | Preference/accessibility. | Stop bootstrap forced dark. | Settings PR. |
+| DEC-001 | Jadwal Reguler dan Reservasi Lab tetap domain terpisah. | Disetujui | Asal dan lifecycle berbeda. | Layanan availability menyatukan evaluasi, bukan tabelnya. | Tahap 8. |
+| DEC-002 | Kegiatan prioritas memakai exception bertanggal dan tidak menghapus jadwal berulang. | Disetujui | Riwayat dan pemulihan harus aman. | Preview, resolusi, audit, notifikasi wajib. | Tahap 9. |
+| DEC-003 | Pelaksanaan Lab menyatukan UX tetapi memakai `Session` dan `ActivityReport` terpisah. | Disetujui | Mengurangi kerja ganda tanpa mencampur domain. | Relasi 1:1 dan migrasi terkontrol. | Tahap 10. |
+| DEC-004 | Laporan wajib sesudah pelaksanaan selesai. | Disetujui | Bukti penggunaan harus lengkap. | Status belum selesai sampai kebijakan laporan terpenuhi. | Tahap 10. |
+| DEC-005 | Form laporan bervariasi menurut jenis kegiatan. | Disetujui | TKA/ANBK dan workshop memerlukan bukti berbeda. | Ada bidang bersama dan bagian khusus. | Tahap 10. |
+| DEC-006 | Denah mendukung multi-template dan elemen non-PC persisten. | Disetujui | Denah harus merepresentasikan ruang. | Model layout ber-version. | Tahap 3–4. |
+| DEC-007 | Drop `student_pc` ke `student_pc` melakukan atomic swap. | Disetujui | Memindahkan kursi tidak boleh menduplikasi koordinat. | Swap langsung, tidak ada pilihan terpisah. | Tahap 3–4. |
+| DEC-008 | Elemen non-PC tidak auto-swap. | Disetujui | Peralatan/struktur tidak setara dengan PC siswa. | Target terisi ditolak. | Tahap 3–4. |
+| DEC-009 | Tema mendukung Light, Dark, System. | Disetujui | Preferensi dan aksesibilitas. | Bootstrap tidak boleh memaksa Dark. | Tahap 2. |
+| DEC-010 | Import Excel membutuhkan preview, validasi, audit, dan kode stabil. | Disetujui | Data sekolah harus terlindungi. | Idempotensi, laporan hasil, dan rollback policy diperlukan. | Tahap 6–7. |
+| DEC-011 | Import jadwal menunggu identifier akademik stabil. | Disetujui | Jadwal tidak boleh menaut ke teks ambigu. | Master akademik didahulukan. | Tahap 5 lalu 8. |
+| DEC-012 | Laravel Policies adalah batas keamanan otoritatif. | Disetujui | Guard frontend dapat dilewati. | Backend memvalidasi permission dan perubahan. | Tahap 12. |
 
-## 14. Open questions
+## 14. Pertanyaan terbuka
 
-1. Which roles may approve priority overrides, and what escalation applies if unavailable?
-2. Which capacity policy governs a lab: enrollment, attendance, workstations, accessible stations, or combination?
-3. What verification SLA and escalation applies for each report type?
-4. Which academic system governs teacher/class/subject/schedule codes and imports?
-5. Which maintenance states close a lab, versus reducing usable capacity?
-6. Which notification channels, retention, preferences, and delivery guarantees are required?
-7. What legacy-data quality threshold and reconciliation process is acceptable before backend cutover?
+1. Rantai persetujuan override prioritas yang tepat, termasuk eskalasi saat approver tidak tersedia.
+2. Kebijakan kapasitas: jumlah terdaftar, hadir, workstation, aksesibilitas, atau kombinasi.
+3. Pengingat/SLA laporan yang dapat dikonfigurasi dan kebutuhan verifikasi menurut jenis laporan.
+4. Model induk kegiatan khusus yang memakai lebih dari satu laboratorium.
+5. Workflow publikasi/versioning denah aktif.
+6. Apakah Jam Pelajaran bersifat global atau spesifik pada versi jadwal/tahun ajaran.
+7. Retensi rollback dan hasil import.
+8. Nama akhir permission-key yang masih proposed.
+9. Kebijakan arsip tahun ajaran serta laporan lama.
