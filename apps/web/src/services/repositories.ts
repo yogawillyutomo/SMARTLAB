@@ -12,6 +12,8 @@ import type {
   MaintenanceExecution,
   MaintenancePlan,
   MaintenanceFrequency,
+  MasterDataCategoryKey,
+  MasterDataItem,
   Notification,
   Schedule,
   Session,
@@ -21,6 +23,8 @@ import type {
   WorkOrder,
   WorkOrderSparePart,
 } from '@/types';
+import { can, type PermissionMatrix } from '@/lib/permissions';
+import { MASTER_DATA_CATEGORY_KEYS } from '@/lib/masterData';
 import { uid } from '@/utils';
 
 /**
@@ -1028,27 +1032,200 @@ export const userRepository: Repository<User> = {
   },
 };
 
-// Master data (simple key-value store per type)
+export interface MasterDataActorContext {
+  user: Pick<User, 'name' | 'role'>;
+  permissions: PermissionMatrix;
+}
+
+interface MasterDataInput {
+  name?: string;
+  code?: string;
+  isActive?: boolean;
+}
+
+function assertMasterDataPermission(context: MasterDataActorContext, action: 'create' | 'update' | 'delete'): void {
+  if (!can(context.permissions, context.user.role, 'master-data', action)) {
+    throw new Error(`Anda tidak memiliki izin ${action} untuk master data`);
+  }
+}
+
+function requiredString(value: string | undefined, field: string): string {
+  const normalized = value?.trim() ?? '';
+  if (!normalized) throw new Error(`${field} wajib diisi`);
+  return normalized;
+}
+
+function optionalCode(value: string | undefined): string | undefined {
+  const code = value?.trim() ?? '';
+  return code || undefined;
+}
+
+function duplicateMasterDataName(items: MasterDataItem[], name: string, excludeId?: string): boolean {
+  return items.some((item) => item.id !== excludeId && item.name.trim().toLowerCase() === name.toLowerCase());
+}
+
+function duplicateMasterDataCode(items: MasterDataItem[], code: string | undefined, excludeId?: string): boolean {
+  if (!code) return false;
+  return items.some((item) => item.id !== excludeId && item.code?.trim().toLowerCase() === code.toLowerCase());
+}
+
+function masterDataAuditObject(category: string, id: string, name: string): string {
+  return `${category}:${id} (${name})`;
+}
+
+function labReferences(db: ReturnType<typeof getDB>, laboratoryId: string): string[] {
+  const references: [string, number][] = [
+    ['device', db.devices.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['asset', db.assets.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['schedule', db.schedules.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['booking', db.bookings.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['session', db.sessions.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['incident', db.incidents.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['work order', db.workOrders.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['maintenance plan', db.maintenance.plans.filter((item) => item.laboratoryId === laboratoryId).length],
+    ['maintenance execution', db.maintenance.executions.filter((item) => item.laboratoryId === laboratoryId).length],
+  ];
+  return references.filter(([, count]) => count > 0).map(([label, count]) => `${label} (${count})`);
+}
+
 export const masterDataRepository = {
-  async getAll(): Promise<Record<string, { id: string; name: string; code?: string }[]>> {
+  listCategories(): MasterDataCategoryKey[] {
+    return [...MASTER_DATA_CATEGORY_KEYS];
+  },
+
+  async listItems(category: MasterDataCategoryKey): Promise<MasterDataItem[]> {
     await delay(100);
-    const db = getDB();
-    return {
-      'kategori aset': ['Komputer', 'Proyektor', 'Printer', 'Networking', 'UPS', 'Furniture'].map((n, i) => ({ id: `md-ka-${i}`, name: n })),
-      'model aset': ['OptiPlex 7090', 'ProDesk 600 G6', 'ThinkCentre M70q', 'EB-X51', 'L3210'].map((n, i) => ({ id: `md-ma-${i}`, name: n })),
-      'kondisi aset': ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((n, i) => ({ id: `md-kk-${i}`, name: n })),
-      'status aset': ['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'].map((n, i) => ({ id: `md-sa-${i}`, name: n })),
-      laboratorium: db.labs.map((l) => ({ id: l.id, name: l.name, code: l.code })),
-      kelas: ['X PPLG 1', 'X PPLG 2', 'XI PPLG 1', 'XI PPLG 2', 'XII PPLG 1', 'XII PPLG 2'].map((n, i) => ({ id: `md-k-${i}`, name: n })),
-      guru: ['Drs. Budi Santoso', 'Siti Aminah, S.Kom', 'Rudi Hartono, M.Kom', 'Maya Putri, S.Pd', 'Joko Susilo, M.Pd'].map((n, i) => ({ id: `md-g-${i}`, name: n })),
-      'mata pelajaran': ['Pemrograman Web', 'Basis Data', 'Pemrograman Berorientasi Objek', 'Jaringan Komputer', 'Sistem Operasi'].map((n, i) => ({ id: `md-mp-${i}`, name: n })),
-      'tahun ajaran': ['2026/2027'].map((n, i) => ({ id: `md-ta-${i}`, name: n })),
-      semester: ['Gasal', 'Genap'].map((n, i) => ({ id: `md-sm-${i}`, name: n })),
-      'kategori incident': ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas'].map((n, i) => ({ id: `md-ki-${i}`, name: n })),
-      supplier: ['PT Sumber Rezeki', 'PT Komputindo', 'PT Jaya Network'].map((n, i) => ({ id: `md-sp-${i}`, name: n })),
-      satuan: ['pcs', 'unit', 'set', 'box', 'botol', 'tube'].map((n, i) => ({ id: `md-st-${i}`, name: n })),
-      'lokasi stok': ['Gudang A', 'Gudang B', 'Gudang C'].map((n, i) => ({ id: `md-ls-${i}`, name: n })),
+    return getDB().masterData[category].map((item) => ({ ...item }));
+  },
+
+  async getItem(category: MasterDataCategoryKey, id: string): Promise<MasterDataItem | null> {
+    await delay(100);
+    const item = getDB().masterData[category].find((candidate) => candidate.id === id);
+    return item ? { ...item } : null;
+  },
+
+  async createItem(category: MasterDataCategoryKey, input: MasterDataInput, context: MasterDataActorContext): Promise<MasterDataItem> {
+    assertMasterDataPermission(context, 'create');
+    await delay(100);
+    const name = requiredString(input.name, 'Nama');
+    const code = optionalCode(input.code);
+    const item: MasterDataItem = {
+      id: uid('md'),
+      category,
+      name,
+      code,
+      isActive: input.isActive ?? true,
+      createdAt: new Date().toISOString(),
     };
+    updateDB((db) => {
+      const items = db.masterData[category];
+      if (duplicateMasterDataName(items, name)) throw new Error(`Nama "${name}" sudah ada pada kategori ini`);
+      if (duplicateMasterDataCode(items, code)) throw new Error(`Kode "${code}" sudah ada pada kategori ini`);
+      items.push(item);
+    });
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'create', object: masterDataAuditObject(category, item.id, item.name), newValue: JSON.stringify(item), device: 'Web' });
+    return { ...item };
+  },
+
+  async updateItem(category: MasterDataCategoryKey, id: string, input: MasterDataInput, context: MasterDataActorContext): Promise<MasterDataItem> {
+    assertMasterDataPermission(context, 'update');
+    await delay(100);
+    let updated: MasterDataItem | undefined;
+    let previous: MasterDataItem | undefined;
+    updateDB((db) => {
+      const items = db.masterData[category];
+      const idx = items.findIndex((item) => item.id === id);
+      if (idx < 0) throw new Error('Data master tidak ditemukan');
+      const current = items[idx];
+      const name = input.name === undefined ? current.name : requiredString(input.name, 'Nama');
+      const code = input.code === undefined ? current.code : optionalCode(input.code);
+      if (duplicateMasterDataName(items, name, id)) throw new Error(`Nama "${name}" sudah ada pada kategori ini`);
+      if (duplicateMasterDataCode(items, code, id)) throw new Error(`Kode "${code}" sudah ada pada kategori ini`);
+      previous = { ...current };
+      updated = items[idx] = { ...current, name, code, isActive: input.isActive ?? current.isActive, updatedAt: new Date().toISOString() };
+    });
+    if (!updated || !previous) throw new Error('Data master tidak dapat diperbarui');
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'update', object: masterDataAuditObject(category, updated.id, updated.name), oldValue: JSON.stringify(previous), newValue: JSON.stringify(updated), device: 'Web' });
+    return { ...updated };
+  },
+
+  async deleteItem(category: MasterDataCategoryKey, id: string, context: MasterDataActorContext): Promise<void> {
+    assertMasterDataPermission(context, 'delete');
+    await delay(100);
+    let removed: MasterDataItem | undefined;
+    updateDB((db) => {
+      const items = db.masterData[category];
+      const idx = items.findIndex((item) => item.id === id);
+      if (idx < 0) throw new Error('Data master tidak ditemukan');
+      removed = items[idx];
+      items.splice(idx, 1);
+    });
+    if (!removed) throw new Error('Data master tidak dapat dihapus');
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'delete', object: masterDataAuditObject(category, removed.id, removed.name), oldValue: JSON.stringify(removed), device: 'Web' });
+  },
+
+  async createLaboratory(input: Partial<Laboratory>, context: MasterDataActorContext): Promise<Laboratory> {
+    assertMasterDataPermission(context, 'create');
+    await delay(100);
+    const name = requiredString(input.name, 'Nama');
+    const code = requiredString(input.code, 'Kode');
+    const created: Laboratory = {
+      id: uid('lab'),
+      name,
+      code,
+      location: input.location?.trim() ?? '',
+      capacity: input.capacity ?? 36,
+      headName: input.headName?.trim() ?? '',
+      technicianName: input.technicianName?.trim() ?? '',
+      pcCount: input.pcCount ?? 0,
+      status: input.status ?? 'active',
+      layoutRows: input.layoutRows ?? 6,
+      layoutCols: input.layoutCols ?? 6,
+    };
+    updateDB((db) => {
+      if (db.labs.some((lab) => lab.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`Nama laboratorium "${name}" sudah ada`);
+      if (db.labs.some((lab) => lab.code.trim().toLowerCase() === code.toLowerCase())) throw new Error(`Kode laboratorium "${code}" sudah ada`);
+      db.labs.push(created);
+    });
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'create', object: masterDataAuditObject('laboratory', created.id, created.name), newValue: JSON.stringify(created), device: 'Web' });
+    return { ...created };
+  },
+
+  async updateLaboratory(id: string, input: Partial<Laboratory>, context: MasterDataActorContext): Promise<Laboratory> {
+    assertMasterDataPermission(context, 'update');
+    await delay(100);
+    let updated: Laboratory | undefined;
+    let previous: Laboratory | undefined;
+    updateDB((db) => {
+      const idx = db.labs.findIndex((lab) => lab.id === id);
+      if (idx < 0) throw new Error('Laboratorium tidak ditemukan');
+      const current = db.labs[idx];
+      const name = input.name === undefined ? current.name : requiredString(input.name, 'Nama');
+      const code = input.code === undefined ? current.code : requiredString(input.code, 'Kode');
+      if (db.labs.some((lab) => lab.id !== id && lab.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`Nama laboratorium "${name}" sudah ada`);
+      if (db.labs.some((lab) => lab.id !== id && lab.code.trim().toLowerCase() === code.toLowerCase())) throw new Error(`Kode laboratorium "${code}" sudah ada`);
+      previous = { ...current };
+      updated = db.labs[idx] = { ...current, name, code };
+    });
+    if (!updated || !previous) throw new Error('Laboratorium tidak dapat diperbarui');
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'update', object: masterDataAuditObject('laboratory', updated.id, updated.name), oldValue: JSON.stringify(previous), newValue: JSON.stringify(updated), device: 'Web' });
+    return { ...updated };
+  },
+
+  async deleteLaboratory(id: string, context: MasterDataActorContext): Promise<void> {
+    assertMasterDataPermission(context, 'delete');
+    await delay(100);
+    let removed: Laboratory | undefined;
+    updateDB((db) => {
+      const idx = db.labs.findIndex((lab) => lab.id === id);
+      if (idx < 0) throw new Error('Laboratorium tidak ditemukan');
+      const references = labReferences(db, id);
+      if (references.length > 0) throw new Error(`Laboratorium "${db.labs[idx].name}" masih digunakan oleh ${references.join(', ')}`);
+      removed = db.labs[idx];
+      db.labs.splice(idx, 1);
+    });
+    if (!removed) throw new Error('Laboratorium tidak dapat dihapus');
+    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'delete', object: masterDataAuditObject('laboratory', removed.id, removed.name), oldValue: JSON.stringify(removed), device: 'Web' });
   },
 };
 

@@ -10,6 +10,8 @@ import type {
   Loan,
   MaintenanceExecution,
   MaintenancePlan,
+  MasterDataCategoryKey,
+  MasterDataCollection,
   Notification,
   Schedule,
   Session,
@@ -171,6 +173,39 @@ const TEACHERS = [
 const CLASSES = ['X PPLG 1', 'X PPLG 2', 'XI PPLG 1', 'XI PPLG 2', 'XII PPLG 1', 'XII PPLG 2'];
 const SUBJECTS = ['Pemrograman Web', 'Basis Data', 'Pemrograman Berorientasi Objek', 'Jaringan Komputer', 'Sistem Operasi'];
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+
+const MASTER_DATA_SEED_VALUES: Record<MasterDataCategoryKey, string[]> = {
+  'asset-category': ['Komputer', 'Proyektor', 'Printer', 'Networking', 'UPS', 'Furniture'],
+  'asset-model': ['OptiPlex 7090', 'ProDesk 600 G6', 'ThinkCentre M70q', 'EB-X51', 'L3210'],
+  'asset-condition': ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'],
+  'asset-status': ['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'],
+  class: CLASSES,
+  teacher: TEACHERS,
+  subject: SUBJECTS,
+  'lesson-hour': ['1 JP', '2 JP', '3 JP', '4 JP'],
+  'academic-year': ['2026/2027'],
+  semester: ['Gasal', 'Genap'],
+  'incident-category': ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas', 'kebersihan', 'keamanan', 'lainnya'],
+  supplier: ['PT Sumber Rezeki', 'PT Komputindo', 'PT Jaya Network'],
+  'stock-unit': ['pcs', 'unit', 'set', 'box', 'botol', 'tube'],
+  'stock-location': ['Gudang A', 'Gudang B', 'Gudang C'],
+};
+
+function masterDataSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function generateMasterData(): MasterDataCollection {
+  return Object.fromEntries(Object.entries(MASTER_DATA_SEED_VALUES).map(([category, names]) => [
+    category,
+    names.map((name) => ({
+      id: `md-${category}-${masterDataSlug(name)}`,
+      category: category as MasterDataCategoryKey,
+      name,
+      isActive: true,
+    })),
+  ])) as MasterDataCollection;
+}
 
 function generateSchedules(): Schedule[] {
   const schedules: Schedule[] = [];
@@ -663,6 +698,7 @@ function generateUsers(): User[] {
 
 export interface SeedData {
   labs: Laboratory[];
+  masterData: MasterDataCollection;
   devices: Device[];
   schedules: Schedule[];
   bookings: Booking[];
@@ -689,6 +725,7 @@ export function generateSeedData(): SeedData {
   const maintenance = generateMaintenance();
   return {
     labs: LABS,
+    masterData: generateMasterData(),
     devices,
     schedules: generateSchedules(),
     bookings: generateBookings(),
