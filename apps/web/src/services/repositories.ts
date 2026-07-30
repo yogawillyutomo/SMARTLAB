@@ -1049,10 +1049,10 @@ function assertMasterDataPermission(context: MasterDataActorContext, action: 'cr
   }
 }
 
-function requiredName(value: string | undefined): string {
-  const name = value?.trim() ?? '';
-  if (!name) throw new Error('Nama wajib diisi');
-  return name;
+function requiredString(value: string | undefined, field: string): string {
+  const normalized = value?.trim() ?? '';
+  if (!normalized) throw new Error(`${field} wajib diisi`);
+  return normalized;
 }
 
 function optionalCode(value: string | undefined): string | undefined {
@@ -1107,7 +1107,7 @@ export const masterDataRepository = {
   async createItem(category: MasterDataCategoryKey, input: MasterDataInput, context: MasterDataActorContext): Promise<MasterDataItem> {
     assertMasterDataPermission(context, 'create');
     await delay(100);
-    const name = requiredName(input.name);
+    const name = requiredString(input.name, 'Nama');
     const code = optionalCode(input.code);
     const item: MasterDataItem = {
       id: uid('md'),
@@ -1137,7 +1137,7 @@ export const masterDataRepository = {
       const idx = items.findIndex((item) => item.id === id);
       if (idx < 0) throw new Error('Data master tidak ditemukan');
       const current = items[idx];
-      const name = input.name === undefined ? current.name : requiredName(input.name);
+      const name = input.name === undefined ? current.name : requiredString(input.name, 'Nama');
       const code = input.code === undefined ? current.code : optionalCode(input.code);
       if (duplicateMasterDataName(items, name, id)) throw new Error(`Nama "${name}" sudah ada pada kategori ini`);
       if (duplicateMasterDataCode(items, code, id)) throw new Error(`Kode "${code}" sudah ada pada kategori ini`);
@@ -1167,8 +1167,8 @@ export const masterDataRepository = {
   async createLaboratory(input: Partial<Laboratory>, context: MasterDataActorContext): Promise<Laboratory> {
     assertMasterDataPermission(context, 'create');
     await delay(100);
-    const name = requiredName(input.name);
-    const code = requiredName(input.code);
+    const name = requiredString(input.name, 'Nama');
+    const code = requiredString(input.code, 'Kode');
     const created: Laboratory = {
       id: uid('lab'),
       name,
@@ -1200,8 +1200,8 @@ export const masterDataRepository = {
       const idx = db.labs.findIndex((lab) => lab.id === id);
       if (idx < 0) throw new Error('Laboratorium tidak ditemukan');
       const current = db.labs[idx];
-      const name = input.name === undefined ? current.name : requiredName(input.name);
-      const code = input.code === undefined ? current.code : requiredName(input.code);
+      const name = input.name === undefined ? current.name : requiredString(input.name, 'Nama');
+      const code = input.code === undefined ? current.code : requiredString(input.code, 'Kode');
       if (db.labs.some((lab) => lab.id !== id && lab.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`Nama laboratorium "${name}" sudah ada`);
       if (db.labs.some((lab) => lab.id !== id && lab.code.trim().toLowerCase() === code.toLowerCase())) throw new Error(`Kode laboratorium "${code}" sudah ada`);
       previous = { ...current };

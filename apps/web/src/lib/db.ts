@@ -22,34 +22,57 @@ function isMasterDataItem(value: unknown, category: MasterDataCategoryKey): valu
   return true;
 }
 
+function normalizeMasterDataItem(value: unknown, category: MasterDataCategoryKey): MasterDataItem | null {
+  if (!isMasterDataItem(value, category)) return null;
+
+  const normalized: MasterDataItem = {
+    id: value.id,
+    category,
+    name: value.name.trim(),
+    isActive: value.isActive,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+  const code = value.code?.trim();
+  if (code) normalized.code = code;
+  return normalized;
+}
+
 function normalizeMasterData(value: unknown, defaults: MasterDataCollection): MasterDataCollection {
   const source = isRecord(value) ? value : {};
   return Object.fromEntries(MASTER_DATA_CATEGORY_KEYS.map((category) => {
     const rawItems = source[category];
     if (!Array.isArray(rawItems)) return [category, defaults[category].map((item) => ({ ...item }))];
-    const validItems = rawItems.filter((item): item is MasterDataItem => isMasterDataItem(item, category));
-    if (validItems.length !== rawItems.length) return [category, defaults[category].map((item) => ({ ...item }))];
-    return [category, validItems.map((item) => {
-      const normalized: MasterDataItem = {
-        id: item.id,
-        category,
-        name: item.name.trim(),
-        isActive: item.isActive,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
-      const code = item.code?.trim();
-      if (code) normalized.code = code;
-      return normalized;
-    })];
+    const ids = new Set<string>();
+    const items: MasterDataItem[] = [];
+    for (const rawItem of rawItems) {
+      const item = normalizeMasterDataItem(rawItem, category);
+      if (!item || ids.has(item.id)) continue;
+      ids.add(item.id);
+      items.push(item);
+    }
+    return [category, items];
   })) as MasterDataCollection;
 }
 
-function needsMasterDataNormalization(value: unknown): boolean {
+function masterDataItemMatches(value: unknown, item: MasterDataItem): boolean {
+  return isRecord(value)
+    && value.id === item.id
+    && value.category === item.category
+    && value.name === item.name
+    && value.code === item.code
+    && value.isActive === item.isActive
+    && value.createdAt === item.createdAt
+    && value.updatedAt === item.updatedAt;
+}
+
+function needsMasterDataNormalization(value: unknown, normalized: MasterDataCollection): boolean {
   if (!isRecord(value)) return true;
   return MASTER_DATA_CATEGORY_KEYS.some((category) => {
     const rawItems = value[category];
-    return !Array.isArray(rawItems) || rawItems.some((item) => !isMasterDataItem(item, category));
+    return !Array.isArray(rawItems)
+      || rawItems.length !== normalized[category].length
+      || rawItems.some((item, index) => !masterDataItemMatches(item, normalized[category][index]));
   });
 }
 
@@ -63,7 +86,7 @@ export function loadDB(): AppDB {
   if (isRecord(existing)) {
     const defaults = generateMasterData();
     const normalized = normalizeDB(existing, defaults);
-    if (needsMasterDataNormalization(existing.masterData)) writeStorage(DB_KEY, normalized);
+    if (needsMasterDataNormalization(existing.masterData, normalized.masterData)) writeStorage(DB_KEY, normalized);
     return normalized;
   }
 
