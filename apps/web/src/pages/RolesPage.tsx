@@ -142,7 +142,7 @@ export function RolesPage() {
                     const allowed = draftPermissions[activeRole][mod].includes(act);
                     return (
                       <td key={act} className="px-3 py-2 text-center">
-                        <button disabled={!canEdit} onClick={() => toggle(activeRole, mod, act)} className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50', allowed ? 'border-success bg-success/15 text-success-foreground' : 'border-base-600 text-transparent hover:border-base-500')}>
+                        <button disabled={!canEdit} onClick={() => toggle(activeRole, mod, act)} className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50', allowed ? 'border-success bg-success/15 text-success-foreground' : 'border-base-600 text-transparent hover:border-base-600')}>
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                         </button>
                       </td>

@@ -11,7 +11,7 @@ interface PCIconCardProps {
 
 const statusConfig: Record<DeviceStatus, { ring: string; glow: string; icon: typeof Monitor; label: string }> = {
   Online: { ring: 'border-success/40 hover:border-success', glow: 'shadow-soft', icon: MonitorCheck, label: 'Online' },
-  Offline: { ring: 'border-base-600 hover:border-base-500', glow: '', icon: MonitorX, label: 'Offline' },
+  Offline: { ring: 'border-base-600 hover:border-base-600', glow: '', icon: MonitorX, label: 'Offline' },
   Warning: { ring: 'border-warning/50 hover:border-warning', glow: 'shadow-soft', icon: AlertTriangle, label: 'Warning' },
   Critical: { ring: 'border-danger/60 hover:border-danger', glow: 'shadow-soft', icon: MonitorX, label: 'Critical' },
   Maintenance: { ring: 'border-orange/50 hover:border-orange', glow: 'shadow-soft', icon: Wrench, label: 'Maintenance' },
@@ -20,7 +20,7 @@ const statusConfig: Record<DeviceStatus, { ring: string; glow: string; icon: typ
 
 const statusDot: Record<DeviceStatus, string> = {
   Online: 'bg-success',
-  Offline: 'bg-base-500',
+  Offline: 'bg-base-600',
   Warning: 'bg-warning',
   Critical: 'bg-danger animate-pulse-soft',
   Maintenance: 'bg-orange',
@@ -92,7 +92,7 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
 export function PCStatusLegend() {
   const items: { status: DeviceStatus; color: string }[] = [
     { status: 'Online', color: 'bg-success' },
-    { status: 'Offline', color: 'bg-base-500' },
+    { status: 'Offline', color: 'bg-base-600' },
     { status: 'Warning', color: 'bg-warning' },
     { status: 'Critical', color: 'bg-danger' },
     { status: 'Maintenance', color: 'bg-orange' },
