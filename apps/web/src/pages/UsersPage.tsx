@@ -91,7 +91,7 @@ export function UsersPage() {
     { key: 'unit', header: 'Unit', render: (u) => u.unit ?? '-' },
     { key: 'status', header: 'Status', render: (u) => <StatusBadge status={u.status} /> },
     { key: 'lastLogin', header: 'Terakhir Login', render: (u) => u.lastLogin ? relativeTime(u.lastLogin) : '-' },
-    { key: 'actions', header: 'Aksi', render: (u) => (
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (u) => (
       <div className="flex gap-1">
         {canUpdate && <button onClick={() => openEdit(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
         {canUpdate && <button onClick={() => resetPassword(u)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Reset Password"><KeyRound className="h-4 w-4" /></button>}
@@ -113,11 +113,11 @@ export function UsersPage() {
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{db.users.length}</p><p className="text-xs text-ink-muted">Total Pengguna</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{db.users.filter((u) => u.status === 'active').length}</p><p className="text-xs text-ink-muted">Aktif</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.users.filter((u) => u.status === 'active').length}</p><p className="text-xs text-ink-muted">Aktif</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{new Set(db.users.map((u) => u.role)).size}</p><p className="text-xs text-ink-muted">Role</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-amber-400">{db.users.filter((u) => u.role === 'Teknisi').length}</p><p className="text-xs text-ink-muted">Teknisi</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.users.filter((u) => u.role === 'Teknisi').length}</p><p className="text-xs text-ink-muted">Teknisi</p></CardContent></Card>
       </div>
-      <Card>
+      <Card className="print-hidden">
         <CardContent className="flex items-end gap-3">
           <Select label="Filter Role" value={filterRole} onChange={(e) => setFilterRole(e.target.value)} options={ROLES.map((r) => ({ value: r, label: r }))} placeholder="Semua role" />
         </CardContent>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { toast } from '@/stores/toastStore';
 import type { RoleName } from '@/types';
+import { useUIStore, type ThemeMode } from '@/stores/uiStore';
 
 const DEMO_ACCOUNTS: { email: string; role: RoleName; label: string }[] = [
   { email: 'admin@smartlab.local', role: 'Super Admin', label: 'Super Admin' },
@@ -21,6 +22,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login, loginAs } = useAuthStore();
   const { db } = useAppData();
+  const { theme, setTheme } = useUIStore();
   const [email, setEmail] = useState('admin@smartlab.local');
   const [password, setPassword] = useState('password');
   const [showPassword, setShowPassword] = useState(false);
@@ -109,6 +111,19 @@ export function LoginPage() {
       {/* Right form panel */}
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-md">
+          <div className="mb-4 flex items-center justify-end gap-2">
+            <label htmlFor="login-theme" className="text-xs text-ink-muted">Tema</label>
+            <select
+              id="login-theme"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as ThemeMode)}
+              className="rounded-lg border border-base-700 bg-base-800 px-2 py-1.5 text-xs text-ink-secondary outline-none focus:ring-2 focus:ring-accent-blue/60"
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
+            </select>
+          </div>
           <div className="mb-8 text-center lg:hidden">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-elevated">
               <FlaskConical className="h-7 w-7" />

@@ -10,6 +10,7 @@ import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV } from '@/utils';
+import { useChartTheme } from '@/hooks/useChartTheme';
 
 const REPORT_CATS = [
   { key: 'usage', label: 'Penggunaan Laboratorium', icon: BarChart3 },
@@ -26,6 +27,7 @@ const REPORT_CATS = [
 export function ReportsPage() {
   const { db } = useAppData();
   const canExport = usePermission('reports', 'export');
+  const chartTheme = useChartTheme();
   const [active, setActive] = useState('usage');
   const [dateFrom, setDateFrom] = useState('2026-07-01');
   const [dateTo, setDateTo] = useState('2026-07-31');
@@ -46,8 +48,8 @@ export function ReportsPage() {
 
   const assetConditionData = useMemo(() => {
     const conds = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat'];
-    return conds.map((c) => ({ name: c, value: db.assets.filter((a) => a.condition === c).length, color: c === 'Baik' ? '#10B981' : c === 'Rusak Ringan' ? '#F59E0B' : c === 'Rusak Sedang' ? '#F97316' : '#EF4444' })).filter((x) => x.value > 0);
-  }, [db.assets]);
+    return conds.map((c) => ({ name: c, value: db.assets.filter((a) => a.condition === c).length, color: c === 'Baik' ? chartTheme.success : c === 'Rusak Ringan' ? chartTheme.warning : c === 'Rusak Sedang' ? chartTheme.orange : chartTheme.danger })).filter((x) => x.value > 0);
+  }, [chartTheme, db.assets]);
 
   const slaData = useMemo(() => {
     const techs = ['Andi Wijaya', 'Dedi Kurniawan'];
@@ -111,14 +113,14 @@ export function ReportsPage() {
           {active === 'usage' && (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={usageData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} />
-                <YAxis stroke="#94A3B8" fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="jadwal" fill="#3B82F6" name="Jadwal" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="online" fill="#10B981" name="Online" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="masalah" fill="#F59E0B" name="Bermasalah" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="name" stroke={chartTheme.axis} fontSize={11} />
+                <YAxis stroke={chartTheme.axis} fontSize={11} />
+                <Tooltip contentStyle={chartTheme.tooltip} />
+                <Legend wrapperStyle={chartTheme.legend} />
+                <Bar dataKey="jadwal" fill={chartTheme.primary} name="Jadwal" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="online" fill={chartTheme.success} name="Online" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="masalah" fill={chartTheme.warning} name="Bermasalah" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -126,13 +128,13 @@ export function ReportsPage() {
             <>
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={incidentTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                  <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} />
-                  <YAxis stroke="#94A3B8" fontSize={11} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="incident" stroke="#EF4444" strokeWidth={2} name="Incident" />
-                  <Line type="monotone" dataKey="selesai" stroke="#10B981" strokeWidth={2} name="Selesai" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                  <XAxis dataKey="name" stroke={chartTheme.axis} fontSize={11} />
+                  <YAxis stroke={chartTheme.axis} fontSize={11} />
+                  <Tooltip contentStyle={chartTheme.tooltip} />
+                  <Legend wrapperStyle={chartTheme.legend} />
+                  <Line type="monotone" dataKey="incident" stroke={chartTheme.danger} strokeWidth={2} name="Incident" />
+                  <Line type="monotone" dataKey="selesai" stroke={chartTheme.success} strokeWidth={2} name="Selesai" />
                 </LineChart>
               </ResponsiveContainer>
               <div className="grid grid-cols-4 gap-3">
@@ -149,8 +151,8 @@ export function ReportsPage() {
                 <Pie data={assetConditionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
                   {assetConditionData.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Tooltip contentStyle={chartTheme.tooltip} />
+                <Legend wrapperStyle={chartTheme.legend} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -173,13 +175,13 @@ export function ReportsPage() {
           {active === 'sla' && (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={slaData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} />
-                <YAxis stroke="#94A3B8" fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="selesai" fill="#10B981" name="Selesai" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="total" fill="#3B82F6" name="Total" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="name" stroke={chartTheme.axis} fontSize={11} />
+                <YAxis stroke={chartTheme.axis} fontSize={11} />
+                <Tooltip contentStyle={chartTheme.tooltip} />
+                <Legend wrapperStyle={chartTheme.legend} />
+                <Bar dataKey="selesai" fill={chartTheme.success} name="Selesai" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total" fill={chartTheme.primary} name="Total" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

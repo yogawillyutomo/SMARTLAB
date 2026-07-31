@@ -1,4 +1,5 @@
 import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/utils';
 
 const baseField =
@@ -60,23 +61,22 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             {props.required && <span className="text-danger ml-0.5">*</span>}
           </label>
         )}
-        <select
-          ref={ref}
-          id={selId}
-          className={cn(baseField, 'h-10 px-3 text-sm appearance-none bg-[length:1.25rem] bg-[right_0.5rem_center] bg-no-repeat pr-9', error && 'border-danger', className)}
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394A3B8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
-          }}
-          {...props}
-        >
-          {placeholder && <option value="">{placeholder}</option>}
-          {options.map((o) => (
-            <option key={o.value} value={o.value} className="bg-base-800 text-ink-primary">
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <select
+            ref={ref}
+            id={selId}
+            className={cn(baseField, 'h-10 px-3 pr-9 text-sm appearance-none', error && 'border-danger', className)}
+            {...props}
+          >
+            {placeholder && <option value="">{placeholder}</option>}
+            {options.map((o) => (
+              <option key={o.value} value={o.value} className="bg-base-800 text-ink-primary">
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+        </div>
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     );

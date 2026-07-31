@@ -16,14 +16,14 @@ import { downloadCSV, cn } from '@/utils';
 import type { CalendarEvent, CalendarCategory } from '@/types';
 
 const CATEGORIES: { value: CalendarCategory; label: string; color: string }[] = [
-  { value: 'hari efektif', label: 'Hari Efektif', color: 'bg-emerald-500' },
-  { value: 'libur', label: 'Libur', color: 'bg-red-500' },
-  { value: 'ujian', label: 'Ujian', color: 'bg-amber-500' },
+  { value: 'hari efektif', label: 'Hari Efektif', color: 'bg-success' },
+  { value: 'libur', label: 'Libur', color: 'bg-danger' },
+  { value: 'ujian', label: 'Ujian', color: 'bg-warning' },
   { value: 'kegiatan sekolah', label: 'Kegiatan Sekolah', color: 'bg-accent-blue' },
-  { value: 'maintenance', label: 'Maintenance', color: 'bg-orange-500' },
-  { value: 'booking', label: 'Booking', color: 'bg-purple-500' },
+  { value: 'maintenance', label: 'Maintenance', color: 'bg-orange' },
+  { value: 'booking', label: 'Booking', color: 'bg-purple' },
   { value: 'workshop', label: 'Workshop', color: 'bg-accent-cyan' },
-  { value: 'LKS', label: 'LKS', color: 'bg-blue-500' },
+  { value: 'LKS', label: 'LKS', color: 'bg-accent-blue' },
   { value: 'rapat', label: 'Rapat', color: 'bg-pink-500' },
   { value: 'lainnya', label: 'Lainnya', color: 'bg-base-600' },
 ];

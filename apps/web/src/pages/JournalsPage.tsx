@@ -109,9 +109,9 @@ export function JournalsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{stats.total}</p><p className="text-xs text-ink-muted">Total Jurnal</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{stats.verified}</p><p className="text-xs text-ink-muted">Diverifikasi</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.verified}</p><p className="text-xs text-ink-muted">Diverifikasi</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-muted">{stats.draft}</p><p className="text-xs text-ink-muted">Draft</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-amber-400">{stats.needsFix}</p><p className="text-xs text-ink-muted">Perlu Perbaikan</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{stats.needsFix}</p><p className="text-xs text-ink-muted">Perlu Perbaikan</p></CardContent></Card>
       </div>
 
       <Card>
@@ -177,7 +177,7 @@ export function JournalsPage() {
             <div><p className="text-xs text-ink-muted">Materi</p><p className="text-ink-secondary">{detail.material}</p></div>
             <div><p className="text-xs text-ink-muted">Kondisi Awal</p><p className="text-ink-secondary">{detail.initialCondition}</p></div>
             <div><p className="text-xs text-ink-muted">Kondisi Akhir</p><p className="text-ink-secondary">{detail.finalCondition}</p></div>
-            {detail.issues && <div><p className="text-xs text-ink-muted">Kendala</p><p className="text-amber-400">{detail.issues}</p></div>}
+            {detail.issues && <div><p className="text-xs text-ink-muted">Kendala</p><p className="text-warning-foreground">{detail.issues}</p></div>}
             {detail.followUp && <div><p className="text-xs text-ink-muted">Tindak Lanjut</p><p className="text-ink-secondary">{detail.followUp}</p></div>}
             <div><p className="text-xs text-ink-muted">Sumber</p><Badge tone={detail.source === 'session' ? 'accent' : 'muted'}>{detail.source === 'session' ? 'Dari Pelaksanaan' : 'Manual'}</Badge></div>
           </div>

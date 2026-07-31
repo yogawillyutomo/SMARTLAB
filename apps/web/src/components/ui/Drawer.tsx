@@ -31,8 +31,8 @@ export function Drawer({ open, onClose, title, description, children, footer, si
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 animate-fade-in">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="print-hidden fixed inset-0 z-50 animate-fade-in">
+      <div className="absolute inset-0 bg-overlay/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className={cn(
           'absolute top-0 bottom-0 w-full bg-base-800 border-base-700 shadow-elevated flex flex-col animate-slide-in-right',

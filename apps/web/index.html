@@ -1,9 +1,26 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (() => {
+        const root = document.documentElement;
+        let theme = 'dark';
+        let accent = 'blue';
+        try {
+          const stored = JSON.parse(localStorage.getItem('smartlab_pplg_ui') || 'null');
+          if (stored?.theme === 'dark' || stored?.theme === 'light' || stored?.theme === 'system') theme = stored.theme;
+          if (stored?.accent === 'blue' || stored?.accent === 'cyan') accent = stored.accent;
+        } catch {}
+        const isDark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        root.classList.toggle('dark', isDark);
+        root.dataset.theme = isDark ? 'dark' : 'light';
+        root.dataset.accent = accent;
+        root.style.colorScheme = isDark ? 'dark' : 'light';
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

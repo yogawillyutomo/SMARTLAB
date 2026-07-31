@@ -19,6 +19,8 @@ import {
   ClipboardList,
   CalendarClock,
   HandHelping,
+  Sun,
+  Moon,
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
@@ -142,7 +144,7 @@ function useGlobalSearch() {
 }
 
 export function AppTopbar() {
-  const { setMobileSidebar, activeLabId, setActiveLab, academicYear, semester, setCommandOpen } = useUIStore();
+  const { setMobileSidebar, activeLabId, setActiveLab, academicYear, semester, setCommandOpen, resolvedTheme, setTheme } = useUIStore();
   const { user, switchRole, logout } = useAuthStore();
   const { db, refresh } = useAppData();
   const canCreateIncident = usePermission('incidents', 'create');
@@ -199,7 +201,7 @@ export function AppTopbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-base-700 bg-base-900/90 px-3 backdrop-blur sm:px-4">
+      <header className="print-hidden sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-base-700 bg-base-900/90 px-3 backdrop-blur sm:px-4">
         <button
           onClick={() => setMobileSidebar(true)}
           className="rounded-lg p-2 text-ink-secondary hover:bg-base-700 hover:text-ink-primary lg:hidden"
@@ -274,6 +276,15 @@ export function AppTopbar() {
           <RefreshCw className="h-4 w-4" />
         </button>
 
+        <button
+          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          className="rounded-lg p-2 text-ink-secondary hover:bg-base-700 hover:text-ink-primary"
+          title={resolvedTheme === 'dark' ? 'Beralih ke tema terang' : 'Beralih ke tema gelap'}
+          aria-label={resolvedTheme === 'dark' ? 'Beralih ke tema terang' : 'Beralih ke tema gelap'}
+        >
+          {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
@@ -321,7 +332,7 @@ export function AppTopbar() {
         {canCreateIncident && (
           <button
             onClick={() => navigate('/incidents')}
-            className="hidden items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 sm:flex"
+            className="hidden items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 sm:flex"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden md:inline">Buat Tiket</span>
@@ -390,7 +401,7 @@ export function AppTopbar() {
       {/* Command palette */}
       {searchOpen && (
         <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[15vh] animate-fade-in">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSearchOpen(false)} />
+          <div className="absolute inset-0 bg-overlay/60 backdrop-blur-sm" onClick={() => setSearchOpen(false)} />
           <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-base-700 bg-base-800 shadow-elevated animate-slide-up">
             <div className="flex items-center gap-3 border-b border-base-700 px-4 py-3">
               <Search className="h-5 w-5 text-ink-muted" />

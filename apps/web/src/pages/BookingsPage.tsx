@@ -140,7 +140,7 @@ export function BookingsPage() {
       </Card>
 
       {pendingCount > 0 && canApprove && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
           <CalendarClock className="h-4 w-4" />
           {pendingCount} reservasi menunggu persetujuan Anda
         </div>
@@ -167,7 +167,7 @@ export function BookingsPage() {
                     <button onClick={() => setDetail(b)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Eye className="h-4 w-4" /></button>
                     {canApprove && (b.status === 'Menunggu Persetujuan' || b.status === 'Diajukan') && (
                       <>
-                        <button onClick={() => approve(b)} className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10"><Check className="h-4 w-4" /></button>
+                        <button onClick={() => approve(b)} className="rounded p-1 text-success-foreground hover:bg-success/10"><Check className="h-4 w-4" /></button>
                         <button onClick={() => { setRejectOpen(b); setRejectReason(''); }} className="rounded p-1 text-danger hover:bg-danger/10"><X className="h-4 w-4" /></button>
                       </>
                     )}

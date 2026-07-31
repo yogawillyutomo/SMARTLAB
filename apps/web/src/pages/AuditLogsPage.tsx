@@ -48,7 +48,7 @@ export function AuditLogsPage() {
     { key: 'action', header: 'Aksi', sortable: true, render: (a) => <Badge tone={actionTones[a.action] ?? 'neutral'}>{a.action}</Badge> },
     { key: 'object', header: 'Objek', render: (a) => <span className="text-ink-secondary">{a.object}</span> },
     { key: 'device', header: 'Device', render: (a) => <span className="text-ink-muted text-xs">{a.device}</span> },
-    { key: 'actions', header: '', render: (a) => <button onClick={() => setDetail(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Eye className="h-4 w-4" /></button> },
+    { key: 'actions', header: '', printHidden: true, render: (a) => <button onClick={() => setDetail(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Eye className="h-4 w-4" /></button> },
   ];
 
   return (
@@ -56,7 +56,7 @@ export function AuditLogsPage() {
       <PageHeader title="Audit Log" description="Riwayat aktivitas pengguna" icon={<ScrollText className="h-5 w-5" />}
         actions={canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
       />
-      <Card>
+      <Card className="print-hidden">
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select label="Pengguna" value={filters.user} onChange={(e) => setFilters({ ...filters, user: e.target.value })} options={users.map((u) => ({ value: u, label: u }))} placeholder="Semua" />
           <Select label="Modul" value={filters.module} onChange={(e) => setFilters({ ...filters, module: e.target.value })} options={modules.map((m) => ({ value: m, label: m }))} placeholder="Semua" />

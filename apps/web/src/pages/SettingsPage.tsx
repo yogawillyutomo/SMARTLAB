@@ -128,19 +128,19 @@ export function SettingsPage() {
                   <p className="mb-2 text-sm font-medium text-ink-secondary">Tema</p>
                   <div className="grid grid-cols-3 gap-2">
                     {([['dark', Moon, 'Dark'], ['light', Sun, 'Light'], ['system', Monitor, 'System']] as const).map(([val, Icon, label]) => (
-                      <button key={val} onClick={() => setTheme(val as ThemeMode)} className={cn('flex flex-col items-center gap-2 rounded-xl border p-4 transition-colors', theme === val ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-base-700 text-ink-secondary hover:border-base-600')}>
+                      <button key={val} type="button" aria-pressed={theme === val} onClick={() => setTheme(val as ThemeMode)} className={cn('flex flex-col items-center gap-2 rounded-xl border p-4 transition-colors', theme === val ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-base-700 text-ink-secondary hover:border-base-600')}>
                         <Icon className="h-5 w-5" />
                         <span className="text-xs font-medium">{label}</span>
                       </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-ink-muted">Dark mode adalah default dan direkomendasikan untuk aplikasi ini.</p>
+                  <p className="mt-2 text-xs text-ink-muted">Gunakan tema Sistem untuk mengikuti pengaturan tampilan perangkat Anda.</p>
                 </div>
                 <div>
                   <p className="mb-2 text-sm font-medium text-ink-secondary">Warna Aksen</p>
                   <div className="flex gap-2">
                     {([['blue', 'bg-accent-blue'], ['cyan', 'bg-accent-cyan']] as const).map(([val, cls]) => (
-                      <button key={val} onClick={() => setAccent(val as AccentColor)} className={cn('flex h-10 w-10 items-center justify-center rounded-xl border-2 transition-colors', cls, accent === val ? 'border-white' : 'border-transparent')}>
+                      <button key={val} type="button" aria-label={`Pilih aksen ${val}`} aria-pressed={accent === val} onClick={() => setAccent(val as AccentColor)} className={cn('flex h-10 w-10 items-center justify-center rounded-xl border-2 transition-colors', cls, accent === val ? 'border-ink-primary' : 'border-transparent')}>
                         {accent === val && <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}

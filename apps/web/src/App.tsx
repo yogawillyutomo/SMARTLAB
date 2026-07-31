@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppDataProvider } from '@/hooks/useAppData';
 import { AppLayout } from '@/layouts/AppLayout';
@@ -8,7 +8,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { MonitoringPage } from '@/pages/MonitoringPage';
 import { Toaster } from '@/components/ui/Toaster';
 import { useAuthStore } from '@/stores/authStore';
-import { useUIStore, applyTheme } from '@/stores/uiStore';
+import { useUIStore } from '@/stores/uiStore';
 import { useAppData } from '@/hooks/useAppData';
 
 // Pages
@@ -84,11 +84,22 @@ function AppBootstrap() {
   const hydrateAuth = useAuthStore((state) => state.hydrate);
   const isAuthHydrated = useAuthStore((state) => state.isHydrated);
   const hydrateUI = useUIStore((state) => state.hydrate);
+  const isUIHydrated = useUIStore((state) => state.isHydrated);
+  const hydrationStarted = useRef(false);
 
   useEffect(() => {
+    if (hydrationStarted.current || isUIHydrated) return;
+    hydrationStarted.current = true;
     hydrateUI();
-    applyTheme('dark');
-  }, [hydrateUI]);
+  }, [hydrateUI, isUIHydrated]);
+
+  useEffect(() => {
+    if (!isUIHydrated) return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => useUIStore.getState().syncSystemTheme();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [isUIHydrated]);
 
   useEffect(() => {
     if (ready && !isAuthHydrated) {
@@ -96,7 +107,7 @@ function AppBootstrap() {
     }
   }, [db.users, hydrateAuth, isAuthHydrated, ready]);
 
-  if (!ready || !isAuthHydrated) {
+  if (!ready || !isAuthHydrated || !isUIHydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-base-900 text-sm text-ink-muted">
         Memuat SmartLab...

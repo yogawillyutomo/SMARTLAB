@@ -313,11 +313,11 @@ export function MonitoringPage() {
 function SummaryStat({ label, value, tone }: { label: string; value: number; tone: 'neutral' | 'success' | 'muted' | 'warning' | 'danger' | 'orange' }) {
   const toneClass: Record<typeof tone, string> = {
     neutral: 'text-ink-primary',
-    success: 'text-emerald-400',
+    success: 'text-success-foreground',
     muted: 'text-ink-muted',
-    warning: 'text-amber-400',
+    warning: 'text-warning-foreground',
     danger: 'text-danger',
-    orange: 'text-orange-400',
+    orange: 'text-orange-foreground',
   };
   return (
     <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-2 text-center">
@@ -354,7 +354,7 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 rounded-xl border border-base-700 bg-base-800/60 p-4">
-        <div className={cn('flex h-14 w-14 items-center justify-center rounded-xl', device.status === 'Online' ? 'bg-emerald-500/15 text-emerald-400' : device.status === 'Critical' ? 'bg-danger/15 text-danger' : device.status === 'Maintenance' ? 'bg-orange-500/15 text-orange-400' : 'bg-base-700 text-ink-muted')}>
+        <div className={cn('flex h-14 w-14 items-center justify-center rounded-xl', device.status === 'Online' ? 'bg-success/15 text-success-foreground' : device.status === 'Critical' ? 'bg-danger/15 text-danger' : device.status === 'Maintenance' ? 'bg-orange/15 text-orange-foreground' : 'bg-base-700 text-ink-muted')}>
           <Monitor className="h-7 w-7" />
         </div>
         <div className="flex-1">
@@ -506,7 +506,7 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 function MetricBar({ icon, label, value, max, unit, tone }: { icon: React.ReactNode; label: string; value: number; max: number; unit: string; tone: 'success' | 'warning' | 'danger' }) {
   const pct = Math.min(100, (value / max) * 100);
-  const color = tone === 'success' ? 'bg-emerald-500' : tone === 'warning' ? 'bg-amber-500' : 'bg-danger';
+  const color = tone === 'success' ? 'bg-success' : tone === 'warning' ? 'bg-warning' : 'bg-danger';
   return (
     <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3">
       <div className="flex items-center justify-between text-xs">

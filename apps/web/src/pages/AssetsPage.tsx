@@ -118,7 +118,7 @@ export function AssetsPage() {
   }
 
   const columns: Column<Asset>[] = [
-    { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px' },
+    { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px', printHidden: true },
     { key: 'assetCode', header: 'Kode Aset', sortable: true, render: (a) => <span className="font-medium text-ink-primary">{a.assetCode}</span> },
     { key: 'name', header: 'Nama', sortable: true, render: (a) => <button onClick={() => navigate(`/assets/${a.id}`)} className="text-accent-blue hover:underline">{a.name}</button> },
     { key: 'category', header: 'Kategori', sortable: true },
@@ -126,7 +126,7 @@ export function AssetsPage() {
     { key: 'condition', header: 'Kondisi', render: (a) => <ConditionBadge condition={a.condition} /> },
     { key: 'status', header: 'Status', render: (a) => <StatusBadge status={a.status} /> },
     { key: 'price', header: 'Harga', sortable: true, sortValue: (a) => a.price, render: (a) => <span className="text-ink-muted">{formatCurrency(a.price)}</span> },
-    { key: 'actions', header: 'Aksi', render: (a) => (
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (a) => (
       <div className="flex gap-1">
         <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
         {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
@@ -154,12 +154,12 @@ export function AssetsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-amber-400">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
       </div>
 
-      <Card>
+      <Card className="print-hidden">
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select label="Kategori" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} placeholder="Semua" options={categories.map((c) => ({ value: c, label: c }))} />
           <Select label="Lab" value={filters.lab} onChange={(e) => setFilters({ ...filters, lab: e.target.value })} placeholder="Semua" options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
@@ -273,7 +273,7 @@ function OpnameSimulator({ assets, labs, onComplete }: { assets: Asset[]; labs: 
         ))}
       </div>
       <div className="flex items-center justify-between text-sm">
-        <span className="text-ink-muted">Ditemukan: <span className="text-emerald-400 font-semibold">{found.size}</span> / {labAssets.length}</span>
+        <span className="text-ink-muted">Ditemukan: <span className="text-success-foreground font-semibold">{found.size}</span> / {labAssets.length}</span>
         <Button size="sm" onClick={() => { toast(`Opname selesai: ${found.size}/${labAssets.length} ditemukan`, 'success'); onComplete(); }}>Selesai</Button>
       </div>
     </div>

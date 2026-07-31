@@ -98,10 +98,10 @@ export function StockPage() {
     { key: 'location', header: 'Lokasi' },
     { key: 'supplier', header: 'Supplier' },
     { key: 'price', header: 'Harga', sortable: true, sortValue: (s) => s.price, render: (s) => <span className="text-ink-muted">{formatCurrency(s.price)}</span> },
-    { key: 'actions', header: 'Aksi', render: (s) => (
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (s) => (
       <div className="flex gap-1">
-        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-amber-400 hover:bg-amber-500/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>}
+        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-success-foreground hover:bg-success/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>}
+        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-warning-foreground hover:bg-warning/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>}
         {canUpdate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
         {canDelete && <button onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
@@ -129,16 +129,16 @@ export function StockPage() {
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{stats.total}</p><p className="text-xs text-ink-muted">Jenis Barang</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.lowStock}</p><p className="text-xs text-ink-muted">Stok Rendah</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(stats.totalValue)}</p><p className="text-xs text-ink-muted">Nilai Stok</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{stats.categories}</p><p className="text-xs text-ink-muted">Kategori</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.categories}</p><p className="text-xs text-ink-muted">Kategori</p></CardContent></Card>
       </div>
 
       {stats.lowStock > 0 && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
           <AlertTriangle className="h-4 w-4" /> {stats.lowStock} barang di bawah stok minimum
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-base-700">
+      <div className="print-hidden flex gap-2 border-b border-base-700">
         <button onClick={() => setTxTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'items' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Daftar Barang</button>
         <button onClick={() => setTxTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'transactions' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Histori Transaksi</button>
       </div>

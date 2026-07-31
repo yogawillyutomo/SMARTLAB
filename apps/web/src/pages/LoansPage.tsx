@@ -131,11 +131,11 @@ export function LoansPage() {
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{stats.active}</p><p className="text-xs text-ink-muted">Aktif Dipinjam</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.overdue}</p><p className="text-xs text-ink-muted">Terlambat</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{stats.returned}</p><p className="text-xs text-ink-muted">Dikembalikan</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.returned}</p><p className="text-xs text-ink-muted">Dikembalikan</p></CardContent></Card>
       </div>
 
       {stats.overdue > 0 && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
           <AlertTriangle className="h-4 w-4" /> {stats.overdue} peminjaman terlambat
         </div>
       )}

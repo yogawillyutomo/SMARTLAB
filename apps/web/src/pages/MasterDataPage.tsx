@@ -120,6 +120,7 @@ export function MasterDataPage() {
       key: 'actions',
       header: 'Aksi',
       className: 'w-24 text-right',
+      printHidden: true,
       render: (item) => (
         <div className="flex justify-end gap-1">
           {canUpdate && (
@@ -424,7 +425,7 @@ function LaboratoryShortcut({
 function SummaryMetric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'success' | 'accent' }) {
   const toneClass = {
     neutral: 'bg-base-700/40 text-ink-primary',
-    success: 'bg-emerald-500/10 text-emerald-400',
+    success: 'bg-success/10 text-success-foreground',
     accent: 'bg-accent-blue/10 text-accent-blue',
   }[tone];
   return (
