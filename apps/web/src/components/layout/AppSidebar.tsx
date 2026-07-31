@@ -41,7 +41,7 @@ export function AppSidebar() {
       >
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-base-700 px-4 py-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-soft">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-soft">
             <FlaskConical className="h-5 w-5" />
           </div>
           {!sidebarCollapsed && (

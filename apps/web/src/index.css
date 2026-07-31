@@ -13,6 +13,10 @@
   --color-base-600: 71 85 105;
   --color-accent-primary: 59 130 246;
   --color-accent-secondary: 6 182 212;
+  --color-brand-blue: 59 130 246;
+  --color-brand-cyan: 6 182 212;
+  --color-info: 59 130 246;
+  --color-status-cyan: 6 182 212;
   --color-success: 16 185 129;
   --color-warning: 245 158 11;
   --color-danger: 239 68 68;
@@ -45,6 +49,18 @@
   --color-accent-primary: 6 182 212;
   --color-accent-secondary: 59 130 246;
   --color-focus: 6 182 212;
+}
+
+:root[data-accent='indigo'] {
+  --color-accent-primary: 99 102 241;
+  --color-accent-secondary: 129 140 248;
+  --color-focus: 99 102 241;
+}
+
+:root[data-accent='violet'] {
+  --color-accent-primary: 139 92 246;
+  --color-accent-secondary: 192 132 252;
+  --color-focus: 139 92 246;
 }
 
 * {

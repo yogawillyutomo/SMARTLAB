@@ -19,6 +19,13 @@ const TABS = [
   { key: 'notifications', label: 'Notifikasi', icon: Bell },
 ];
 
+const ACCENT_OPTIONS: { value: AccentColor; swatch: string }[] = [
+  { value: 'blue', swatch: 'bg-palette-blue' },
+  { value: 'cyan', swatch: 'bg-palette-cyan' },
+  { value: 'indigo', swatch: 'bg-palette-indigo' },
+  { value: 'violet', swatch: 'bg-palette-violet' },
+];
+
 export function SettingsPage() {
   const { db, reset, exportDB, importDB } = useAppData();
   const canUpdate = usePermission('settings', 'update');
@@ -138,10 +145,10 @@ export function SettingsPage() {
                 </div>
                 <div>
                   <p className="mb-2 text-sm font-medium text-ink-secondary">Warna Aksen</p>
-                  <div className="flex gap-2">
-                    {([['blue', 'bg-accent-blue'], ['cyan', 'bg-accent-cyan']] as const).map(([val, cls]) => (
-                      <button key={val} type="button" aria-label={`Pilih aksen ${val}`} aria-pressed={accent === val} onClick={() => setAccent(val as AccentColor)} className={cn('flex h-10 w-10 items-center justify-center rounded-xl border-2 transition-colors', cls, accent === val ? 'border-ink-primary' : 'border-transparent')}>
-                        {accent === val && <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                  <div className="flex flex-wrap gap-2">
+                    {ACCENT_OPTIONS.map((option) => (
+                      <button key={option.value} type="button" aria-label={`Pilih aksen ${option.value}`} title={`Pilih aksen ${option.value}`} aria-pressed={accent === option.value} onClick={() => setAccent(option.value)} className={cn('flex h-10 w-10 items-center justify-center rounded-xl border-2 transition-colors', option.swatch, accent === option.value ? 'border-ink-primary' : 'border-transparent')}>
+                        {accent === option.value && <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}
                   </div>

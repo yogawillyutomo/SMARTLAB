@@ -12,7 +12,7 @@
         try {
           const stored = JSON.parse(localStorage.getItem('smartlab_pplg_ui') || 'null');
           if (stored?.theme === 'dark' || stored?.theme === 'light' || stored?.theme === 'system') theme = stored.theme;
-          if (stored?.accent === 'blue' || stored?.accent === 'cyan') accent = stored.accent;
+          if (stored?.accent === 'blue' || stored?.accent === 'cyan' || stored?.accent === 'indigo' || stored?.accent === 'violet') accent = stored.accent;
         } catch {}
         const isDark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         root.classList.toggle('dark', isDark);

@@ -20,7 +20,7 @@ const toneClasses: Record<NonNullable<StatCardProps['tone']>, string> = {
   success: 'bg-success/15 text-success-foreground',
   warning: 'bg-warning/15 text-warning-foreground',
   danger: 'bg-danger/15 text-danger-foreground',
-  info: 'bg-accent-blue/15 text-accent-blue',
+  info: 'bg-info/15 text-info',
   neutral: 'bg-base-700/60 text-ink-secondary',
   orange: 'bg-orange/15 text-orange-foreground',
 };

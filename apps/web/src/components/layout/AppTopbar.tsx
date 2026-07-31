@@ -346,7 +346,7 @@ export function AppTopbar() {
             className="flex items-center gap-2 rounded-lg p-1 pr-2 hover:bg-base-700"
             aria-label="Menu profil"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent-blue to-accent-cyan text-xs font-bold text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-blue to-brand-cyan text-xs font-bold text-white">
               {user ? initials(user.name) : '?'}
             </div>
             <ChevronDown className="hidden h-4 w-4 text-ink-muted sm:block" />

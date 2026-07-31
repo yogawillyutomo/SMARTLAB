@@ -16,7 +16,7 @@ export function Toaster() {
             'pointer-events-auto flex items-start gap-3 rounded-xl border bg-base-800/95 backdrop-blur px-4 py-3 shadow-elevated animate-slide-up',
             t.type === 'success' && 'border-success/30',
             t.type === 'error' && 'border-danger/30',
-            t.type === 'info' && 'border-accent-blue/30'
+            t.type === 'info' && 'border-info/30'
           )}
         >
           <div
@@ -24,7 +24,7 @@ export function Toaster() {
               'mt-0.5',
               t.type === 'success' && 'text-success-foreground',
               t.type === 'error' && 'text-danger',
-              t.type === 'info' && 'text-accent-blue'
+              t.type === 'info' && 'text-info'
             )}
           >
             {t.type === 'success' && <CheckCircle2 className="h-5 w-5" />}

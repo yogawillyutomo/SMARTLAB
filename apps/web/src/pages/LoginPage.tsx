@@ -65,12 +65,12 @@ export function LoginPage() {
       {/* Left brand panel */}
       <div className="relative hidden flex-1 overflow-hidden bg-gradient-to-br from-base-800 via-base-900 to-base-800 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-0 opacity-30">
-          <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-accent-blue/30 blur-3xl" />
-          <div className="absolute right-0 bottom-0 h-96 w-96 rounded-full bg-accent-cyan/20 blur-3xl" />
+          <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-brand-blue/30 blur-3xl" />
+          <div className="absolute right-0 bottom-0 h-96 w-96 rounded-full bg-brand-cyan/20 blur-3xl" />
         </div>
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-elevated">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-elevated">
               <FlaskConical className="h-6 w-6" />
             </div>
             <div>
@@ -125,7 +125,7 @@ export function LoginPage() {
             </select>
           </div>
           <div className="mb-8 text-center lg:hidden">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-elevated">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-elevated">
               <FlaskConical className="h-7 w-7" />
             </div>
             <h1 className="text-xl font-bold text-ink-primary">SMARTLAB PPLG</h1>

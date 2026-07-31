@@ -82,7 +82,7 @@ export function UsersPage() {
   const columns: Column<User>[] = [
     { key: 'name', header: 'Nama', sortable: true, render: (u) => (
       <button onClick={() => setDetail(u)} className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent-blue to-accent-cyan text-xs font-bold text-white">{initials(u.name)}</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-blue to-brand-cyan text-xs font-bold text-white">{initials(u.name)}</div>
         <span className="font-medium text-ink-primary">{u.name}</span>
       </button>
     ) },
@@ -140,7 +140,7 @@ export function UsersPage() {
         {detail && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-xl font-bold text-white">{initials(detail.name)}</div>
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-xl font-bold text-white">{initials(detail.name)}</div>
               <div>
                 <Badge tone="accent">{detail.role}</Badge>
                 <p className="mt-1"><StatusBadge status={detail.status} /></p>

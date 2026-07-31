@@ -51,7 +51,7 @@ export function NotFoundPage() {
       <p className="text-7xl font-bold text-accent-blue">404</p>
       <h2 className="mt-4 text-xl font-bold text-ink-primary">Halaman tidak ditemukan</h2>
       <p className="mt-1 max-w-sm text-sm text-ink-muted">URL yang Anda akses tidak tersedia atau telah dipindahkan.</p>
-      <a href="/dashboard" className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+      <a href="/dashboard" className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-blue px-4 py-2 text-sm font-semibold text-white hover:brightness-110">
         Kembali ke Dashboard
       </a>
     </div>

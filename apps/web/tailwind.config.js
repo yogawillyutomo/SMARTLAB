@@ -18,6 +18,18 @@ export default {
           blue: 'rgb(var(--color-accent-primary) / <alpha-value>)',
           cyan: 'rgb(var(--color-accent-secondary) / <alpha-value>)',
         },
+        brand: {
+          blue: 'rgb(var(--color-brand-blue) / <alpha-value>)',
+          cyan: 'rgb(var(--color-brand-cyan) / <alpha-value>)',
+        },
+        info: 'rgb(var(--color-info) / <alpha-value>)',
+        'status-cyan': 'rgb(var(--color-status-cyan) / <alpha-value>)',
+        palette: {
+          blue: 'rgb(59 130 246 / <alpha-value>)',
+          cyan: 'rgb(6 182 212 / <alpha-value>)',
+          indigo: 'rgb(99 102 241 / <alpha-value>)',
+          violet: 'rgb(139 92 246 / <alpha-value>)',
+        },
         success: 'rgb(var(--color-success) / <alpha-value>)',
         warning: 'rgb(var(--color-warning) / <alpha-value>)',
         danger: 'rgb(var(--color-danger) / <alpha-value>)',
