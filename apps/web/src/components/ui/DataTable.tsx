@@ -12,6 +12,7 @@ export interface Column<T> {
   sortValue?: (row: T) => string | number;
   className?: string;
   width?: string;
+  printHidden?: boolean;
 }
 
 interface DataTableProps<T> {
@@ -84,9 +85,9 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="data-table-root space-y-3">
       {(searchable || toolbar) && (
-        <div className="flex flex-wrap items-center gap-2 justify-between">
+        <div className="data-table-toolbar flex flex-wrap items-center gap-2 justify-between">
           {searchable && (
             <div className="w-full sm:w-64">
               <Input icon={<Search className="h-4 w-4" />} placeholder={searchPlaceholder} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -95,14 +96,14 @@ export function DataTable<T>({
           {toolbar && <div className="flex flex-wrap items-center gap-2 ml-auto">{toolbar}</div>}
         </div>
       )}
-      <div className="overflow-x-auto rounded-xl border border-base-700/70 bg-base-800/60">
-        <table className="w-full text-sm">
+      <div className="data-table-scroll overflow-x-auto rounded-xl border border-base-700/70 bg-base-800/60">
+        <table className="data-table-table w-full text-sm">
           <thead>
             <tr className="border-b border-base-700/70 bg-base-800/80">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={cn('px-4 py-3 text-left font-semibold text-ink-secondary whitespace-nowrap', compact && 'py-2', col.className)}
+                  className={cn('px-4 py-3 text-left font-semibold text-ink-secondary whitespace-nowrap', compact && 'py-2', col.className, col.printHidden && 'print-hidden')}
                   style={col.width ? { width: col.width } : undefined}
                 >
                   {col.sortable ? (
@@ -143,7 +144,7 @@ export function DataTable<T>({
                   )}
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={cn('px-4 py-3 text-ink-secondary', compact && 'py-2', col.className)}>
+                    <td key={col.key} className={cn('px-4 py-3 text-ink-secondary', compact && 'py-2', col.className, col.printHidden && 'print-hidden')}>
                       {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
                     </td>
                   ))}
@@ -154,7 +155,7 @@ export function DataTable<T>({
         </table>
       </div>
       {sorted.length > pageSize && (
-        <div className="flex items-center justify-between text-xs text-ink-muted">
+        <div className="data-table-pagination flex items-center justify-between text-xs text-ink-muted">
           <span>
             Menampilkan {(current - 1) * pageSize + 1}–{Math.min(current * pageSize, sorted.length)} dari {sorted.length}
           </span>

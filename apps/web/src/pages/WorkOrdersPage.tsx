@@ -191,7 +191,7 @@ export function WorkOrdersPage() {
         ))}
       </div>
 
-      <div className="flex items-center gap-1 rounded-lg border border-base-700 p-1 w-fit">
+      <div className="print-hidden flex items-center gap-1 rounded-lg border border-base-700 p-1 w-fit">
         <button onClick={() => setView('table')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'table' ? 'bg-accent-blue text-white' : 'text-ink-muted')}><TableIcon className="h-3.5 w-3.5" />Tabel</button>
         <button onClick={() => setView('board')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'board' ? 'bg-accent-blue text-white' : 'text-ink-muted')}><KanbanSquare className="h-3.5 w-3.5" />Board</button>
         <button onClick={() => setView('calendar')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'calendar' ? 'bg-accent-blue text-white' : 'text-ink-muted')}><Calendar className="h-3.5 w-3.5" />Kalender</button>

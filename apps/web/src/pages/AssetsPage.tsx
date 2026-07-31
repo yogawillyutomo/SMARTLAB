@@ -118,7 +118,7 @@ export function AssetsPage() {
   }
 
   const columns: Column<Asset>[] = [
-    { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px' },
+    { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px', printHidden: true },
     { key: 'assetCode', header: 'Kode Aset', sortable: true, render: (a) => <span className="font-medium text-ink-primary">{a.assetCode}</span> },
     { key: 'name', header: 'Nama', sortable: true, render: (a) => <button onClick={() => navigate(`/assets/${a.id}`)} className="text-accent-blue hover:underline">{a.name}</button> },
     { key: 'category', header: 'Kategori', sortable: true },
@@ -126,7 +126,7 @@ export function AssetsPage() {
     { key: 'condition', header: 'Kondisi', render: (a) => <ConditionBadge condition={a.condition} /> },
     { key: 'status', header: 'Status', render: (a) => <StatusBadge status={a.status} /> },
     { key: 'price', header: 'Harga', sortable: true, sortValue: (a) => a.price, render: (a) => <span className="text-ink-muted">{formatCurrency(a.price)}</span> },
-    { key: 'actions', header: 'Aksi', render: (a) => (
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (a) => (
       <div className="flex gap-1">
         <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
         {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
@@ -159,7 +159,7 @@ export function AssetsPage() {
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
       </div>
 
-      <Card>
+      <Card className="print-hidden">
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select label="Kategori" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} placeholder="Semua" options={categories.map((c) => ({ value: c, label: c }))} />
           <Select label="Lab" value={filters.lab} onChange={(e) => setFilters({ ...filters, lab: e.target.value })} placeholder="Semua" options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />

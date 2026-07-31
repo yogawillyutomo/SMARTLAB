@@ -188,6 +188,60 @@ input[type='checkbox'], input[type='radio'] {
     overflow: visible !important;
   }
 
+  .data-table-root {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .data-table-toolbar,
+  .data-table-pagination {
+    display: none !important;
+  }
+
+  .data-table-scroll {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .data-table-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+    border-collapse: collapse !important;
+    font-size: 9pt !important;
+  }
+
+  .data-table-table thead {
+    display: table-header-group;
+  }
+
+  .data-table-table th,
+  .data-table-table td {
+    padding: 0.35rem 0.4rem !important;
+    vertical-align: top;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.25;
+    color: #0f172a !important;
+    background: #fff !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  .data-table-table th {
+    font-weight: 600;
+  }
+
+  .data-table-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   #app-main {
     height: auto !important;
     overflow: visible !important;

@@ -198,7 +198,7 @@ export function IncidentsPage() {
           <Card key={st}><CardContent><p className="text-2xl font-bold text-ink-primary">{db.incidents.filter((i) => i.status === st).length}</p><p className="text-xs text-ink-muted">{st}</p></CardContent></Card>
         ))}
       </div>
-      <Card>
+      <Card className="print-hidden">
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select label="Status" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} placeholder="Semua" options={STATUSES.map((s) => ({ value: s, label: s }))} />
           <Select label="Prioritas" value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })} placeholder="Semua" options={PRIORITIES.map((p) => ({ value: p, label: p }))} />

@@ -98,7 +98,7 @@ export function StockPage() {
     { key: 'location', header: 'Lokasi' },
     { key: 'supplier', header: 'Supplier' },
     { key: 'price', header: 'Harga', sortable: true, sortValue: (s) => s.price, render: (s) => <span className="text-ink-muted">{formatCurrency(s.price)}</span> },
-    { key: 'actions', header: 'Aksi', render: (s) => (
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (s) => (
       <div className="flex gap-1">
         {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-success-foreground hover:bg-success/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>}
         {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-warning-foreground hover:bg-warning/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>}
@@ -138,7 +138,7 @@ export function StockPage() {
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-base-700">
+      <div className="print-hidden flex gap-2 border-b border-base-700">
         <button onClick={() => setTxTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'items' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Daftar Barang</button>
         <button onClick={() => setTxTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'transactions' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Histori Transaksi</button>
       </div>

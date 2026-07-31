@@ -120,6 +120,7 @@ export function MasterDataPage() {
       key: 'actions',
       header: 'Aksi',
       className: 'w-24 text-right',
+      printHidden: true,
       render: (item) => (
         <div className="flex justify-end gap-1">
           {canUpdate && (
