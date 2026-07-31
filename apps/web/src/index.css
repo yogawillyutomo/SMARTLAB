@@ -11,8 +11,9 @@
   --color-base-800: 30 41 59;
   --color-base-700: 51 65 85;
   --color-base-600: 71 85 105;
-  --color-accent-primary: 59 130 246;
+  --color-accent-primary: 37 99 235;
   --color-accent-secondary: 6 182 212;
+  --color-accent-foreground: 255 255 255;
   --color-brand-blue: 59 130 246;
   --color-brand-cyan: 6 182 212;
   --color-info: 59 130 246;
@@ -30,7 +31,7 @@
   --color-danger-foreground: 248 113 113;
   --color-orange-foreground: 251 146 60;
   --color-purple-foreground: 216 180 254;
-  --color-focus: 59 130 246;
+  --color-focus: 37 99 235;
   --color-overlay: 0 0 0;
   --color-chart-grid: 51 65 85;
   --color-chart-axis: 148 163 184;
@@ -46,21 +47,24 @@
 }
 
 :root[data-accent='cyan'] {
-  --color-accent-primary: 6 182 212;
+  --color-accent-primary: 14 116 144;
   --color-accent-secondary: 59 130 246;
-  --color-focus: 6 182 212;
+  --color-accent-foreground: 255 255 255;
+  --color-focus: 14 116 144;
 }
 
 :root[data-accent='indigo'] {
-  --color-accent-primary: 99 102 241;
-  --color-accent-secondary: 129 140 248;
-  --color-focus: 99 102 241;
+  --color-accent-primary: 79 70 229;
+  --color-accent-secondary: 139 92 246;
+  --color-accent-foreground: 255 255 255;
+  --color-focus: 79 70 229;
 }
 
 :root[data-accent='violet'] {
-  --color-accent-primary: 139 92 246;
-  --color-accent-secondary: 192 132 252;
-  --color-focus: 139 92 246;
+  --color-accent-primary: 124 58 237;
+  --color-accent-secondary: 99 102 241;
+  --color-accent-foreground: 255 255 255;
+  --color-focus: 124 58 237;
 }
 
 * {

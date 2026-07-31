@@ -118,14 +118,14 @@ export function MaintenancePage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Card><CardContent className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-danger" /><div><p className="text-2xl font-bold text-ink-primary">{stats.overdue}</p><p className="text-xs text-ink-muted">Overdue</p></div></CardContent></Card>
         <Card><CardContent className="flex items-center gap-3"><Clock className="h-8 w-8 text-warning-foreground" /><div><p className="text-2xl font-bold text-ink-primary">{stats.dueSoon}</p><p className="text-xs text-ink-muted">Due Soon</p></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3"><ShieldCheck className="h-8 w-8 text-accent-blue" /><div><p className="text-2xl font-bold text-ink-primary">{stats.scheduled}</p><p className="text-xs text-ink-muted">Scheduled</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-3"><ShieldCheck className="h-8 w-8 text-accent-primary" /><div><p className="text-2xl font-bold text-ink-primary">{stats.scheduled}</p><p className="text-xs text-ink-muted">Scheduled</p></div></CardContent></Card>
         <Card><CardContent className="flex items-center gap-3"><CheckCircle2 className="h-8 w-8 text-success-foreground" /><div><p className="text-2xl font-bold text-ink-primary">{stats.completed}</p><p className="text-xs text-ink-muted">Completed</p></div></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.compliance}%</p><p className="text-xs text-ink-muted">Compliance</p></CardContent></Card>
       </div>
 
       <div className="flex gap-2 border-b border-base-700">
-        <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Rencana Pemeliharaan</button>
-        <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-blue text-accent-blue' : 'border-transparent text-ink-muted'}`}>Riwayat Pemeliharaan</button>
+        <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-primary text-accent-primary' : 'border-transparent text-ink-muted'}`}>Rencana Pemeliharaan</button>
+        <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-primary text-accent-primary' : 'border-transparent text-ink-muted'}`}>Riwayat Pemeliharaan</button>
       </div>
 
       {tab === 'plans' ? (
@@ -229,7 +229,7 @@ export function MaintenancePage() {
             <div className="space-y-1">
               {(execForm.checklist ?? []).map((c, i) => (
                 <label key={i} className="flex items-center gap-2 rounded-lg border border-base-700/60 px-3 py-1.5 text-sm">
-                  <input type="checkbox" checked={c.done} onChange={(e) => setExecForm({ ...execForm, checklist: execForm.checklist!.map((x, idx) => idx === i ? { ...x, done: e.target.checked } : x) })} className="rounded border-base-600 text-accent-blue" />
+                  <input type="checkbox" checked={c.done} onChange={(e) => setExecForm({ ...execForm, checklist: execForm.checklist!.map((x, idx) => idx === i ? { ...x, done: e.target.checked } : x) })} className="rounded border-base-600 text-accent-primary" />
                   <span className="text-ink-secondary">{c.item}</span>
                 </label>
               ))}

@@ -35,7 +35,7 @@ const toneStyles: Record<Tone, string> = {
   warning: 'bg-warning/15 text-warning-foreground border-warning/30',
   danger: 'bg-danger/15 text-danger-foreground border-danger/30',
   info: 'bg-info/15 text-info border-info/30',
-  accent: 'bg-accent-blue/15 text-accent-blue border-accent-blue/30',
+  accent: 'bg-accent-primary/15 text-accent-primary border-accent-primary/30',
   muted: 'bg-base-700/40 text-ink-muted border-base-600/60',
   orange: 'bg-orange/15 text-orange-foreground border-orange/30',
   purple: 'bg-purple/15 text-purple-foreground border-purple/30',

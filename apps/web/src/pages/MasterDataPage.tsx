@@ -127,7 +127,7 @@ export function MasterDataPage() {
             <button
               type="button"
               onClick={() => openEdit(item)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-base-700 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-base-700 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
               aria-label={`Edit ${item.name}`}
               title={`Edit ${item.name}`}
             >
@@ -138,7 +138,7 @@ export function MasterDataPage() {
             <button
               type="button"
               onClick={() => setConfirmDel(item)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-base-700 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-base-700 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
               aria-label={`Hapus ${item.name}`}
               title={`Hapus ${item.name}`}
             >
@@ -268,9 +268,9 @@ export function MasterDataPage() {
                         onClick={() => selectCategory(item.key)}
                         aria-current={activeItem.key === item.key ? 'page' : undefined}
                         className={cn(
-                          'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue',
+                          'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary',
                           activeItem.key === item.key
-                            ? 'border-accent-blue/50 bg-accent-blue/10 text-accent-blue'
+                            ? 'border-accent-primary/50 bg-accent-primary/10 text-accent-primary'
                             : 'border-transparent text-ink-secondary hover:border-base-700 hover:bg-base-700/40 hover:text-ink-primary'
                         )}
                       >
@@ -426,7 +426,7 @@ function SummaryMetric({ label, value, tone = 'neutral' }: { label: string; valu
   const toneClass = {
     neutral: 'bg-base-700/40 text-ink-primary',
     success: 'bg-success/10 text-success-foreground',
-    accent: 'bg-accent-blue/10 text-accent-blue',
+    accent: 'bg-accent-primary/10 text-accent-primary',
   }[tone];
   return (
     <div className="rounded-xl border border-base-700/70 bg-base-800/40 p-4">

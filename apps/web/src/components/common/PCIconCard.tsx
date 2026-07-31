@@ -15,7 +15,7 @@ const statusConfig: Record<DeviceStatus, { ring: string; glow: string; icon: typ
   Warning: { ring: 'border-warning/50 hover:border-warning', glow: 'shadow-soft', icon: AlertTriangle, label: 'Warning' },
   Critical: { ring: 'border-danger/60 hover:border-danger', glow: 'shadow-soft', icon: MonitorX, label: 'Critical' },
   Maintenance: { ring: 'border-orange/50 hover:border-orange', glow: 'shadow-soft', icon: Wrench, label: 'Maintenance' },
-  Reserved: { ring: 'border-accent-blue/50 hover:border-accent-blue', glow: 'shadow-soft', icon: Lock, label: 'Reserved' },
+  Reserved: { ring: 'border-info/50 hover:border-info', glow: 'shadow-soft', icon: Lock, label: 'Reserved' },
 };
 
 const statusDot: Record<DeviceStatus, string> = {
@@ -24,7 +24,7 @@ const statusDot: Record<DeviceStatus, string> = {
   Warning: 'bg-warning',
   Critical: 'bg-danger animate-pulse-soft',
   Maintenance: 'bg-orange',
-  Reserved: 'bg-accent-blue',
+  Reserved: 'bg-info',
 };
 
 export function PCIconCard({ device, onClick, selected, compact }: PCIconCardProps) {
@@ -41,7 +41,7 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
         'group relative flex flex-col items-center gap-1.5 rounded-xl border-2 bg-base-800/80 p-3 text-center transition-all duration-200 hover:-translate-y-0.5',
         cfg.ring,
         cfg.glow,
-        selected && 'ring-2 ring-accent-blue ring-offset-2 ring-offset-base-900',
+        selected && 'ring-2 ring-accent-primary ring-offset-2 ring-offset-base-900',
         compact ? 'w-[72px]' : 'w-full'
       )}
     >
@@ -96,7 +96,7 @@ export function PCStatusLegend() {
     { status: 'Warning', color: 'bg-warning' },
     { status: 'Critical', color: 'bg-danger' },
     { status: 'Maintenance', color: 'bg-orange' },
-    { status: 'Reserved', color: 'bg-accent-blue' },
+    { status: 'Reserved', color: 'bg-info' },
   ];
   return (
     <div className="flex flex-wrap items-center gap-3">

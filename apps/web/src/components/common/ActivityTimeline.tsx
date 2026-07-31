@@ -10,7 +10,7 @@ interface TimelineItem {
 }
 
 const toneDot: Record<NonNullable<TimelineItem['tone']>, string> = {
-  accent: 'bg-accent-blue',
+  accent: 'bg-accent-primary',
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-danger',

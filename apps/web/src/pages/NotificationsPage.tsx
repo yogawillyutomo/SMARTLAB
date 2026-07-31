@@ -56,7 +56,7 @@ export function NotificationsPage() {
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select label="Kategori" value={filter} onChange={(e) => setFilter(e.target.value)} options={Object.entries(CAT_LABELS).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="Semua" />
           <label className="flex items-center gap-2 text-sm text-ink-secondary pb-2.5">
-            <input type="checkbox" checked={showUnread} onChange={(e) => setShowUnread(e.target.checked)} className="rounded border-base-600 text-accent-blue" />
+            <input type="checkbox" checked={showUnread} onChange={(e) => setShowUnread(e.target.checked)} className="rounded border-base-600 text-accent-primary" />
             Hanya belum dibaca
           </label>
           <div className="ml-auto text-sm text-ink-muted">{db.notifications.filter((n) => !n.read).length} belum dibaca</div>
@@ -69,15 +69,15 @@ export function NotificationsPage() {
             {filtered.map((n) => {
               const cat = CAT_LABELS[n.category];
               return (
-                <div key={n.id} className={cn('flex items-start gap-3 p-4 transition-colors hover:bg-base-700/20', !n.read && 'bg-accent-blue/5')}>
-                  <div className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', `bg-${cat.tone === 'danger' ? 'red' : cat.tone === 'warning' ? 'amber' : cat.tone === 'accent' ? 'blue' : cat.tone === 'info' ? 'blue' : cat.tone === 'success' ? 'emerald' : cat.tone === 'orange' ? 'orange' : cat.tone === 'purple' ? 'purple' : 'cyan'}-500/15`)}>
-                    <Bell className={cn('h-4 w-4', cat.tone === 'danger' ? 'text-danger' : cat.tone === 'warning' ? 'text-warning-foreground' : cat.tone === 'accent' ? 'text-accent-blue' : 'text-ink-secondary')} />
+                <div key={n.id} className={cn('flex items-start gap-3 p-4 transition-colors hover:bg-base-700/20', !n.read && 'bg-accent-primary/5')}>
+                  <div className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', cat.tone === 'danger' ? 'bg-danger/15' : cat.tone === 'warning' ? 'bg-warning/15' : cat.tone === 'accent' ? 'bg-accent-primary/15' : cat.tone === 'info' ? 'bg-info/15' : cat.tone === 'success' ? 'bg-success/15' : cat.tone === 'orange' ? 'bg-orange/15' : cat.tone === 'purple' ? 'bg-purple/15' : 'bg-status-cyan/15')}>
+                    <Bell className={cn('h-4 w-4', cat.tone === 'danger' ? 'text-danger' : cat.tone === 'warning' ? 'text-warning-foreground' : cat.tone === 'accent' ? 'text-accent-primary' : cat.tone === 'info' ? 'text-info' : cat.tone === 'success' ? 'text-success-foreground' : cat.tone === 'orange' ? 'text-orange-foreground' : cat.tone === 'purple' ? 'text-purple-foreground' : 'text-status-cyan')} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-ink-primary">{n.title}</p>
                       <Badge tone={cat.tone}>{cat.label}</Badge>
-                      {!n.read && <span className="h-2 w-2 rounded-full bg-accent-blue" />}
+                      {!n.read && <span className="h-2 w-2 rounded-full bg-accent-primary" />}
                     </div>
                     <p className="mt-0.5 text-sm text-ink-secondary">{n.message}</p>
                     <p className="mt-1 text-xs text-ink-muted">{relativeTime(n.at)}</p>
@@ -101,7 +101,7 @@ export function NotificationsPage() {
             {Object.entries(CAT_LABELS).map(([key, cat]) => (
               <label key={key} className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-800/40 px-3 py-2">
                 <span className="text-sm text-ink-secondary">{cat.label}</span>
-                <input type="checkbox" defaultChecked className="rounded border-base-600 text-accent-blue" />
+                <input type="checkbox" defaultChecked className="rounded border-base-600 text-accent-primary" />
               </label>
             ))}
           </div>

@@ -105,7 +105,7 @@ export function RolesPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {roleStats.map((s) => (
-          <Card key={s.role} hover onClick={() => setActiveRole(s.role)} className={cn('cursor-pointer', activeRole === s.role && 'border-accent-blue')}>
+          <Card key={s.role} hover onClick={() => setActiveRole(s.role)} className={cn('cursor-pointer', activeRole === s.role && 'border-accent-primary')}>
             <CardContent>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-ink-primary">{s.role}</p>
@@ -122,7 +122,7 @@ export function RolesPage() {
           <CardTitle>Permission Matrix — {activeRole}</CardTitle>
           <div className="flex items-center gap-1 rounded-lg border border-base-700 p-1">
             {ROLES.map((r) => (
-              <button key={r} onClick={() => setActiveRole(r)} className={cn('rounded-md px-2.5 py-1 text-xs font-medium', activeRole === r ? 'bg-accent-blue text-white' : 'text-ink-muted hover:text-ink-secondary')}>{r}</button>
+              <button key={r} onClick={() => setActiveRole(r)} className={cn('rounded-md px-2.5 py-1 text-xs font-medium', activeRole === r ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-secondary')}>{r}</button>
             ))}
           </div>
         </CardHeader>

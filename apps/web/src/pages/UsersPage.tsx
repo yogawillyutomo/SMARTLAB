@@ -112,7 +112,7 @@ export function UsersPage() {
         </>}
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{db.users.length}</p><p className="text-xs text-ink-muted">Total Pengguna</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-primary">{db.users.length}</p><p className="text-xs text-ink-muted">Total Pengguna</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.users.filter((u) => u.status === 'active').length}</p><p className="text-xs text-ink-muted">Aktif</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{new Set(db.users.map((u) => u.role)).size}</p><p className="text-xs text-ink-muted">Role</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.users.filter((u) => u.role === 'Teknisi').length}</p><p className="text-xs text-ink-muted">Teknisi</p></CardContent></Card>

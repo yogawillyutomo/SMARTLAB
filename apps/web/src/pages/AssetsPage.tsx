@@ -120,7 +120,7 @@ export function AssetsPage() {
   const columns: Column<Asset>[] = [
     { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px', printHidden: true },
     { key: 'assetCode', header: 'Kode Aset', sortable: true, render: (a) => <span className="font-medium text-ink-primary">{a.assetCode}</span> },
-    { key: 'name', header: 'Nama', sortable: true, render: (a) => <button onClick={() => navigate(`/assets/${a.id}`)} className="text-accent-blue hover:underline">{a.name}</button> },
+    { key: 'name', header: 'Nama', sortable: true, render: (a) => <button onClick={() => navigate(`/assets/${a.id}`)} className="text-accent-primary hover:underline">{a.name}</button> },
     { key: 'category', header: 'Kategori', sortable: true },
     { key: 'lab', header: 'Lab', render: (a) => db.labs.find((l) => l.id === a.laboratoryId)?.name ?? '-' },
     { key: 'condition', header: 'Kondisi', render: (a) => <ConditionBadge condition={a.condition} /> },
@@ -153,7 +153,7 @@ export function AssetsPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-primary">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>

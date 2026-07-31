@@ -173,7 +173,7 @@ export function IncidentsPage() {
   }
 
   const columns: Column<Incident>[] = [
-    { key: 'ticketNumber', header: 'Tiket', sortable: true, render: (i) => <button onClick={() => setDetail(i)} className="font-medium text-accent-blue hover:underline">{i.ticketNumber}</button> },
+    { key: 'ticketNumber', header: 'Tiket', sortable: true, render: (i) => <button onClick={() => setDetail(i)} className="font-medium text-accent-primary hover:underline">{i.ticketNumber}</button> },
     { key: 'title', header: 'Judul', render: (i) => <span className="text-ink-primary">{i.title}</span> },
     { key: 'lab', header: 'Lab', render: (i) => db.labs.find((l) => l.id === i.laboratoryId)?.name },
     { key: 'category', header: 'Kategori', render: (i) => <Badge tone="neutral">{i.category}</Badge> },
@@ -219,7 +219,7 @@ export function IncidentsPage() {
           <div className="sm:col-span-2"><Textarea label="Deskripsi" value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div className="sm:col-span-2"><Textarea label="Langkah yang Sudah Dilakukan" value={form.stepsTaken ?? ''} onChange={(e) => setForm({ ...form, stepsTaken: e.target.value })} /></div>
           <label className="flex items-center gap-2 text-sm text-ink-secondary sm:col-span-2">
-            <input type="checkbox" checked={form.blocksPracticum ?? false} onChange={(e) => setForm({ ...form, blocksPracticum: e.target.checked })} className="rounded border-base-600 text-accent-blue" />
+    <input type="checkbox" checked={form.blocksPracticum ?? false} onChange={(e) => setForm({ ...form, blocksPracticum: e.target.checked })} className="rounded border-base-600 text-accent-primary" />
             Menghambat praktikum
           </label>
         </div>

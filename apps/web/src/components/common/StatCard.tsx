@@ -16,7 +16,7 @@ interface StatCardProps {
 }
 
 const toneClasses: Record<NonNullable<StatCardProps['tone']>, string> = {
-  accent: 'bg-accent-blue/15 text-accent-blue',
+  accent: 'bg-accent-primary/15 text-accent-primary',
   success: 'bg-success/15 text-success-foreground',
   warning: 'bg-warning/15 text-warning-foreground',
   danger: 'bg-danger/15 text-danger-foreground',

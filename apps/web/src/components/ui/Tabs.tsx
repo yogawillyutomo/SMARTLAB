@@ -18,7 +18,7 @@ export function Tabs({ tabs, active, onChange, className }: { tabs: { key: strin
           className={cn(
             'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
             active === tab.key
-              ? 'border-accent-blue text-accent-blue'
+              ? 'border-accent-primary text-accent-primary'
               : 'border-transparent text-ink-muted hover:text-ink-secondary'
           )}
         >
