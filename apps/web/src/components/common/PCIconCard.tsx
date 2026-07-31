@@ -10,21 +10,21 @@ interface PCIconCardProps {
 }
 
 const statusConfig: Record<DeviceStatus, { ring: string; glow: string; icon: typeof Monitor; label: string }> = {
-  Online: { ring: 'border-emerald-500/40 hover:border-emerald-500', glow: 'shadow-[0_0_12px_-2px_rgba(16,185,129,0.4)]', icon: MonitorCheck, label: 'Online' },
+  Online: { ring: 'border-success/40 hover:border-success', glow: 'shadow-soft', icon: MonitorCheck, label: 'Online' },
   Offline: { ring: 'border-base-600 hover:border-base-500', glow: '', icon: MonitorX, label: 'Offline' },
-  Warning: { ring: 'border-amber-500/50 hover:border-amber-500', glow: 'shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)]', icon: AlertTriangle, label: 'Warning' },
-  Critical: { ring: 'border-red-500/60 hover:border-red-500', glow: 'shadow-[0_0_14px_-2px_rgba(239,68,68,0.5)]', icon: MonitorX, label: 'Critical' },
-  Maintenance: { ring: 'border-orange-500/50 hover:border-orange-500', glow: 'shadow-[0_0_12px_-2px_rgba(249,115,22,0.4)]', icon: Wrench, label: 'Maintenance' },
-  Reserved: { ring: 'border-blue-500/50 hover:border-blue-500', glow: 'shadow-[0_0_12px_-2px_rgba(59,130,246,0.4)]', icon: Lock, label: 'Reserved' },
+  Warning: { ring: 'border-warning/50 hover:border-warning', glow: 'shadow-soft', icon: AlertTriangle, label: 'Warning' },
+  Critical: { ring: 'border-danger/60 hover:border-danger', glow: 'shadow-soft', icon: MonitorX, label: 'Critical' },
+  Maintenance: { ring: 'border-orange/50 hover:border-orange', glow: 'shadow-soft', icon: Wrench, label: 'Maintenance' },
+  Reserved: { ring: 'border-accent-blue/50 hover:border-accent-blue', glow: 'shadow-soft', icon: Lock, label: 'Reserved' },
 };
 
 const statusDot: Record<DeviceStatus, string> = {
-  Online: 'bg-emerald-500',
+  Online: 'bg-success',
   Offline: 'bg-base-500',
-  Warning: 'bg-amber-500',
-  Critical: 'bg-red-500 animate-pulse-soft',
-  Maintenance: 'bg-orange-500',
-  Reserved: 'bg-blue-500',
+  Warning: 'bg-warning',
+  Critical: 'bg-danger animate-pulse-soft',
+  Maintenance: 'bg-orange',
+  Reserved: 'bg-accent-blue',
 };
 
 export function PCIconCard({ device, onClick, selected, compact }: PCIconCardProps) {
@@ -50,9 +50,9 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
 
       {/* Monitor icon */}
       <div className={cn('relative', isProblem ? 'text-ink-muted' : 'text-ink-secondary')}>
-        <Icon className={cn(compact ? 'h-7 w-7' : 'h-9 w-9', device.status === 'Critical' && 'text-red-400', device.status === 'Warning' && 'text-amber-400')} />
+      <Icon className={cn(compact ? 'h-7 w-7' : 'h-9 w-9', device.status === 'Critical' && 'text-danger-foreground', device.status === 'Warning' && 'text-warning-foreground')} />
         {device.status === 'Online' && (
-          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-base-800" />
+          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-base-800" />
         )}
       </div>
 
@@ -75,9 +75,9 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
       {!compact && (
         <div className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-muted">
           {device.network === 'Connected' ? (
-            <Wifi className="h-2.5 w-2.5 text-emerald-500" />
+            <Wifi className="h-2.5 w-2.5 text-success" />
           ) : device.network === 'Limited' ? (
-            <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+            <AlertTriangle className="h-2.5 w-2.5 text-warning" />
           ) : (
             <WifiOff className="h-2.5 w-2.5 text-ink-muted" />
           )}
@@ -91,12 +91,12 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
 // Small status legend
 export function PCStatusLegend() {
   const items: { status: DeviceStatus; color: string }[] = [
-    { status: 'Online', color: 'bg-emerald-500' },
+    { status: 'Online', color: 'bg-success' },
     { status: 'Offline', color: 'bg-base-500' },
-    { status: 'Warning', color: 'bg-amber-500' },
-    { status: 'Critical', color: 'bg-red-500' },
-    { status: 'Maintenance', color: 'bg-orange-500' },
-    { status: 'Reserved', color: 'bg-blue-500' },
+    { status: 'Warning', color: 'bg-warning' },
+    { status: 'Critical', color: 'bg-danger' },
+    { status: 'Maintenance', color: 'bg-orange' },
+    { status: 'Reserved', color: 'bg-accent-blue' },
   ];
   return (
     <div className="flex flex-wrap items-center gap-3">

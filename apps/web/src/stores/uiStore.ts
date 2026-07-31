@@ -3,13 +3,16 @@ import { readStorage, writeStorage, STORAGE_KEYS } from '@/lib/storage';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 export type AccentColor = 'blue' | 'cyan';
+export type ResolvedTheme = 'dark' | 'light';
 
 interface UIState {
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
   commandOpen: boolean;
   theme: ThemeMode;
+  resolvedTheme: ResolvedTheme;
   accent: AccentColor;
+  isHydrated: boolean;
   compactTable: boolean;
   activeLabId: string;
   academicYear: string;
@@ -20,6 +23,7 @@ interface UIState {
   setCommandOpen: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setAccent: (a: AccentColor) => void;
+  syncSystemTheme: () => void;
   setCompactTable: (v: boolean) => void;
   setActiveLab: (id: string) => void;
   setAcademicYear: (y: string) => void;
@@ -48,7 +52,21 @@ const defaults: PersistedUI = {
 };
 
 function load(): PersistedUI {
-  return readStorage<PersistedUI>(STORAGE_KEYS.UI, defaults);
+  const stored = readStorage<Partial<PersistedUI>>(STORAGE_KEYS.UI, defaults);
+  return {
+    ...defaults,
+    ...stored,
+    theme: isThemeMode(stored.theme) ? stored.theme : defaults.theme,
+    accent: isAccentColor(stored.accent) ? stored.accent : defaults.accent,
+  };
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'dark' || value === 'light' || value === 'system';
+}
+
+function isAccentColor(value: unknown): value is AccentColor {
+  return value === 'blue' || value === 'cyan';
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -56,7 +74,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   mobileSidebarOpen: false,
   commandOpen: false,
   theme: defaults.theme,
+  resolvedTheme: 'dark',
   accent: defaults.accent,
+  isHydrated: false,
   compactTable: defaults.compactTable,
   activeLabId: defaults.activeLabId,
   academicYear: defaults.academicYear,
@@ -78,12 +98,21 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   setTheme(t) {
     writeStorage(STORAGE_KEYS.UI, { ...load(), theme: t });
-    set({ theme: t });
-    applyTheme(t);
+    const resolvedTheme = resolveTheme(t);
+    set({ theme: t, resolvedTheme });
+    applyTheme(t, resolvedTheme);
   },
   setAccent(a) {
     writeStorage(STORAGE_KEYS.UI, { ...load(), accent: a });
     set({ accent: a });
+    applyAccent(a);
+  },
+  syncSystemTheme() {
+    const { theme } = get();
+    if (theme !== 'system') return;
+    const resolvedTheme = resolveTheme(theme);
+    set({ resolvedTheme });
+    applyTheme(theme, resolvedTheme);
   },
   setCompactTable(v) {
     writeStorage(STORAGE_KEYS.UI, { ...load(), compactTable: v });
@@ -103,25 +132,38 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   hydrate() {
     const p = load();
+    const resolvedTheme = resolveTheme(p.theme);
     set({
       sidebarCollapsed: p.sidebarCollapsed,
       theme: p.theme,
+      resolvedTheme,
       accent: p.accent,
       compactTable: p.compactTable,
       activeLabId: p.activeLabId,
       academicYear: p.academicYear,
       semester: p.semester,
+      isHydrated: true,
     });
-    applyTheme(p.theme);
+    applyTheme(p.theme, resolvedTheme);
+    applyAccent(p.accent);
   },
 }));
 
-export function applyTheme(theme: ThemeMode) {
+export function resolveTheme(theme: ThemeMode): ResolvedTheme {
+  if (theme === 'light') return 'light';
+  if (theme === 'dark') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+export function applyTheme(theme: ThemeMode, resolvedTheme = resolveTheme(theme)) {
   const root = document.documentElement;
-  const isDark =
-    theme === 'dark' ||
-    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  root.classList.toggle('dark', isDark);
+  root.classList.toggle('dark', resolvedTheme === 'dark');
+  root.dataset.theme = resolvedTheme;
+  root.style.colorScheme = resolvedTheme;
+}
+
+export function applyAccent(accent: AccentColor) {
+  document.documentElement.dataset.accent = accent;
 }
 
 export function toastEvent(message: string, type: 'success' | 'error' | 'info' = 'success') {

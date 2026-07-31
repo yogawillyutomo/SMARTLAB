@@ -117,10 +117,10 @@ export function MaintenancePage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Card><CardContent className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-danger" /><div><p className="text-2xl font-bold text-ink-primary">{stats.overdue}</p><p className="text-xs text-ink-muted">Overdue</p></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3"><Clock className="h-8 w-8 text-amber-400" /><div><p className="text-2xl font-bold text-ink-primary">{stats.dueSoon}</p><p className="text-xs text-ink-muted">Due Soon</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-3"><Clock className="h-8 w-8 text-warning-foreground" /><div><p className="text-2xl font-bold text-ink-primary">{stats.dueSoon}</p><p className="text-xs text-ink-muted">Due Soon</p></div></CardContent></Card>
         <Card><CardContent className="flex items-center gap-3"><ShieldCheck className="h-8 w-8 text-accent-blue" /><div><p className="text-2xl font-bold text-ink-primary">{stats.scheduled}</p><p className="text-xs text-ink-muted">Scheduled</p></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3"><CheckCircle2 className="h-8 w-8 text-emerald-400" /><div><p className="text-2xl font-bold text-ink-primary">{stats.completed}</p><p className="text-xs text-ink-muted">Completed</p></div></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{stats.compliance}%</p><p className="text-xs text-ink-muted">Compliance</p></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-3"><CheckCircle2 className="h-8 w-8 text-success-foreground" /><div><p className="text-2xl font-bold text-ink-primary">{stats.completed}</p><p className="text-xs text-ink-muted">Completed</p></div></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.compliance}%</p><p className="text-xs text-ink-muted">Compliance</p></CardContent></Card>
       </div>
 
       <div className="flex gap-2 border-b border-base-700">

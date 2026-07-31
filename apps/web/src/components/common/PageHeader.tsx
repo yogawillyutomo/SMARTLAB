@@ -23,7 +23,7 @@ export function PageHeader({ title, description, icon, actions, className }: Pag
           {description && <p className="mt-0.5 text-sm text-ink-muted truncate">{description}</p>}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="print-hidden flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
     </div>
   );
 }

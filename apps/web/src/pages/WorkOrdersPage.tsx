@@ -278,7 +278,7 @@ export function WorkOrdersPage() {
             </div>
             {detail.diagnosis && <div><p className="text-xs text-ink-muted">Diagnosis</p><p className="text-sm text-ink-secondary">{detail.diagnosis}</p></div>}
             {detail.action && <div><p className="text-xs text-ink-muted">Tindakan</p><p className="text-sm text-ink-secondary">{detail.action}</p></div>}
-            {detail.testResult && <div><p className="text-xs text-ink-muted">Hasil Pengujian</p><p className="text-sm text-emerald-400">{detail.testResult}</p></div>}
+            {detail.testResult && <div><p className="text-xs text-ink-muted">Hasil Pengujian</p><p className="text-sm text-success-foreground">{detail.testResult}</p></div>}
 
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Spare Parts ({detail.spareParts.length})</p>

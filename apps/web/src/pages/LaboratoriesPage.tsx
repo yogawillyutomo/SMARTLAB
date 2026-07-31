@@ -155,12 +155,12 @@ export function LaboratoriesPage() {
                     <p className="text-sm font-bold text-ink-primary">{devices.length}</p>
                     <p className="text-[10px] text-ink-muted">Total PC</p>
                   </div>
-                  <div className="rounded-lg bg-emerald-500/10 p-2">
-                    <p className="text-sm font-bold text-emerald-400">{online}</p>
+                  <div className="rounded-lg bg-success/10 p-2">
+                    <p className="text-sm font-bold text-success-foreground">{online}</p>
                     <p className="text-[10px] text-ink-muted">Online</p>
                   </div>
-                  <div className="rounded-lg bg-amber-500/10 p-2">
-                    <p className="text-sm font-bold text-amber-400">{problem}</p>
+                  <div className="rounded-lg bg-warning/10 p-2">
+                    <p className="text-sm font-bold text-warning-foreground">{problem}</p>
                     <p className="text-[10px] text-ink-muted">Bermasalah</p>
                   </div>
                 </div>
@@ -261,8 +261,8 @@ export function LaboratoryDetailPage() {
       {tab === 'overview' && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{devices.length}</p><p className="text-xs text-ink-muted">Total Perangkat</p></CardContent></Card>
-          <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{devices.filter((d) => d.status === 'Online').length}</p><p className="text-xs text-ink-muted">PC Online</p></CardContent></Card>
-          <Card><CardContent><p className="text-2xl font-bold text-amber-400">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</p><p className="text-xs text-ink-muted">PC Bermasalah</p></CardContent></Card>
+          <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{devices.filter((d) => d.status === 'Online').length}</p><p className="text-xs text-ink-muted">PC Online</p></CardContent></Card>
+          <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</p><p className="text-xs text-ink-muted">PC Bermasalah</p></CardContent></Card>
           <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{lab.capacity}</p><p className="text-xs text-ink-muted">Kapasitas</p></CardContent></Card>
           <Card className="sm:col-span-2 lg:col-span-4"><CardContent className="grid gap-3 sm:grid-cols-2">
             <div><p className="text-xs text-ink-muted">Kepala Lab</p><p className="text-sm font-medium text-ink-primary">{lab.headName}</p></div>
@@ -452,7 +452,7 @@ export function LaboratoryLayoutPage() {
               <p className="text-sm text-ink-muted">Grid {currentLab.layoutRows} × {cols}</p>
               <div className="flex items-center gap-2 text-xs text-ink-muted">
                 <Monitor className="h-4 w-4 text-accent-blue" /> PC
-                <Users className="h-4 w-4 text-emerald-400" /> Meja Guru
+                <Users className="h-4 w-4 text-success-foreground" /> Meja Guru
               </div>
             </div>
             <div className="overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
@@ -478,7 +478,7 @@ export function LaboratoryLayoutPage() {
                           onDragStart={(e) => e.dataTransfer.setData('text/plain', device.id)}
                           className={cn(
                             'flex h-full w-full cursor-grab flex-col items-center justify-center rounded-lg border-2 transition-colors active:cursor-grabbing',
-                            device.status === 'Online' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+                            device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground'
                           )}
                         >
                           <Monitor className="h-5 w-5" />
@@ -513,8 +513,8 @@ export function LaboratoryLayoutPage() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Statistik</p>
               <div className="space-y-1 text-xs text-ink-muted">
                 <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{devices.length}</span></div>
-                <div className="flex justify-between"><span>Online</span><span className="text-emerald-400">{devices.filter((d) => d.status === 'Online').length}</span></div>
-                <div className="flex justify-between"><span>Bermasalah</span><span className="text-amber-400">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</span></div>
+                <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{devices.filter((d) => d.status === 'Online').length}</span></div>
+                <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</span></div>
               </div>
             </div>
           </CardContent>

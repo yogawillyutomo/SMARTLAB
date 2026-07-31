@@ -71,7 +71,7 @@ export function NotificationsPage() {
               return (
                 <div key={n.id} className={cn('flex items-start gap-3 p-4 transition-colors hover:bg-base-700/20', !n.read && 'bg-accent-blue/5')}>
                   <div className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', `bg-${cat.tone === 'danger' ? 'red' : cat.tone === 'warning' ? 'amber' : cat.tone === 'accent' ? 'blue' : cat.tone === 'info' ? 'blue' : cat.tone === 'success' ? 'emerald' : cat.tone === 'orange' ? 'orange' : cat.tone === 'purple' ? 'purple' : 'cyan'}-500/15`)}>
-                    <Bell className={cn('h-4 w-4', cat.tone === 'danger' ? 'text-danger' : cat.tone === 'warning' ? 'text-amber-400' : cat.tone === 'accent' ? 'text-accent-blue' : 'text-ink-secondary')} />
+                    <Bell className={cn('h-4 w-4', cat.tone === 'danger' ? 'text-danger' : cat.tone === 'warning' ? 'text-warning-foreground' : cat.tone === 'accent' ? 'text-accent-blue' : 'text-ink-secondary')} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export function NotificationsPage() {
                   </div>
                   <div className="flex shrink-0 gap-1">
                     {n.link && <button onClick={() => navigate(n.link!)} className="rounded p-1.5 text-ink-muted hover:bg-base-700 hover:text-ink-primary" title="Buka sumber"><Bell className="h-4 w-4" /></button>}
-                    {!n.read && <button onClick={() => markRead(n.id)} className="rounded p-1.5 text-ink-muted hover:bg-base-700 hover:text-emerald-400" title="Tandai dibaca"><CheckCheck className="h-4 w-4" /></button>}
+                    {!n.read && <button onClick={() => markRead(n.id)} className="rounded p-1.5 text-ink-muted hover:bg-base-700 hover:text-success-foreground" title="Tandai dibaca"><CheckCheck className="h-4 w-4" /></button>}
                     <button onClick={() => remove(n.id)} className="rounded p-1.5 text-ink-muted hover:bg-base-700 hover:text-danger" title="Hapus"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>

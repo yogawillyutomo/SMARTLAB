@@ -29,12 +29,12 @@ export function AppSidebar() {
     <>
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileSidebar(false)} />
+        <div className="fixed inset-0 z-40 bg-overlay/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileSidebar(false)} />
       )}
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-base-700 bg-base-800/95 backdrop-blur transition-all duration-200 lg:static lg:translate-x-0',
+          'print-hidden fixed inset-y-0 left-0 z-50 flex flex-col border-r border-base-700 bg-base-800/95 backdrop-blur transition-all duration-200 lg:static lg:translate-x-0',
           sidebarCollapsed ? 'w-[68px]' : 'w-64',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}

@@ -154,8 +154,8 @@ export function AssetsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-emerald-400">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-amber-400">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
       </div>
 
@@ -273,7 +273,7 @@ function OpnameSimulator({ assets, labs, onComplete }: { assets: Asset[]; labs: 
         ))}
       </div>
       <div className="flex items-center justify-between text-sm">
-        <span className="text-ink-muted">Ditemukan: <span className="text-emerald-400 font-semibold">{found.size}</span> / {labAssets.length}</span>
+        <span className="text-ink-muted">Ditemukan: <span className="text-success-foreground font-semibold">{found.size}</span> / {labAssets.length}</span>
         <Button size="sm" onClick={() => { toast(`Opname selesai: ${found.size}/${labAssets.length} ditemukan`, 'success'); onComplete(); }}>Selesai</Button>
       </div>
     </div>

@@ -250,11 +250,11 @@ export function SessionsPage() {
             </div>
             <div><p className="text-xs text-ink-muted">Kondisi Awal</p><p className="text-ink-secondary">{detail.initialCondition || '-'}</p></div>
             {detail.finalMaterial && <div><p className="text-xs text-ink-muted">Materi</p><p className="text-ink-secondary">{detail.finalMaterial}</p></div>}
-            {detail.issues && <div><p className="text-xs text-ink-muted">Kendala</p><p className="text-amber-400">{detail.issues}</p></div>}
+            {detail.issues && <div><p className="text-xs text-ink-muted">Kendala</p><p className="text-warning-foreground">{detail.issues}</p></div>}
             {detail.brokenPCsAfter && detail.brokenPCsAfter.length > 0 && (
               <div><p className="text-xs text-ink-muted">PC Bermasalah</p><div className="mt-1 flex flex-wrap gap-1">{detail.brokenPCsAfter.map((pc) => <Badge key={pc} tone="danger">{pc}</Badge>)}</div></div>
             )}
-            {detail.journalId && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />Jurnal dibuat otomatis dari pelaksanaan ini</div>}
+            {detail.journalId && <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success-foreground"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />Jurnal dibuat otomatis dari pelaksanaan ini</div>}
           </div>
         )}
       </Drawer>

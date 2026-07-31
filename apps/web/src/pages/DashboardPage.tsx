@@ -40,12 +40,14 @@ import { Button } from '@/components/ui/Button';
 import { LoadingState, EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { relativeTime, cn, downloadCSV } from '@/utils';
+import { useChartTheme } from '@/hooks/useChartTheme';
 export function DashboardPage() {
   const { db, ready } = useAppData();
   const user = useAuthStore((s) => s.user);
   const { activeLabId } = useUIStore();
   const canExport = usePermission('dashboard', 'export');
   const canCreateIncident = usePermission('incidents', 'create');
+  const chartTheme = useChartTheme();
 
   const stats = useMemo(() => {
     const activeLabs = db.labs.filter((l) => l.status === 'active').length;
@@ -76,10 +78,10 @@ export function DashboardPage() {
       .map((c) => ({
         name: c,
         value: db.assets.filter((a) => a.condition === c).length,
-        color: c === 'Baik' ? '#10B981' : c === 'Rusak Ringan' ? '#F59E0B' : c === 'Rusak Sedang' ? '#F97316' : c === 'Rusak Berat' ? '#EF4444' : '#64748B',
+        color: c === 'Baik' ? chartTheme.success : c === 'Rusak Ringan' ? chartTheme.warning : c === 'Rusak Sedang' ? chartTheme.orange : c === 'Rusak Berat' ? chartTheme.danger : chartTheme.axis,
       }))
       .filter((x) => x.value > 0);
-  }, [db.assets]);
+  }, [chartTheme, db.assets]);
 
   const labStatuses = db.labs.map((lab) => {
     const devices = db.devices.filter((d) => d.laboratoryId === lab.id);
@@ -185,7 +187,7 @@ export function DashboardPage() {
                     <span className="font-semibold text-ink-primary">{online}/{total}</span>
                   </div>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-base-700">
-                    <div className={cn('h-full rounded-full', problem > 0 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${total ? (online / total) * 100 : 0}%` }} />
+                    <div className={cn('h-full rounded-full', problem > 0 ? 'bg-warning' : 'bg-success')} style={{ width: `${total ? (online / total) * 100 : 0}%` }} />
                   </div>
                   {todaySchedule ? (
                     <p className="mt-2 truncate text-[10px] text-ink-muted">{todaySchedule.startTime} · {todaySchedule.className}</p>
@@ -208,27 +210,20 @@ export function DashboardPage() {
                 <AreaChart data={usageData}>
                   <defs>
                     <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                      <stop offset="0%" stopColor={chartTheme.primary} stopOpacity={0.4} />
+                      <stop offset="100%" stopColor={chartTheme.primary} stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
+                      <stop offset="0%" stopColor={chartTheme.secondary} stopOpacity={0.3} />
+                      <stop offset="100%" stopColor={chartTheme.secondary} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                  <XAxis dataKey="day" stroke="#94A3B8" fontSize={11} />
-                  <YAxis stroke="#94A3B8" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1E293B',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area type="monotone" dataKey="penggunaan" stroke="#3B82F6" strokeWidth={2} fill="url(#g1)" name="Penggunaan (%)" />
-                  <Area type="monotone" dataKey="jadwal" stroke="#06B6D4" strokeWidth={2} fill="url(#g2)" name="Jadwal (%)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                  <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={11} />
+                  <YAxis stroke={chartTheme.axis} fontSize={11} />
+                  <Tooltip contentStyle={chartTheme.tooltip} />
+                  <Area type="monotone" dataKey="penggunaan" stroke={chartTheme.primary} strokeWidth={2} fill="url(#g1)" name="Penggunaan (%)" />
+                  <Area type="monotone" dataKey="jadwal" stroke={chartTheme.secondary} strokeWidth={2} fill="url(#g2)" name="Jadwal (%)" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -301,8 +296,8 @@ export function DashboardPage() {
                       <Cell key={i} fill={entry.color} stroke="none" />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" />
+                  <Tooltip contentStyle={chartTheme.tooltip} />
+                  <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -318,7 +313,7 @@ export function DashboardPage() {
               {db.incidents.slice(0, 4).map((inc) => (
                 <Link key={inc.id} to="/incidents" className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
                   <div className="min-w-0 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+                    <AlertCircle className="h-4 w-4 shrink-0 text-warning-foreground" />
                     <div className="min-w-0">
                       <p className="truncate text-xs font-medium text-ink-primary">{inc.title}</p>
                       <p className="truncate text-[10px] text-ink-muted">{inc.ticketNumber}</p>
