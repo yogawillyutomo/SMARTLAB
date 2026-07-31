@@ -84,15 +84,15 @@ export function AppSidebar() {
                             'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                             sidebarCollapsed && 'justify-center',
                             isActive
-                              ? 'bg-accent-primary/15 text-accent-primary'
+                              ? 'bg-accent-primary/15 text-accent-content'
                               : 'text-ink-secondary hover:bg-base-700/60 hover:text-ink-primary'
                           )
                         }
                       >
                         {({ isActive }) => (
                           <>
-                            {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-accent-primary" />}
-                            <Icon className={cn('h-5 w-5 shrink-0', isActive ? 'text-accent-primary' : 'text-ink-muted group-hover:text-ink-secondary')} />
+                            {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-accent-content" />}
+                            <Icon className={cn('h-5 w-5 shrink-0', isActive ? 'text-accent-content' : 'text-ink-muted group-hover:text-ink-secondary')} />
                             {!sidebarCollapsed && <span className="flex-1 truncate">{item.label}</span>}
                             {!sidebarCollapsed && badge > 0 && (
                               <Badge tone="danger" className="px-1.5 py-0">

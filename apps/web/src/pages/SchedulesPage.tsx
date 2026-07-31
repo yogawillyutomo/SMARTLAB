@@ -213,7 +213,7 @@ export function SchedulesPage() {
                     <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
                   ) : (
                     daySchedules.map((s) => (
-                      <button key={s.id} onClick={() => canUpdate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-primary/40">
+                      <button key={s.id} onClick={() => canUpdate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-content/40">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-ink-primary">{s.startTime} - {s.endTime}</span>
                           <StatusBadge status={s.status} />

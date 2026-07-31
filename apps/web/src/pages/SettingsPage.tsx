@@ -94,7 +94,7 @@ export function SettingsPage() {
             {TABS.map((t) => {
               const Icon = t.icon;
               return (
-                <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors', tab === t.key ? 'bg-accent-primary/15 text-accent-primary' : 'text-ink-secondary hover:bg-base-700/60 hover:text-ink-primary')}>
+                <button key={t.key} onClick={() => setTab(t.key)} className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors', tab === t.key ? 'bg-accent-primary/15 text-accent-content' : 'text-ink-secondary hover:bg-base-700/60 hover:text-ink-primary')}>
                   <Icon className="h-4 w-4" />{t.label}
                 </button>
               );
@@ -137,7 +137,7 @@ export function SettingsPage() {
                   <p className="mb-2 text-sm font-medium text-ink-secondary">Tema</p>
                   <div className="grid grid-cols-3 gap-2">
                     {([['dark', Moon, 'Dark'], ['light', Sun, 'Light'], ['system', Monitor, 'System']] as const).map(([val, Icon, label]) => (
-                      <button key={val} type="button" aria-pressed={theme === val} onClick={() => setTheme(val as ThemeMode)} className={cn('flex flex-col items-center gap-2 rounded-xl border p-4 transition-colors', theme === val ? 'border-accent-primary bg-accent-primary/10 text-accent-primary' : 'border-base-700 text-ink-secondary hover:border-base-600')}>
+                      <button key={val} type="button" aria-pressed={theme === val} onClick={() => setTheme(val as ThemeMode)} className={cn('flex flex-col items-center gap-2 rounded-xl border p-4 transition-colors', theme === val ? 'border-accent-content bg-accent-primary/10 text-accent-content' : 'border-base-700 text-ink-secondary hover:border-base-600')}>
                         <Icon className="h-5 w-5" />
                         <span className="text-xs font-medium">{label}</span>
                       </button>
@@ -149,7 +149,7 @@ export function SettingsPage() {
                   <p className="mb-2 text-sm font-medium text-ink-secondary">Warna Aksen</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {ACCENT_OPTIONS.map((option) => (
-                      <button key={option.value} type="button" aria-label={`Pilih aksen ${option.label}`} aria-pressed={accent === option.value} onClick={() => setAccent(option.value)} className={cn('flex min-w-0 items-center gap-2 rounded-xl border p-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-900 hover:border-accent-primary/60', accent === option.value ? 'border-accent-primary bg-accent-primary/10 text-accent-primary ring-1 ring-accent-primary/30' : 'border-base-700 text-ink-secondary')}>
+                      <button key={option.value} type="button" aria-label={`Pilih aksen ${option.label}`} aria-pressed={accent === option.value} onClick={() => setAccent(option.value)} className={cn('flex min-w-0 items-center gap-2 rounded-xl border p-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-900 hover:border-accent-content/60', accent === option.value ? 'border-accent-content bg-accent-primary/10 text-accent-content ring-1 ring-accent-content/30' : 'border-base-700 text-ink-secondary')}>
                         <span className={cn('h-5 w-5 shrink-0 rounded-full', option.swatchClass)} aria-hidden="true" />
                         <span className="min-w-0 truncate">{option.label}</span>
                         {accent === option.value && <Check className="ml-auto h-4 w-4 shrink-0" aria-hidden="true" />}
@@ -161,7 +161,7 @@ export function SettingsPage() {
                 <div>
                   <label className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-800/40 px-3 py-3">
                     <div><p className="text-sm font-medium text-ink-primary">Tabel Compact</p><p className="text-xs text-ink-muted">Tampilkan tabel dengan padding lebih rapat</p></div>
-                    <input type="checkbox" checked={compactTable} onChange={(e) => setCompactTable(e.target.checked)} className="h-5 w-5 rounded border-base-600 text-accent-primary" />
+                    <input type="checkbox" checked={compactTable} onChange={(e) => setCompactTable(e.target.checked)} className="h-5 w-5 rounded border-base-600 text-accent-content" />
                   </label>
                 </div>
               </CardContent>
@@ -206,7 +206,7 @@ export function SettingsPage() {
                 {['Incident Baru', 'Work Order', 'Maintenance Overdue', 'Stok Rendah', 'Booking Baru', 'Jurnal', 'Peminjaman Terlambat', 'PC Offline'].map((n) => (
                   <label key={n} className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-800/40 px-3 py-2.5">
                     <span className="text-sm text-ink-secondary">{n}</span>
-                    <input type="checkbox" defaultChecked className="rounded border-base-600 text-accent-primary" />
+                    <input type="checkbox" defaultChecked className="rounded border-base-600 text-accent-content" />
                   </label>
                 ))}
               </CardContent>

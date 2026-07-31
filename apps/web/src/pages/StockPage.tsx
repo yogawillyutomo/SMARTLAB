@@ -126,7 +126,7 @@ export function StockPage() {
         </>}
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-primary">{stats.total}</p><p className="text-xs text-ink-muted">Jenis Barang</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.total}</p><p className="text-xs text-ink-muted">Jenis Barang</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.lowStock}</p><p className="text-xs text-ink-muted">Stok Rendah</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(stats.totalValue)}</p><p className="text-xs text-ink-muted">Nilai Stok</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.categories}</p><p className="text-xs text-ink-muted">Kategori</p></CardContent></Card>
@@ -139,8 +139,8 @@ export function StockPage() {
       )}
 
       <div className="print-hidden flex gap-2 border-b border-base-700">
-        <button onClick={() => setTxTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'items' ? 'border-accent-primary text-accent-primary' : 'border-transparent text-ink-muted'}`}>Daftar Barang</button>
-        <button onClick={() => setTxTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'transactions' ? 'border-accent-primary text-accent-primary' : 'border-transparent text-ink-muted'}`}>Histori Transaksi</button>
+        <button onClick={() => setTxTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'items' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Daftar Barang</button>
+        <button onClick={() => setTxTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'transactions' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Histori Transaksi</button>
       </div>
 
       {txTab === 'items' ? (

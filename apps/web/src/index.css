@@ -14,6 +14,7 @@
   --color-accent-primary: 37 99 235;
   --color-accent-secondary: 6 182 212;
   --color-accent-foreground: 255 255 255;
+  --color-accent-content: 96 165 250;
   --color-brand-blue: 59 130 246;
   --color-brand-cyan: 6 182 212;
   --color-info: 59 130 246;
@@ -31,7 +32,7 @@
   --color-danger-foreground: 248 113 113;
   --color-orange-foreground: 251 146 60;
   --color-purple-foreground: 216 180 254;
-  --color-focus: 37 99 235;
+  --color-focus: 96 165 250;
   --color-overlay: 0 0 0;
   --color-chart-grid: 51 65 85;
   --color-chart-axis: 148 163 184;
@@ -50,21 +51,24 @@
   --color-accent-primary: 14 116 144;
   --color-accent-secondary: 59 130 246;
   --color-accent-foreground: 255 255 255;
-  --color-focus: 14 116 144;
+  --color-accent-content: 34 211 238;
+  --color-focus: 34 211 238;
 }
 
 :root[data-accent='indigo'] {
   --color-accent-primary: 79 70 229;
   --color-accent-secondary: 139 92 246;
   --color-accent-foreground: 255 255 255;
-  --color-focus: 79 70 229;
+  --color-accent-content: 165 180 252;
+  --color-focus: 165 180 252;
 }
 
 :root[data-accent='violet'] {
   --color-accent-primary: 124 58 237;
   --color-accent-secondary: 99 102 241;
   --color-accent-foreground: 255 255 255;
-  --color-focus: 124 58 237;
+  --color-accent-content: 196 181 253;
+  --color-focus: 196 181 253;
 }
 
 * {
@@ -111,6 +115,11 @@ body {
   --color-base-800: 255 255 255;
   --color-base-700: 241 245 249;
   --color-base-600: 203 213 225;
+  --color-accent-primary: 37 99 235;
+  --color-accent-secondary: 6 182 212;
+  --color-accent-foreground: 255 255 255;
+  --color-accent-content: 37 99 235;
+  --color-focus: 37 99 235;
   --color-ink-primary: 15 23 42;
   --color-ink-secondary: 51 65 85;
   --color-ink-muted: 100 116 139;
@@ -130,6 +139,27 @@ body {
   --shadow-soft: 0 1px 3px 0 rgb(15 23 42 / 0.08), 0 1px 2px -1px rgb(15 23 42 / 0.08);
   --shadow-card: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.08);
   --shadow-elevated: 0 10px 25px -5px rgb(15 23 42 / 0.12), 0 8px 10px -6px rgb(15 23 42 / 0.12);
+}
+
+:root[data-theme='light'][data-accent='cyan'] {
+  --color-accent-primary: 14 116 144;
+  --color-accent-secondary: 59 130 246;
+  --color-accent-content: 14 116 144;
+  --color-focus: 14 116 144;
+}
+
+:root[data-theme='light'][data-accent='indigo'] {
+  --color-accent-primary: 79 70 229;
+  --color-accent-secondary: 139 92 246;
+  --color-accent-content: 79 70 229;
+  --color-focus: 79 70 229;
+}
+
+:root[data-theme='light'][data-accent='violet'] {
+  --color-accent-primary: 124 58 237;
+  --color-accent-secondary: 99 102 241;
+  --color-accent-content: 124 58 237;
+  --color-focus: 124 58 237;
 }
 
 @keyframes fade-in {

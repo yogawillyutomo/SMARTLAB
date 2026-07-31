@@ -41,7 +41,7 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
         'group relative flex flex-col items-center gap-1.5 rounded-xl border-2 bg-base-800/80 p-3 text-center transition-all duration-200 hover:-translate-y-0.5',
         cfg.ring,
         cfg.glow,
-        selected && 'ring-2 ring-accent-primary ring-offset-2 ring-offset-base-900',
+        selected && 'ring-2 ring-accent-content ring-offset-2 ring-offset-base-900',
         compact ? 'w-[72px]' : 'w-full'
       )}
     >

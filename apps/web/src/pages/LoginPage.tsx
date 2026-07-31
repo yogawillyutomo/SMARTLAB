@@ -95,7 +95,7 @@ export function LoginPage() {
               { label: 'Semester', value: 'Gasal' },
             ].map((s) => (
               <div key={s.label} className="rounded-xl border border-base-700 bg-base-800/50 p-4">
-                <p className="text-2xl font-bold text-accent-primary">{s.value}</p>
+                <p className="text-2xl font-bold text-accent-content">{s.value}</p>
                 <p className="mt-1 text-xs text-ink-muted">{s.label}</p>
               </div>
             ))}
@@ -117,7 +117,7 @@ export function LoginPage() {
               id="login-theme"
               value={theme}
               onChange={(e) => setTheme(e.target.value as ThemeMode)}
-              className="rounded-lg border border-base-700 bg-base-800 px-2 py-1.5 text-xs text-ink-secondary outline-none focus:ring-2 focus:ring-accent-primary/60"
+              className="rounded-lg border border-base-700 bg-base-800 px-2 py-1.5 text-xs text-ink-secondary outline-none focus:ring-2 focus:ring-accent-content/60"
             >
               <option value="dark">Dark</option>
               <option value="light">Light</option>
@@ -183,11 +183,11 @@ export function LoginPage() {
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-primary focus:ring-accent-primary"
+                  className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-content focus:ring-accent-content"
                 />
                 Ingat saya
               </label>
-              <button type="button" className="text-sm text-accent-primary hover:underline" onClick={() => toast('Fitur lupa password akan tersedia di backend Laravel', 'info')}>
+              <button type="button" className="text-sm text-accent-content hover:underline" onClick={() => toast('Fitur lupa password akan tersedia di backend Laravel', 'info')}>
                 Lupa password?
               </button>
             </div>
@@ -224,7 +224,7 @@ export function LoginPage() {
                 <button
                   key={acc.email}
                   onClick={() => quickLogin(acc.email)}
-                  className="flex flex-col items-start rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-left transition-colors hover:border-accent-primary/50 hover:bg-base-700/40"
+                  className="flex flex-col items-start rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-left transition-colors hover:border-accent-content/50 hover:bg-base-700/40"
                 >
                   <span className="text-xs font-semibold text-ink-primary">{acc.label}</span>
                   <span className="text-[10px] text-ink-muted truncate w-full">{acc.email}</span>

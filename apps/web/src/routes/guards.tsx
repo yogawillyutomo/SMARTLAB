@@ -48,7 +48,7 @@ export function NoAccess() {
 export function NotFoundPage() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <p className="text-7xl font-bold text-accent-primary">404</p>
+      <p className="text-7xl font-bold text-accent-content">404</p>
       <h2 className="mt-4 text-xl font-bold text-ink-primary">Halaman tidak ditemukan</h2>
       <p className="mt-1 max-w-sm text-sm text-ink-muted">URL yang Anda akses tidak tersedia atau telah dipindahkan.</p>
       <a href="/dashboard" className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-primary px-4 py-2 text-sm font-semibold text-accent-foreground hover:brightness-110">

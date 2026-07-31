@@ -129,7 +129,7 @@ export function LoansPage() {
         </>}
       />
       <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-primary">{stats.active}</p><p className="text-xs text-ink-muted">Aktif Dipinjam</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.active}</p><p className="text-xs text-ink-muted">Aktif Dipinjam</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.overdue}</p><p className="text-xs text-ink-muted">Terlambat</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.returned}</p><p className="text-xs text-ink-muted">Dikembalikan</p></CardContent></Card>
       </div>
@@ -226,7 +226,7 @@ export function LoansPage() {
             <Textarea label="Catatan" value={returnForm.notes} onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })} />
             {canCreateIncident && returnForm.condition !== 'Baik' && (
               <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                <input type="checkbox" checked={returnForm.createIncident} onChange={(e) => setReturnForm({ ...returnForm, createIncident: e.target.checked })} className="rounded border-base-600 text-accent-primary" />
+                <input type="checkbox" checked={returnForm.createIncident} onChange={(e) => setReturnForm({ ...returnForm, createIncident: e.target.checked })} className="rounded border-base-600 text-accent-content" />
                 Buat incident dari kerusakan ini
               </label>
             )}

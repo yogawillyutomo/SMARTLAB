@@ -163,7 +163,7 @@ export function WorkOrdersPage() {
   }
 
   const columns: Column<WorkOrder>[] = [
-    { key: 'woNumber', header: 'WO', sortable: true, render: (w) => <button onClick={() => setDetail(w)} className="font-medium text-accent-primary hover:underline">{w.woNumber}</button> },
+    { key: 'woNumber', header: 'WO', sortable: true, render: (w) => <button onClick={() => setDetail(w)} className="font-medium text-accent-content hover:underline">{w.woNumber}</button> },
     { key: 'assetCode', header: 'Aset', render: (w) => w.assetCode ?? '-' },
     { key: 'lab', header: 'Lab', render: (w) => db.labs.find((l) => l.id === w.laboratoryId)?.name },
     { key: 'technician', header: 'Teknisi', sortable: true },
@@ -239,7 +239,7 @@ export function WorkOrdersPage() {
                 <div key={i} className="min-h-[80px] rounded-lg border border-base-700/60 bg-base-800/40 p-1.5">
                   <p className="text-xs text-ink-muted">{day}</p>
                   {dayWOs.slice(0, 2).map((w) => (
-                    <button key={w.id} onClick={() => setDetail(w)} className="mt-1 block w-full truncate rounded bg-accent-primary/15 px-1.5 py-0.5 text-[10px] text-accent-primary hover:bg-accent-primary/25">{w.woNumber}</button>
+                    <button key={w.id} onClick={() => setDetail(w)} className="mt-1 block w-full truncate rounded bg-accent-primary/15 px-1.5 py-0.5 text-[10px] text-accent-content hover:bg-accent-primary/25">{w.woNumber}</button>
                   ))}
                 </div>
               );

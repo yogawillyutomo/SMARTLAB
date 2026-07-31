@@ -20,6 +20,7 @@ export default {
           primary: 'rgb(var(--color-accent-primary) / <alpha-value>)',
           secondary: 'rgb(var(--color-accent-secondary) / <alpha-value>)',
           foreground: 'rgb(var(--color-accent-foreground) / <alpha-value>)',
+          content: 'rgb(var(--color-accent-content) / <alpha-value>)',
         },
         brand: {
           blue: 'rgb(var(--color-brand-blue) / <alpha-value>)',

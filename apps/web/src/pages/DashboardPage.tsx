@@ -162,7 +162,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Status Laboratorium</CardTitle>
-              <Link to="/laboratories" className="text-xs text-accent-primary hover:underline">Lihat semua</Link>
+              <Link to="/laboratories" className="text-xs text-accent-content hover:underline">Lihat semua</Link>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
               {labStatuses.map(({ lab, online, problem, total, inUse, todaySchedule }) => (
@@ -234,7 +234,7 @@ export function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Sesi Berlangsung</CardTitle>
-              <Link to="/sessions" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/sessions" className="text-xs text-accent-content hover:underline">Lihat</Link>
               </CardHeader>
               <CardContent className="space-y-3">
                 {db.sessions.filter((s) => s.status === 'Berlangsung' || s.status === 'Belum Dimulai').slice(0, 3).map((s) => {
@@ -258,7 +258,7 @@ export function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Tugas Perbaikan Teknisi</CardTitle>
-              <Link to="/work-orders" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/work-orders" className="text-xs text-accent-content hover:underline">Lihat</Link>
               </CardHeader>
               <CardContent className="space-y-3">
                 {db.workOrders.filter((w) => w.status === 'In Progress' || w.status === 'Assigned' || w.status === 'Waiting Part').slice(0, 3).map((w) => {
@@ -307,7 +307,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Ringkasan Tiket Kerusakan</CardTitle>
-              <Link to="/incidents" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/incidents" className="text-xs text-accent-content hover:underline">Lihat</Link>
             </CardHeader>
             <CardContent className="space-y-2">
               {db.incidents.slice(0, 4).map((inc) => (
@@ -329,7 +329,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Maintenance Mendatang</CardTitle>
-              <Link to="/maintenance" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/maintenance" className="text-xs text-accent-content hover:underline">Lihat</Link>
             </CardHeader>
             <CardContent className="space-y-2">
               {upcomingMaintenance.map((m) => {
@@ -355,7 +355,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Stok Kritis</CardTitle>
-              <Link to="/stock" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/stock" className="text-xs text-accent-content hover:underline">Lihat</Link>
             </CardHeader>
             <CardContent className="space-y-2">
               {db.stock.items.filter((s) => s.quantity <= s.minStock).slice(0, 3).map((s) => (
@@ -380,7 +380,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Aktivitas Terbaru</CardTitle>
-              <Link to="/audit-logs" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+              <Link to="/audit-logs" className="text-xs text-accent-content hover:underline">Lihat</Link>
             </CardHeader>
             <CardContent>
               <ActivityTimeline items={recentActivity} />
@@ -394,7 +394,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Kalender Mini</CardTitle>
-            <Link to="/calendar" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+            <Link to="/calendar" className="text-xs text-accent-content hover:underline">Lihat</Link>
           </CardHeader>
           <CardContent>
             <MiniCalendar events={db.calendarEvents} />
@@ -404,7 +404,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Jurnal Belum Dilengkapi</CardTitle>
-            <Link to="/journals" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+            <Link to="/journals" className="text-xs text-accent-content hover:underline">Lihat</Link>
           </CardHeader>
           <CardContent className="space-y-2">
             {pendingJournals.slice(0, 4).map((j) => (
@@ -423,12 +423,12 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Notifikasi Penting</CardTitle>
-            <Link to="/notifications" className="text-xs text-accent-primary hover:underline">Lihat</Link>
+            <Link to="/notifications" className="text-xs text-accent-content hover:underline">Lihat</Link>
           </CardHeader>
           <CardContent className="space-y-2">
             {criticalNotifications.map((n) => (
               <Link key={n.id} to={n.link ?? '/notifications'} className="flex gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-primary" />}
+                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-content" />}
                 <div className={cn('min-w-0', n.read && 'pl-4')}>
                   <p className="truncate text-xs font-medium text-ink-primary">{n.title}</p>
                   <p className="truncate text-[10px] text-ink-muted">{n.message}</p>
@@ -479,7 +479,7 @@ function MiniCalendar({ events }: { events: { id: string; title: string; date: s
             key={i}
             className={cn(
               'flex h-7 items-center justify-center rounded-md text-[10px]',
-              d === null ? '' : d === todayDate ? 'bg-accent-primary font-bold text-accent-foreground' : eventDates.has(d) ? 'bg-accent-primary/20 text-accent-primary' : 'text-ink-secondary hover:bg-base-700'
+              d === null ? '' : d === todayDate ? 'bg-accent-primary font-bold text-accent-foreground' : eventDates.has(d) ? 'bg-accent-primary/20 text-accent-content' : 'text-ink-secondary hover:bg-base-700'
             )}
           >
             {d}
@@ -487,7 +487,7 @@ function MiniCalendar({ events }: { events: { id: string; title: string; date: s
         ))}
       </div>
       <div className="mt-3 flex items-center gap-2 text-[10px] text-ink-muted">
-        <span className="h-2 w-2 rounded-full bg-accent-primary/40" /> Hari dengan event
+        <span className="h-2 w-2 rounded-full bg-accent-content/40" /> Hari dengan event
       </div>
     </div>
   );

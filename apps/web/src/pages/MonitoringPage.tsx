@@ -464,7 +464,7 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
                   onClick={() => onStatusChange(s)}
                   className={cn(
                     'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                    device.status === s ? 'border-accent-primary bg-accent-primary/15 text-accent-primary' : 'border-base-700 text-ink-secondary hover:bg-base-700/40'
+                    device.status === s ? 'border-accent-content bg-accent-primary/15 text-accent-content' : 'border-base-700 text-ink-secondary hover:bg-base-700/40'
                   )}
                 >
                   {s}

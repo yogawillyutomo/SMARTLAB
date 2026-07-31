@@ -141,10 +141,10 @@ export function CalendarPage() {
                 const isToday = day === new Date().getDate() && current.getMonth() === new Date().getMonth() && current.getFullYear() === new Date().getFullYear();
                 const dayEvents = day ? eventsOnDay(day) : [];
                 return (
-                  <div key={i} className={cn('min-h-[90px] rounded-lg border p-1.5', day ? 'border-base-700/60 bg-base-800/40' : 'border-transparent', isToday && 'border-accent-primary')}>
+                  <div key={i} className={cn('min-h-[90px] rounded-lg border p-1.5', day ? 'border-base-700/60 bg-base-800/40' : 'border-transparent', isToday && 'border-accent-content')}>
                     {day && (
                       <>
-                        <p className={cn('text-xs', isToday ? 'font-bold text-accent-primary' : 'text-ink-muted')}>{day}</p>
+                        <p className={cn('text-xs', isToday ? 'font-bold text-accent-content' : 'text-ink-muted')}>{day}</p>
                         <div className="mt-1 space-y-0.5">
                           {dayEvents.slice(0, 2).map((e) => (
                             <button key={e.id} onClick={() => setDetail(e)} className={cn('block w-full truncate rounded px-1 py-0.5 text-left text-[10px] text-white', colorMap[e.category] ?? 'bg-base-600')}>
