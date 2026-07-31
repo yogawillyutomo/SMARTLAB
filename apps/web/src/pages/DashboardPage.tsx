@@ -45,6 +45,7 @@ export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const { activeLabId } = useUIStore();
   const canExport = usePermission('dashboard', 'export');
+  const canCreateIncident = usePermission('incidents', 'create');
 
   const stats = useMemo(() => {
     const activeLabs = db.labs.filter((l) => l.status === 'active').length;
@@ -134,9 +135,9 @@ export function DashboardPage() {
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
               Export
             </Button>}
-            <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
+            {canCreateIncident && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
               Buat Tiket
-            </Button>
+            </Button>}
           </>
         }
       />

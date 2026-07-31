@@ -81,7 +81,7 @@ export function JournalsPage() {
   function exportCSV() {
     if (!canExport) return;
     downloadCSV('riwayat-laporan-pelaksanaan.csv', db.journals.map((j) => ({
-      No: j.journalNumber, Tanggal: j.date, Lab: db.labs.find((l) => l.id === j.laboratoryId)?.name, Guru: j.teacherName, Kelas: j.className, Mapel: j.subject, Materi: j.material, Hadir: j.presentCount, Absen: j.absentCount, Status: j.status, Sumber: j.source,
+      No: j.journalNumber, Tanggal: j.date, Lab: db.labs.find((l) => l.id === j.laboratoryId)?.name, Guru: j.teacherName, Kelas: j.className, Mapel: j.subject, Materi: j.material, Hadir: j.presentCount, Absen: j.absentCount, Status: j.status, Sumber: j.source === 'session' ? 'Pelaksanaan' : 'Manual',
     })));
   }
 
