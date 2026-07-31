@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, CalendarDays, Plus, Check, X, Eye, Download } from 'lucide-react';
+import { CalendarClock, Plus, Check, X, Eye, Download } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -111,7 +111,7 @@ export function BookingsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('booking-lab.csv', db.bookings.map((b) => ({
+    downloadCSV('reservasi-lab.csv', db.bookings.map((b) => ({
       Pemohon: b.requesterName, Lab: db.labs.find((l) => l.id === b.laboratoryId)?.name, Tanggal: b.date, Jam: `${b.startTime}-${b.endTime}`, Kegiatan: b.activity, Status: b.status,
     })));
   }
@@ -126,7 +126,6 @@ export function BookingsPage() {
         icon={<CalendarClock className="h-5 w-5" />}
         actions={
           <>
-            {canViewSchedules && <Button variant="secondary" size="sm" icon={<CalendarDays className="h-4 w-4" />} onClick={() => navigate('/schedules')}>Jadwal Reguler</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Ajukan Reservasi</Button>}
           </>

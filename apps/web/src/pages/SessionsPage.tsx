@@ -70,7 +70,7 @@ export function SessionsPage() {
         d.sessions[idx].startTime = new Date().toISOString();
       }
     });
-    toast('Sesi dimulai', 'success');
+    toast('Pelaksanaan dimulai', 'success');
   }
 
   function openFinish(s: Session) {
@@ -128,12 +128,12 @@ export function SessionsPage() {
               assetCode: pc,
               date: new Date().toISOString(),
               category: 'hardware',
-              title: `Kerusakan ${pc} dari sesi ${s.subject}`,
-              description: `Ditemukan saat sesi ${s.className} - ${s.subject}`,
+              title: `Kerusakan ${pc} dari pelaksanaan ${s.subject}`,
+              description: `Ditemukan saat pelaksanaan ${s.className} - ${s.subject}`,
               impact: 'Menghambat praktikum',
               priority: 'Normal',
               blocksPracticum: true,
-              stepsTaken: 'Dicek saat sesi berlangsung',
+              stepsTaken: 'Dicek saat pelaksanaan berlangsung',
               status: 'Dilaporkan',
               comments: [],
               timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: s.teacherName }],
@@ -148,7 +148,7 @@ export function SessionsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('sesi-praktikum.csv', db.sessions.map((s) => ({
+    downloadCSV('pelaksanaan-lab.csv', db.sessions.map((s) => ({
       Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status, Mulai: s.startTime, Selesai: s.endTime ?? '',
     })));
   }
@@ -254,7 +254,7 @@ export function SessionsPage() {
             {detail.brokenPCsAfter && detail.brokenPCsAfter.length > 0 && (
               <div><p className="text-xs text-ink-muted">PC Bermasalah</p><div className="mt-1 flex flex-wrap gap-1">{detail.brokenPCsAfter.map((pc) => <Badge key={pc} tone="danger">{pc}</Badge>)}</div></div>
             )}
-            {detail.journalId && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />Jurnal dibuat otomatis dari sesi ini</div>}
+            {detail.journalId && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />Jurnal dibuat otomatis dari pelaksanaan ini</div>}
           </div>
         )}
       </Drawer>

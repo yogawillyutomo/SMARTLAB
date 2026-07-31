@@ -103,7 +103,7 @@ export function AssetsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('inventaris-aset.csv', filtered.map((a) => ({
+    downloadCSV('aset-tetap.csv', filtered.map((a) => ({
       Kode: a.assetCode, Nama: a.name, Kategori: a.category, Brand: a.brand, Serial: a.serialNumber, Lab: db.labs.find((l) => l.id === a.laboratoryId)?.name, Posisi: a.position, Kondisi: a.condition, Status: a.status, Harga: a.price,
     })));
   }

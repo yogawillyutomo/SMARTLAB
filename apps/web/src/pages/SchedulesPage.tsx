@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, CalendarClock, Plus, ChevronLeft, ChevronRight, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore } from '@/stores/uiStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -118,7 +118,7 @@ export function SchedulesPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('jadwal-lab.csv', filtered.map((s) => ({
+    downloadCSV('jadwal-reguler.csv', filtered.map((s) => ({
       Hari: s.day, Tanggal: s.date, Jam: `${s.startTime}-${s.endTime}`, Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status,
     })));
   }
@@ -131,7 +131,6 @@ export function SchedulesPage() {
         icon={<CalendarDays className="h-5 w-5" />}
         actions={
           <>
-            {canViewBookings && <Button variant="secondary" size="sm" icon={<CalendarClock className="h-4 w-4" />} onClick={() => navigate('/bookings')}>Reservasi Lab</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
             {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal Reguler</Button>}

@@ -169,7 +169,7 @@ export function IncidentsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('laporan-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
+    downloadCSV('tiket-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
   }
 
   const columns: Column<Incident>[] = [

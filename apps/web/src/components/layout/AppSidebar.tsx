@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, FlaskConical, X } from 'lucide-react';
-import { NAV_GROUPS } from '@/routes/nav';
+import { getNavGroupsForPermissions, NAV_GROUPS } from '@/routes/nav';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { canView } from '@/lib/permissions';
@@ -23,6 +23,7 @@ export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
   const badges = useBadgeCounts();
+  const navGroups = user ? getNavGroupsForPermissions(permissions, user.role) : NAV_GROUPS;
 
   return (
     <>
@@ -60,7 +61,7 @@ export function AppSidebar() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 no-scrollbar">
-          {NAV_GROUPS.map((group) => {
+          {navGroups.map((group) => {
             const items = group.items.filter((it) => !user || canView(permissions, user.role, it.module));
             if (items.length === 0) return null;
             return (

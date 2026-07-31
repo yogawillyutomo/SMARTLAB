@@ -117,7 +117,7 @@ export function LoansPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('peminjaman.csv', db.loans.map((l) => ({ Peminjam: l.borrowerName, Barang: l.itemName, Jumlah: l.quantity, Pinjam: l.borrowDate, RencanaKembali: l.plannedReturn, Status: l.status })));
+    downloadCSV('peminjaman-barang.csv', db.loans.map((l) => ({ Peminjam: l.borrowerName, Barang: l.itemName, Jumlah: l.quantity, Pinjam: l.borrowDate, RencanaKembali: l.plannedReturn, Status: l.status })));
   }
 
   return (

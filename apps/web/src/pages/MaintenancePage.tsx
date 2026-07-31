@@ -96,7 +96,7 @@ export function MaintenancePage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('maintenance-plans.csv', db.maintenance.plans.map((p) => ({ Nama: p.name, Lab: db.labs.find((l) => l.id === p.laboratoryId)?.name, Frekuensi: p.frequency, Teknisi: p.technician, Jadwal: p.nextSchedule, Status: p.status })));
+    downloadCSV('pemeliharaan-berkala.csv', db.maintenance.plans.map((p) => ({ Nama: p.name, Lab: db.labs.find((l) => l.id === p.laboratoryId)?.name, Frekuensi: p.frequency, Teknisi: p.technician, Jadwal: p.nextSchedule, Status: p.status })));
   }
 
   function addChecklistItem() {

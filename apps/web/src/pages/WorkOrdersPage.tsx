@@ -159,7 +159,7 @@ export function WorkOrdersPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('work-order.csv', db.workOrders.map((w) => ({ WO: w.woNumber, Lab: db.labs.find((l) => l.id === w.laboratoryId)?.name, Teknisi: w.technician, Prioritas: w.priority, Status: w.status, Biaya: w.cost })));
+    downloadCSV('tugas-perbaikan.csv', db.workOrders.map((w) => ({ WO: w.woNumber, Lab: db.labs.find((l) => l.id === w.laboratoryId)?.name, Teknisi: w.technician, Prioritas: w.priority, Status: w.status, Biaya: w.cost })));
   }
 
   const columns: Column<WorkOrder>[] = [

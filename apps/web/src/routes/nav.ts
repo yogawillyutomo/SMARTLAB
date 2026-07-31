@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CalendarClock,
   BookOpen,
+  ClipboardList,
   Boxes,
   Package,
   AlertTriangle,
@@ -21,7 +22,7 @@ import {
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
-import type { ModuleKey } from '@/lib/permissions';
+import { canView, type ModuleKey, type PermissionMatrix, type RoleName } from '@/lib/permissions';
 
 export interface NavItem {
   to: string;
@@ -78,5 +79,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
+
+export function getNavGroupsForPermissions(permissions: PermissionMatrix, role: RoleName): NavGroup[] {
+  const canViewSessions = canView(permissions, role, 'sessions');
+  const canViewJournals = canView(permissions, role, 'journals');
+
+  if (canViewSessions || !canViewJournals) return NAV_GROUPS;
+
+  return NAV_GROUPS.map((group) => group.title === 'Operasional'
+    ? { ...group, items: [...group.items, { to: '/journals', label: 'Riwayat & Laporan', icon: ClipboardList, module: 'journals' }] }
+    : group);
+}
 
 export const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);

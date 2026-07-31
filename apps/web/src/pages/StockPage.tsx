@@ -86,7 +86,7 @@ export function StockPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('persediaan-stok.csv', db.stock.items.map((s) => ({ Nama: s.name, Kategori: s.category, Jumlah: s.quantity, Min: s.minStock, Satuan: s.unit, Lokasi: s.location, Supplier: s.supplier, Harga: s.price })));
+    downloadCSV('stok-spare-part.csv', db.stock.items.map((s) => ({ Nama: s.name, Kategori: s.category, Jumlah: s.quantity, Min: s.minStock, Satuan: s.unit, Lokasi: s.location, Supplier: s.supplier, Harga: s.price })));
   }
 
   const columns: Column<StockItem>[] = [

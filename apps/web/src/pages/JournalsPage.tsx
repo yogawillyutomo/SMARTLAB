@@ -80,7 +80,7 @@ export function JournalsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('jurnal-praktikum.csv', db.journals.map((j) => ({
+    downloadCSV('riwayat-laporan-pelaksanaan.csv', db.journals.map((j) => ({
       No: j.journalNumber, Tanggal: j.date, Lab: db.labs.find((l) => l.id === j.laboratoryId)?.name, Guru: j.teacherName, Kelas: j.className, Mapel: j.subject, Materi: j.material, Hadir: j.presentCount, Absen: j.absentCount, Status: j.status, Sumber: j.source,
     })));
   }
@@ -93,10 +93,10 @@ export function JournalsPage() {
         icon={<ClipboardList className="h-5 w-5" />}
         actions={
           <>
-            {canViewSessions && <Button variant="secondary" size="sm" icon={<BookOpen className="h-4 w-4" />} onClick={() => navigate('/sessions')}>Kembali ke Pelaksanaan Lab</Button>}
+            {canViewSessions && <Button variant="secondary" size="sm" icon={<BookOpen className="h-4 w-4" />} onClick={() => navigate('/sessions')}>Pelaksanaan Lab</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jurnal/Laporan</Button>}
+            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Laporan</Button>}
           </>
         }
       />
@@ -129,7 +129,7 @@ export function JournalsPage() {
                   <td className="px-4 py-3 text-ink-secondary">{j.className}</td>
                   <td className="px-4 py-3 text-ink-secondary max-w-[200px] truncate">{j.material}</td>
                   <td className="px-4 py-3 text-ink-secondary">{j.presentCount}/{j.absentCount}</td>
-                  <td className="px-4 py-3"><Badge tone={j.source === 'session' ? 'accent' : 'muted'}>{j.source === 'session' ? 'Sesi' : 'Manual'}</Badge></td>
+                  <td className="px-4 py-3"><Badge tone={j.source === 'session' ? 'accent' : 'muted'}>{j.source === 'session' ? 'Pelaksanaan' : 'Manual'}</Badge></td>
                   <td className="px-4 py-3"><StatusBadge status={j.status} /></td>
                   <td className="px-4 py-3"><div className="flex gap-1">
                     <button onClick={() => setDetail(j)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Eye className="h-4 w-4" /></button>
@@ -179,7 +179,7 @@ export function JournalsPage() {
             <div><p className="text-xs text-ink-muted">Kondisi Akhir</p><p className="text-ink-secondary">{detail.finalCondition}</p></div>
             {detail.issues && <div><p className="text-xs text-ink-muted">Kendala</p><p className="text-amber-400">{detail.issues}</p></div>}
             {detail.followUp && <div><p className="text-xs text-ink-muted">Tindak Lanjut</p><p className="text-ink-secondary">{detail.followUp}</p></div>}
-            <div><p className="text-xs text-ink-muted">Sumber</p><Badge tone={detail.source === 'session' ? 'accent' : 'muted'}>{detail.source === 'session' ? 'Dari Sesi' : 'Manual'}</Badge></div>
+            <div><p className="text-xs text-ink-muted">Sumber</p><Badge tone={detail.source === 'session' ? 'accent' : 'muted'}>{detail.source === 'session' ? 'Dari Pelaksanaan' : 'Manual'}</Badge></div>
           </div>
         )}
       </Drawer>
