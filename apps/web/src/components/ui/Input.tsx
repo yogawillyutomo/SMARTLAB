@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '@/utils';
 
 const baseField =
-  'w-full rounded-lg border border-base-600 bg-base-800 text-ink-primary placeholder:text-ink-muted transition-colors focus:outline-none focus:ring-2 focus:ring-accent-blue/60 focus:border-accent-blue disabled:opacity-50';
+  'w-full rounded-lg border border-base-600 bg-base-800 text-ink-primary placeholder:text-ink-muted transition-colors focus:outline-none focus:ring-2 focus:ring-accent-content/60 focus:border-accent-content disabled:opacity-50';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;

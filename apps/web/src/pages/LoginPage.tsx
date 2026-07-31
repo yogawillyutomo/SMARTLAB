@@ -65,12 +65,12 @@ export function LoginPage() {
       {/* Left brand panel */}
       <div className="relative hidden flex-1 overflow-hidden bg-gradient-to-br from-base-800 via-base-900 to-base-800 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-0 opacity-30">
-          <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-accent-blue/30 blur-3xl" />
-          <div className="absolute right-0 bottom-0 h-96 w-96 rounded-full bg-accent-cyan/20 blur-3xl" />
+          <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-brand-blue/30 blur-3xl" />
+          <div className="absolute right-0 bottom-0 h-96 w-96 rounded-full bg-brand-cyan/20 blur-3xl" />
         </div>
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-elevated">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-elevated">
               <FlaskConical className="h-6 w-6" />
             </div>
             <div>
@@ -95,7 +95,7 @@ export function LoginPage() {
               { label: 'Semester', value: 'Gasal' },
             ].map((s) => (
               <div key={s.label} className="rounded-xl border border-base-700 bg-base-800/50 p-4">
-                <p className="text-2xl font-bold text-accent-blue">{s.value}</p>
+                <p className="text-2xl font-bold text-accent-content">{s.value}</p>
                 <p className="mt-1 text-xs text-ink-muted">{s.label}</p>
               </div>
             ))}
@@ -117,7 +117,7 @@ export function LoginPage() {
               id="login-theme"
               value={theme}
               onChange={(e) => setTheme(e.target.value as ThemeMode)}
-              className="rounded-lg border border-base-700 bg-base-800 px-2 py-1.5 text-xs text-ink-secondary outline-none focus:ring-2 focus:ring-accent-blue/60"
+              className="rounded-lg border border-base-700 bg-base-800 px-2 py-1.5 text-xs text-ink-secondary outline-none focus:ring-2 focus:ring-accent-content/60"
             >
               <option value="dark">Dark</option>
               <option value="light">Light</option>
@@ -125,7 +125,7 @@ export function LoginPage() {
             </select>
           </div>
           <div className="mb-8 text-center lg:hidden">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-cyan text-white shadow-elevated">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-elevated">
               <FlaskConical className="h-7 w-7" />
             </div>
             <h1 className="text-xl font-bold text-ink-primary">SMARTLAB PPLG</h1>
@@ -183,11 +183,11 @@ export function LoginPage() {
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-blue focus:ring-accent-blue"
+                  className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-content focus:ring-accent-content"
                 />
                 Ingat saya
               </label>
-              <button type="button" className="text-sm text-accent-blue hover:underline" onClick={() => toast('Fitur lupa password akan tersedia di backend Laravel', 'info')}>
+              <button type="button" className="text-sm text-accent-content hover:underline" onClick={() => toast('Fitur lupa password akan tersedia di backend Laravel', 'info')}>
                 Lupa password?
               </button>
             </div>
@@ -224,7 +224,7 @@ export function LoginPage() {
                 <button
                   key={acc.email}
                   onClick={() => quickLogin(acc.email)}
-                  className="flex flex-col items-start rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-left transition-colors hover:border-accent-blue/50 hover:bg-base-700/40"
+                  className="flex flex-col items-start rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-left transition-colors hover:border-accent-content/50 hover:bg-base-700/40"
                 >
                   <span className="text-xs font-semibold text-ink-primary">{acc.label}</span>
                   <span className="text-[10px] text-ink-muted truncate w-full">{acc.email}</span>

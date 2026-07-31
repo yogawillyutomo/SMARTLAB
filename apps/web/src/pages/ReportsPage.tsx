@@ -99,7 +99,7 @@ export function ReportsPage() {
         {REPORT_CATS.map((cat) => {
           const Icon = cat.icon;
           return (
-            <button key={cat.key} onClick={() => setActive(cat.key)} className={`flex items-center gap-2 rounded-xl border p-3 text-left text-sm transition-all ${active === cat.key ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-base-700 text-ink-secondary hover:border-base-600'}`}>
+            <button key={cat.key} onClick={() => setActive(cat.key)} className={`flex items-center gap-2 rounded-xl border p-3 text-left text-sm transition-all ${active === cat.key ? 'border-accent-content bg-accent-primary/10 text-accent-content' : 'border-base-700 text-ink-secondary hover:border-base-600'}`}>
               <Icon className="h-4 w-4 shrink-0" />
               <span className="truncate">{cat.label}</span>
             </button>

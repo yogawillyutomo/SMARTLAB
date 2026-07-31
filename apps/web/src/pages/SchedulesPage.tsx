@@ -154,7 +154,7 @@ export function SchedulesPage() {
             <Select label="Mapel" value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="Semua mapel" options={subjects.map((s) => ({ value: s, label: s }))} />
             <div className="ml-auto flex items-center gap-1 rounded-lg border border-base-700 p-1">
               {(['week', 'day', 'list'] as const).map((v) => (
-                <button key={v} onClick={() => setView(v)} className={cn('rounded-md px-3 py-1.5 text-xs font-medium', view === v ? 'bg-accent-blue text-white' : 'text-ink-muted')}>
+                <button key={v} onClick={() => setView(v)} className={cn('rounded-md px-3 py-1.5 text-xs font-medium', view === v ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}>
                   {v === 'week' ? 'Mingguan' : v === 'day' ? 'Harian' : 'Daftar'}
                 </button>
               ))}
@@ -213,7 +213,7 @@ export function SchedulesPage() {
                     <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
                   ) : (
                     daySchedules.map((s) => (
-                      <button key={s.id} onClick={() => canUpdate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-blue/40">
+                      <button key={s.id} onClick={() => canUpdate && openEdit(s)} className="w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left transition-colors hover:border-accent-content/40">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-ink-primary">{s.startTime} - {s.endTime}</span>
                           <StatusBadge status={s.status} />

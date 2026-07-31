@@ -108,7 +108,7 @@ export function JournalsPage() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{stats.total}</p><p className="text-xs text-ink-muted">Total Jurnal</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.total}</p><p className="text-xs text-ink-muted">Total Jurnal</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.verified}</p><p className="text-xs text-ink-muted">Diverifikasi</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-ink-muted">{stats.draft}</p><p className="text-xs text-ink-muted">Draft</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{stats.needsFix}</p><p className="text-xs text-ink-muted">Perlu Perbaikan</p></CardContent></Card>

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { readStorage, writeStorage, STORAGE_KEYS } from '@/lib/storage';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
-export type AccentColor = 'blue' | 'cyan';
+export type AccentColor = 'blue' | 'cyan' | 'indigo' | 'violet';
 export type ResolvedTheme = 'dark' | 'light';
 
 interface UIState {
@@ -66,7 +66,7 @@ function isThemeMode(value: unknown): value is ThemeMode {
 }
 
 function isAccentColor(value: unknown): value is AccentColor {
-  return value === 'blue' || value === 'cyan';
+  return value === 'blue' || value === 'cyan' || value === 'indigo' || value === 'violet';
 }
 
 export const useUIStore = create<UIState>((set, get) => ({

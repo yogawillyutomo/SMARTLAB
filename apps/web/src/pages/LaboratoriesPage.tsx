@@ -138,7 +138,7 @@ export function LaboratoriesPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-blue/15 text-accent-blue">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-primary/15 text-accent-content">
                         <FlaskConical className="h-5 w-5" />
                       </div>
                       <div>
@@ -260,7 +260,7 @@ export function LaboratoryDetailPage() {
 
       {tab === 'overview' && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardContent><p className="text-2xl font-bold text-accent-blue">{devices.length}</p><p className="text-xs text-ink-muted">Total Perangkat</p></CardContent></Card>
+          <Card><CardContent><p className="text-2xl font-bold text-accent-content">{devices.length}</p><p className="text-xs text-ink-muted">Total Perangkat</p></CardContent></Card>
           <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{devices.filter((d) => d.status === 'Online').length}</p><p className="text-xs text-ink-muted">PC Online</p></CardContent></Card>
           <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</p><p className="text-xs text-ink-muted">PC Bermasalah</p></CardContent></Card>
           <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{lab.capacity}</p><p className="text-xs text-ink-muted">Kapasitas</p></CardContent></Card>
@@ -451,7 +451,7 @@ export function LaboratoryLayoutPage() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-ink-muted">Grid {currentLab.layoutRows} × {cols}</p>
               <div className="flex items-center gap-2 text-xs text-ink-muted">
-                <Monitor className="h-4 w-4 text-accent-blue" /> PC
+                <Monitor className="h-4 w-4 text-accent-content" /> PC
                 <Users className="h-4 w-4 text-success-foreground" /> Meja Guru
               </div>
             </div>
@@ -503,7 +503,7 @@ export function LaboratoryLayoutPage() {
               { type: 'switch' as const, label: 'Switch', icon: <Monitor className="h-4 w-4" /> },
               { type: 'ap' as const, label: 'Access Point', icon: <Monitor className="h-4 w-4" /> },
             ].map((el) => (
-              <button key={el.type} onClick={() => addElement(el.type)} className="flex w-full items-center gap-2 rounded-lg border border-base-700 bg-base-800/60 p-3 text-left text-sm text-ink-secondary transition-colors hover:border-accent-blue/50 hover:bg-base-700/40">
+              <button key={el.type} onClick={() => addElement(el.type)} className="flex w-full items-center gap-2 rounded-lg border border-base-700 bg-base-800/60 p-3 text-left text-sm text-ink-secondary transition-colors hover:border-accent-content/50 hover:bg-base-700/40">
                 {el.icon}
                 {el.label}
                 <Plus className="ml-auto h-4 w-4 text-ink-muted" />

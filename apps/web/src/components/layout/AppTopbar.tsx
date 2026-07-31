@@ -238,7 +238,7 @@ export function AppTopbar() {
 
         {/* Active lab selector */}
         <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm xl:flex">
-          <FlaskConical className="h-4 w-4 text-accent-blue" />
+          <FlaskConical className="h-4 w-4 text-accent-content" />
           <select
             value={activeLabId}
             onChange={(e) => setActiveLab(e.target.value)}
@@ -303,7 +303,7 @@ export function AppTopbar() {
             <div className="absolute right-0 top-12 z-50 w-80 rounded-xl border border-base-700 bg-base-800 shadow-elevated animate-slide-up">
               <div className="flex items-center justify-between border-b border-base-700 px-4 py-3">
                 <p className="text-sm font-semibold text-ink-primary">Notifikasi</p>
-                <Link to="/notifications" onClick={() => setNotifOpen(false)} className="text-xs text-accent-blue hover:underline">
+                <Link to="/notifications" onClick={() => setNotifOpen(false)} className="text-xs text-accent-content hover:underline">
                   Lihat semua
                 </Link>
               </div>
@@ -313,9 +313,9 @@ export function AppTopbar() {
                     key={n.id}
                     to={n.link ?? '/notifications'}
                     onClick={() => setNotifOpen(false)}
-                    className={cn('flex gap-3 border-b border-base-700/40 px-4 py-3 transition-colors hover:bg-base-700/40', !n.read && 'bg-accent-blue/5')}
+                    className={cn('flex gap-3 border-b border-base-700/40 px-4 py-3 transition-colors hover:bg-base-700/40', !n.read && 'bg-accent-primary/5')}
                   >
-                    {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-blue" />}
+                    {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-content" />}
                     <div className={cn('min-w-0 flex-1', n.read && 'pl-5')}>
                       <p className="text-xs font-semibold text-ink-primary">{n.title}</p>
                       <p className="mt-0.5 text-xs text-ink-muted line-clamp-2">{n.message}</p>
@@ -332,7 +332,7 @@ export function AppTopbar() {
         {canCreateIncident && (
           <button
             onClick={() => navigate('/incidents')}
-            className="hidden items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 sm:flex"
+            className="hidden items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:brightness-110 sm:flex"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden md:inline">Buat Tiket</span>
@@ -346,7 +346,7 @@ export function AppTopbar() {
             className="flex items-center gap-2 rounded-lg p-1 pr-2 hover:bg-base-700"
             aria-label="Menu profil"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent-blue to-accent-cyan text-xs font-bold text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-blue to-brand-cyan text-xs font-bold text-white">
               {user ? initials(user.name) : '?'}
             </div>
             <ChevronDown className="hidden h-4 w-4 text-ink-muted sm:block" />
@@ -356,7 +356,7 @@ export function AppTopbar() {
               <div className="border-b border-base-700 px-4 py-3">
                 <p className="text-sm font-semibold text-ink-primary">{user?.name}</p>
                 <p className="text-xs text-ink-muted">{user?.email}</p>
-                <p className="mt-1 inline-flex rounded-md bg-accent-blue/15 px-2 py-0.5 text-[10px] font-medium text-accent-blue">{user?.role}</p>
+                <p className="mt-1 inline-flex rounded-md bg-accent-primary/15 px-2 py-0.5 text-[10px] font-medium text-accent-content">{user?.role}</p>
               </div>
               <div className="p-2">
                 <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Ganti Role (Simulasi)</p>
@@ -370,11 +370,11 @@ export function AppTopbar() {
                       }}
                       className={cn(
                         'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-base-700',
-                        user?.role === r ? 'text-accent-blue' : 'text-ink-secondary'
+                        user?.role === r ? 'text-accent-content' : 'text-ink-secondary'
                       )}
                     >
                       {r}
-                      {user?.role === r && <span className="h-1.5 w-1.5 rounded-full bg-accent-blue" />}
+                      {user?.role === r && <span className="h-1.5 w-1.5 rounded-full bg-accent-content" />}
                     </button>
                   ))}
                 </div>

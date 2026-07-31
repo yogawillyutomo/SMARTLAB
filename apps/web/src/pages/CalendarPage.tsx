@@ -19,11 +19,11 @@ const CATEGORIES: { value: CalendarCategory; label: string; color: string }[] = 
   { value: 'hari efektif', label: 'Hari Efektif', color: 'bg-success' },
   { value: 'libur', label: 'Libur', color: 'bg-danger' },
   { value: 'ujian', label: 'Ujian', color: 'bg-warning' },
-  { value: 'kegiatan sekolah', label: 'Kegiatan Sekolah', color: 'bg-accent-blue' },
+  { value: 'kegiatan sekolah', label: 'Kegiatan Sekolah', color: 'bg-info' },
   { value: 'maintenance', label: 'Maintenance', color: 'bg-orange' },
   { value: 'booking', label: 'Booking', color: 'bg-purple' },
-  { value: 'workshop', label: 'Workshop', color: 'bg-accent-cyan' },
-  { value: 'LKS', label: 'LKS', color: 'bg-accent-blue' },
+  { value: 'workshop', label: 'Workshop', color: 'bg-status-cyan' },
+  { value: 'LKS', label: 'LKS', color: 'bg-info' },
   { value: 'rapat', label: 'Rapat', color: 'bg-pink-500' },
   { value: 'lainnya', label: 'Lainnya', color: 'bg-base-600' },
 ];
@@ -123,7 +123,7 @@ export function CalendarPage() {
           <Button variant="ghost" size="sm" onClick={() => setCurrent(new Date())}>Hari ini</Button>
           <div className="ml-auto flex items-center gap-1 rounded-lg border border-base-700 p-1">
             {(['month', 'week', 'agenda'] as const).map((v) => (
-              <button key={v} onClick={() => setView(v)} className={cn('rounded-md px-3 py-1.5 text-xs font-medium', view === v ? 'bg-accent-blue text-white' : 'text-ink-muted')}>{v === 'month' ? 'Bulan' : v === 'week' ? 'Minggu' : 'Agenda'}</button>
+              <button key={v} onClick={() => setView(v)} className={cn('rounded-md px-3 py-1.5 text-xs font-medium', view === v ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}>{v === 'month' ? 'Bulan' : v === 'week' ? 'Minggu' : 'Agenda'}</button>
             ))}
           </div>
           <Select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))} placeholder="Semua kategori" />
@@ -141,10 +141,10 @@ export function CalendarPage() {
                 const isToday = day === new Date().getDate() && current.getMonth() === new Date().getMonth() && current.getFullYear() === new Date().getFullYear();
                 const dayEvents = day ? eventsOnDay(day) : [];
                 return (
-                  <div key={i} className={cn('min-h-[90px] rounded-lg border p-1.5', day ? 'border-base-700/60 bg-base-800/40' : 'border-transparent', isToday && 'border-accent-blue')}>
+                  <div key={i} className={cn('min-h-[90px] rounded-lg border p-1.5', day ? 'border-base-700/60 bg-base-800/40' : 'border-transparent', isToday && 'border-accent-content')}>
                     {day && (
                       <>
-                        <p className={cn('text-xs', isToday ? 'font-bold text-accent-blue' : 'text-ink-muted')}>{day}</p>
+                        <p className={cn('text-xs', isToday ? 'font-bold text-accent-content' : 'text-ink-muted')}>{day}</p>
                         <div className="mt-1 space-y-0.5">
                           {dayEvents.slice(0, 2).map((e) => (
                             <button key={e.id} onClick={() => setDetail(e)} className={cn('block w-full truncate rounded px-1 py-0.5 text-left text-[10px] text-white', colorMap[e.category] ?? 'bg-base-600')}>

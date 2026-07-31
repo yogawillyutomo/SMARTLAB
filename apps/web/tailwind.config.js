@@ -17,6 +17,22 @@ export default {
         accent: {
           blue: 'rgb(var(--color-accent-primary) / <alpha-value>)',
           cyan: 'rgb(var(--color-accent-secondary) / <alpha-value>)',
+          primary: 'rgb(var(--color-accent-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--color-accent-secondary) / <alpha-value>)',
+          foreground: 'rgb(var(--color-accent-foreground) / <alpha-value>)',
+          content: 'rgb(var(--color-accent-content) / <alpha-value>)',
+        },
+        brand: {
+          blue: 'rgb(var(--color-brand-blue) / <alpha-value>)',
+          cyan: 'rgb(var(--color-brand-cyan) / <alpha-value>)',
+        },
+        info: 'rgb(var(--color-info) / <alpha-value>)',
+        'status-cyan': 'rgb(var(--color-status-cyan) / <alpha-value>)',
+        palette: {
+          blue: 'rgb(37 99 235 / <alpha-value>)',
+          cyan: 'rgb(14 116 144 / <alpha-value>)',
+          indigo: 'rgb(79 70 229 / <alpha-value>)',
+          violet: 'rgb(124 58 237 / <alpha-value>)',
         },
         success: 'rgb(var(--color-success) / <alpha-value>)',
         warning: 'rgb(var(--color-warning) / <alpha-value>)',

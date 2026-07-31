@@ -229,10 +229,10 @@ export function MonitoringPage() {
             <Select label="Kondisi" value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value)} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} placeholder="Semua kondisi" />
           </div>
           <div className="ml-auto flex items-center gap-1 rounded-lg border border-base-700 p-1">
-            <button onClick={() => setView('grid')} className={cn('rounded-md p-1.5', view === 'grid' ? 'bg-accent-blue text-white' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan grid">
+          <button onClick={() => setView('grid')} className={cn('rounded-md p-1.5', view === 'grid' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan grid">
               <LayoutGrid className="h-4 w-4" />
             </button>
-            <button onClick={() => setView('list')} className={cn('rounded-md p-1.5', view === 'list' ? 'bg-accent-blue text-white' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan list">
+          <button onClick={() => setView('list')} className={cn('rounded-md p-1.5', view === 'list' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan list">
               <List className="h-4 w-4" />
             </button>
           </div>
@@ -464,7 +464,7 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
                   onClick={() => onStatusChange(s)}
                   className={cn(
                     'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                    device.status === s ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-base-700 text-ink-secondary hover:bg-base-700/40'
+                    device.status === s ? 'border-accent-content bg-accent-primary/15 text-accent-content' : 'border-base-700 text-ink-secondary hover:bg-base-700/40'
                   )}
                 >
                   {s}

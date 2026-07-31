@@ -32,7 +32,7 @@ export function ErrorState({ message, onRetry, className }: { message: string; o
       </div>
       <p className="text-sm text-ink-secondary">{message}</p>
       {onRetry && (
-        <button onClick={onRetry} className="mt-3 text-sm font-medium text-accent-blue hover:underline">
+        <button onClick={onRetry} className="mt-3 text-sm font-medium text-accent-content hover:underline">
           Coba lagi
         </button>
       )}

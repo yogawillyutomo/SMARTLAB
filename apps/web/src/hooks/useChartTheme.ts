@@ -23,7 +23,7 @@ export interface ChartTheme {
 }
 
 export function useChartTheme(): ChartTheme {
-  useUIStore((state) => state.resolvedTheme);
+  useUIStore((state) => `${state.resolvedTheme}:${state.accent}`);
   return {
     grid: 'rgb(var(--color-chart-grid))',
     axis: 'rgb(var(--color-chart-axis))',
