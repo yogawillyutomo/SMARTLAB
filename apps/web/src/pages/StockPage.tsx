@@ -86,7 +86,7 @@ export function StockPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('persediaan-stok.csv', db.stock.items.map((s) => ({ Nama: s.name, Kategori: s.category, Jumlah: s.quantity, Min: s.minStock, Satuan: s.unit, Lokasi: s.location, Supplier: s.supplier, Harga: s.price })));
+    downloadCSV('stok-spare-part.csv', db.stock.items.map((s) => ({ Nama: s.name, Kategori: s.category, Jumlah: s.quantity, Min: s.minStock, Satuan: s.unit, Lokasi: s.location, Supplier: s.supplier, Harga: s.price })));
   }
 
   const columns: Column<StockItem>[] = [
@@ -119,7 +119,7 @@ export function StockPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Persediaan dan Spare Part" description="Manajemen stok barang habis pakai dan suku cadang" icon={<Package className="h-5 w-5" />}
+      <PageHeader title="Stok & Spare Part" description="Kelola persediaan barang habis pakai, komponen pengganti, dan transaksi stok." icon={<Package className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Barang</Button>}

@@ -16,9 +16,9 @@ const REPORT_CATS = [
   { key: 'journals', label: 'Jurnal', icon: FileText },
   { key: 'assets', label: 'Kondisi Aset', icon: Package },
   { key: 'incidents', label: 'Kerusakan', icon: Activity },
-  { key: 'workorders', label: 'Work Order', icon: Wrench },
+  { key: 'workorders', label: 'Tugas Perbaikan', icon: Wrench },
   { key: 'sla', label: 'SLA Teknisi', icon: TrendingUp },
-  { key: 'maintenance', label: 'Preventive Maintenance', icon: Wrench },
+  { key: 'maintenance', label: 'Pemeliharaan Berkala', icon: Wrench },
   { key: 'stock', label: 'Stok', icon: Package },
   { key: 'loans', label: 'Peminjaman', icon: Package },
 ];
@@ -78,7 +78,7 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan dan Analitik" description="Pusat laporan laboratorium" icon={<BarChart3 className="h-5 w-5" />}
+      <PageHeader title="Laporan & Analitik" description="Analisis penggunaan laboratorium, aset, kerusakan, perbaikan, stok, dan pemeliharaan." icon={<BarChart3 className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export CSV</Button>}
           {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}

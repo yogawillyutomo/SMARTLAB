@@ -117,12 +117,12 @@ export function LoansPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('peminjaman.csv', db.loans.map((l) => ({ Peminjam: l.borrowerName, Barang: l.itemName, Jumlah: l.quantity, Pinjam: l.borrowDate, RencanaKembali: l.plannedReturn, Status: l.status })));
+    downloadCSV('peminjaman-barang.csv', db.loans.map((l) => ({ Peminjam: l.borrowerName, Barang: l.itemName, Jumlah: l.quantity, Pinjam: l.borrowDate, RencanaKembali: l.plannedReturn, Status: l.status })));
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Peminjaman dan Serah Terima" description="Manajemen peminjaman barang laboratorium" icon={<HandHelping className="h-5 w-5" />}
+      <PageHeader title="Peminjaman Barang" description="Kelola proses serah-terima, masa peminjaman, dan pengembalian barang." icon={<HandHelping className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
           {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Pinjam Baru</Button>}

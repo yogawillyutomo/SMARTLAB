@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Plus, ChevronLeft, ChevronRight, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore } from '@/stores/uiStore';
@@ -19,11 +20,13 @@ const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
 
 export function SchedulesPage() {
   const { db, mutate } = useAppData();
-  const { academicYear, semester } = useUIStore();
+  const navigate = useNavigate();
+  const { semester } = useUIStore();
   const canCreate = usePermission('schedules', 'create');
   const canUpdate = usePermission('schedules', 'update');
   const canDelete = usePermission('schedules', 'delete');
   const canExport = usePermission('schedules', 'export');
+  const canViewBookings = usePermission('bookings', 'view');
   const [view, setView] = useState<'week' | 'day' | 'list'>('week');
   const [weekOffset, setWeekOffset] = useState(0);
   const [filters, setFilters] = useState({ lab: 'all', className: 'all', teacher: 'all', subject: 'all' });
@@ -115,7 +118,7 @@ export function SchedulesPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('jadwal-lab.csv', filtered.map((s) => ({
+    downloadCSV('jadwal-reguler.csv', filtered.map((s) => ({
       Hari: s.day, Tanggal: s.date, Jam: `${s.startTime}-${s.endTime}`, Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status,
     })));
   }
@@ -123,17 +126,24 @@ export function SchedulesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Jadwal Laboratorium"
-        description={`${academicYear} · Semester ${semester}`}
+        title="Jadwal Reguler"
+        description="Alokasi penggunaan laboratorium yang berulang berdasarkan tahun ajaran, semester, kelas, guru, mata pelajaran, hari, dan jam."
         icon={<CalendarDays className="h-5 w-5" />}
         actions={
           <>
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
             {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal</Button>}
+            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal Reguler</Button>}
           </>
         }
       />
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-secondary">Jadwal Reguler digunakan untuk alokasi pembelajaran berulang. Penggunaan insidental atau kegiatan pada tanggal tertentu diajukan melalui Reservasi Lab.</p>
+          {canViewBookings && <Button variant="secondary" size="sm" onClick={() => navigate('/bookings')}>Buka Reservasi Lab</Button>}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="space-y-4">
@@ -162,7 +172,7 @@ export function SchedulesPage() {
       </Card>
 
       {filtered.length === 0 ? (
-        <Card><EmptyState icon={<CalendarDays className="h-7 w-7" />} title="Tidak ada jadwal" description="Tambah jadwal atau ubah filter." /></Card>
+        <Card><EmptyState icon={<CalendarDays className="h-7 w-7" />} title="Belum ada Jadwal Reguler" description="Tambah jadwal reguler atau ubah filter." /></Card>
       ) : view === 'list' ? (
         <Card>
           <div className="overflow-x-auto">
@@ -220,7 +230,7 @@ export function SchedulesPage() {
         </div>
       )}
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Jadwal' : 'Tambah Jadwal'} onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Jadwal Reguler' : 'Tambah Jadwal Reguler'} onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Hari" value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} options={DAYS.map((d) => ({ value: d, label: d }))} />
           <Input label="Tanggal" type="date" value={form.date ?? ''} onChange={(e) => setForm({ ...form, date: e.target.value })} />

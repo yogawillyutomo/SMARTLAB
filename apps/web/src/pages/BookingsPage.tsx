@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CalendarClock, Plus, Check, X, Eye, Download } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Card } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -19,10 +20,12 @@ import type { Booking } from '@/types';
 
 export function BookingsPage() {
   const { db, mutate } = useAppData();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const canCreate = usePermission('bookings', 'create');
   const canApprove = usePermission('bookings', 'approve');
   const canExport = usePermission('bookings', 'export');
+  const canViewSchedules = usePermission('schedules', 'view');
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [rejectOpen, setRejectOpen] = useState<Booking | null>(null);
@@ -74,7 +77,7 @@ export function BookingsPage() {
         timeline: [{ status: 'Diajukan', at: new Date().toISOString(), by: form.requesterName ?? 'User' }],
       });
     });
-    toast('Booking diajukan', 'success');
+    toast('Reservasi diajukan', 'success');
     setOpen(false);
   }
 
@@ -87,7 +90,7 @@ export function BookingsPage() {
       }
     });
     setDetail(null);
-    toast('Booking disetujui', 'success');
+    toast('Reservasi disetujui', 'success');
   }
 
   function reject() {
@@ -100,7 +103,7 @@ export function BookingsPage() {
         d.bookings[idx].timeline.push({ status: 'Ditolak', at: new Date().toISOString(), by: user?.name ?? 'Admin' });
       }
     });
-    toast('Booking ditolak', 'info');
+    toast('Reservasi ditolak', 'info');
     setRejectOpen(null);
     setRejectReason('');
     setDetail(null);
@@ -108,7 +111,7 @@ export function BookingsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('booking-lab.csv', db.bookings.map((b) => ({
+    downloadCSV('reservasi-lab.csv', db.bookings.map((b) => ({
       Pemohon: b.requesterName, Lab: db.labs.find((l) => l.id === b.laboratoryId)?.name, Tanggal: b.date, Jam: `${b.startTime}-${b.endTime}`, Kegiatan: b.activity, Status: b.status,
     })));
   }
@@ -118,21 +121,28 @@ export function BookingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Booking Laboratorium"
-        description="Peminjaman ruang lab di luar jadwal reguler"
+        title="Reservasi Lab"
+        description="Pengajuan penggunaan laboratorium pada tanggal tertentu untuk kegiatan insidental, tambahan, atau kegiatan resmi sekolah."
         icon={<CalendarClock className="h-5 w-5" />}
         actions={
           <>
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Booking Baru</Button>}
+            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Ajukan Reservasi</Button>}
           </>
         }
       />
 
+      <Card>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-secondary">Reservasi Lab digunakan untuk penggunaan bertanggal dan tidak menggantikan definisi Jadwal Reguler.</p>
+          {canViewSchedules && <Button variant="secondary" size="sm" onClick={() => navigate('/schedules')}>Buka Jadwal Reguler</Button>}
+        </CardContent>
+      </Card>
+
       {pendingCount > 0 && canApprove && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
           <CalendarClock className="h-4 w-4" />
-          {pendingCount} booking menunggu persetujuan Anda
+          {pendingCount} reservasi menunggu persetujuan Anda
         </div>
       )}
 
@@ -144,7 +154,7 @@ export function BookingsPage() {
             </tr></thead>
             <tbody>
               {db.bookings.length === 0 ? (
-                <tr><td colSpan={7}><EmptyState title="Belum ada booking" className="py-10" /></td></tr>
+                <tr><td colSpan={7}><EmptyState title="Belum ada reservasi" className="py-10" /></td></tr>
               ) : db.bookings.map((b) => (
                 <tr key={b.id} className="border-b border-base-700/40 hover:bg-base-700/30">
                   <td className="px-4 py-3 text-ink-primary">{b.requesterName}</td>
@@ -169,7 +179,7 @@ export function BookingsPage() {
         </div>
       </Card>
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title="Booking Laboratorium" onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title="Ajukan Reservasi Lab" onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Pemohon" value={form.requesterName ?? ''} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} />
           <Select label="Laboratorium" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
@@ -214,11 +224,11 @@ export function BookingsPage() {
         )}
       </Drawer>
 
-      <Modal open={Boolean(rejectOpen)} onClose={() => setRejectOpen(null)} title="Tolak Booking" size="sm">
+      <Modal open={Boolean(rejectOpen)} onClose={() => setRejectOpen(null)} title="Tolak Reservasi" size="sm">
         <Textarea label="Alasan Penolakan" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Masukkan alasan penolakan..." />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setRejectOpen(null)}>Batal</Button>
-          <Button variant="danger" onClick={reject}>Tolak Booking</Button>
+          <Button variant="danger" onClick={reject}>Tolak Reservasi</Button>
         </div>
       </Modal>
     </div>

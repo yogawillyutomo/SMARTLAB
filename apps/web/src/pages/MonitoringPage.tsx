@@ -141,7 +141,7 @@ export function MonitoringPage() {
         timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: user?.name ?? 'User' }],
       });
     });
-    toast(`Laporan kerusakan dibuat untuk ${device.hostname}`, 'success');
+    toast(`Tiket kerusakan dibuat untuk ${device.hostname}`, 'success');
     setSelected(null);
   }
 
@@ -160,7 +160,7 @@ export function MonitoringPage() {
         status: 'active',
       });
     });
-    toast(`Maintenance terjadwal untuk ${device.hostname}`, 'success');
+    toast(`Pemeliharaan terjadwal untuk ${device.hostname}`, 'success');
   }
 
   const selectedAsset = selected ? db.assets.find((a) => a.assetCode === selected.assetCode) : null;
@@ -170,8 +170,8 @@ export function MonitoringPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Monitoring PC"
-        description="Pantau status setiap komputer di laboratorium secara realtime"
+        title="Monitoring Perangkat"
+        description="Pantau status operasional, konektivitas, dan kondisi teknis perangkat laboratorium."
         icon={<Monitor className="h-5 w-5" />}
         actions={
           <>
@@ -474,10 +474,10 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
           </div>}
           <div className="grid gap-2 pt-2">
             {canCreateIncident && <Button variant="danger" size="sm" icon={<AlertTriangle className="h-4 w-4" />} onClick={onCreateIncident} className="w-full justify-start">
-              Buat Laporan Kerusakan
+              Buat Tiket Kerusakan
             </Button>}
             {canScheduleMaintenance && <Button variant="warning" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={onScheduleMaintenance} className="w-full justify-start">
-              Jadwalkan Maintenance
+              Jadwalkan Pemeliharaan
             </Button>}
             {canUpdateStatus && <Button variant="secondary" size="sm" icon={<XCircle className="h-4 w-4" />} onClick={() => onStatusChange('Offline')} className="w-full justify-start">
               Tandai Offline

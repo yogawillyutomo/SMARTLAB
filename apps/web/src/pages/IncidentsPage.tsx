@@ -88,7 +88,7 @@ export function IncidentsPage() {
         status: 'Dilaporkan', comments: [], timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: form.reporterName ?? 'User' }],
       });
     });
-    toast('Laporan kerusakan dibuat', 'success');
+    toast('Tiket kerusakan dibuat', 'success');
     setOpen(false);
   }
 
@@ -156,7 +156,7 @@ export function IncidentsPage() {
       changed = true;
     });
     if (!changed) return;
-    toast('Incident dikonversi menjadi Work Order', 'success');
+    toast('Tiket dikonversi menjadi tugas perbaikan', 'success');
     setDetail(null);
   }
 
@@ -169,7 +169,7 @@ export function IncidentsPage() {
 
   function exportCSV() {
     if (!canExport) return;
-    downloadCSV('laporan-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
+    downloadCSV('tiket-kerusakan.csv', filtered.map((i) => ({ Tiket: i.ticketNumber, Judul: i.title, Lab: db.labs.find((l) => l.id === i.laboratoryId)?.name, Kategori: i.category, Prioritas: i.priority, Status: i.status, Pelapor: i.reporterName, Tanggal: i.date })));
   }
 
   const columns: Column<Incident>[] = [
@@ -187,10 +187,10 @@ export function IncidentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan Kerusakan" description="Tiket kerusakan dan incident laboratorium" icon={<AlertTriangle className="h-5 w-5" />}
+      <PageHeader title="Tiket Kerusakan" description="Catat, klasifikasikan, dan tindak lanjuti masalah perangkat atau fasilitas." icon={<AlertTriangle className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Lapor Kerusakan</Button>}
+          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Buat Tiket</Button>}
         </>}
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -207,7 +207,7 @@ export function IncidentsPage() {
       </Card>
       <Card><DataTable columns={columns} data={filtered} rowKey={(i) => i.id} searchable searchKeys={(i) => `${i.ticketNumber} ${i.title} ${i.description} ${i.reporterName}`} /></Card>
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title="Lapor Kerusakan" onSubmit={save} size="lg">
+      <FormDialog open={open} onClose={() => setOpen(false)} title="Buat Tiket Kerusakan" onSubmit={save} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Pelapor" value={form.reporterName ?? ''} onChange={(e) => setForm({ ...form, reporterName: e.target.value })} />
           <Select label="Laboratorium" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
@@ -240,7 +240,7 @@ export function IncidentsPage() {
               <div><p className="text-xs text-ink-muted">Aset</p><p className="text-ink-primary">{detail.assetCode || '-'}</p></div>
               <div><p className="text-xs text-ink-muted">Tanggal</p><p className="text-ink-primary">{relativeTime(detail.date)}</p></div>
               {detail.assignedTechnician && <div><p className="text-xs text-ink-muted">Teknisi</p><p className="text-ink-primary">{detail.assignedTechnician}</p></div>}
-              {detail.workOrderId && <div><p className="text-xs text-ink-muted">Work Order</p><Badge tone="accent">{db.workOrders.find((w) => w.id === detail.workOrderId)?.woNumber}</Badge></div>}
+              {detail.workOrderId && <div><p className="text-xs text-ink-muted">Tugas Perbaikan</p><Badge tone="accent">{db.workOrders.find((w) => w.id === detail.workOrderId)?.woNumber}</Badge></div>}
             </div>
             <div><p className="text-xs text-ink-muted">Deskripsi</p><p className="text-sm text-ink-secondary">{detail.description}</p></div>
             {detail.impact && <div><p className="text-xs text-ink-muted">Dampak</p><p className="text-sm text-ink-secondary">{detail.impact}</p></div>}
@@ -275,7 +275,7 @@ export function IncidentsPage() {
                   <Select value="" onChange={(e) => e.target.value && assignTechnician(detail, e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((t) => ({ value: t, label: `Assign ke ${t}` }))} placeholder="Assign Teknisi" />
                 )}
                 {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as Incident['status'])} options={availableStatusOptions} placeholder="Ubah Status" />}
-                {canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Work Order</Button>}
+                {canCreateWorkOrder && !detail.workOrderId && <Button variant="secondary" size="sm" icon={<ArrowRight className="h-4 w-4" />} onClick={() => convertToWO(detail)}>Jadi Tugas Perbaikan</Button>}
                 {canDelete && <Button variant="danger" size="sm" onClick={() => { setConfirmDel(detail); setDetail(null); }}>Hapus</Button>}
               </div>
             </div>

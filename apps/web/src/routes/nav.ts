@@ -22,7 +22,7 @@ import {
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
-import type { ModuleKey } from '@/lib/permissions';
+import { canView, type ModuleKey, type PermissionMatrix, type RoleName } from '@/lib/permissions';
 
 export interface NavItem {
   to: string;
@@ -43,29 +43,28 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' },
       { to: '/laboratories', label: 'Laboratorium', icon: FlaskConical, module: 'laboratories' },
-      { to: '/schedules', label: 'Jadwal Lab', icon: CalendarDays, module: 'schedules' },
-      { to: '/bookings', label: 'Booking Lab', icon: CalendarClock, module: 'bookings', badgeKey: 'pending_bookings' },
-      { to: '/sessions', label: 'Sesi Praktikum', icon: BookOpen, module: 'sessions' },
-      { to: '/journals', label: 'Jurnal Praktikum', icon: ClipboardList, module: 'journals' },
+      { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules' },
+      { to: '/bookings', label: 'Reservasi Lab', icon: CalendarClock, module: 'bookings', badgeKey: 'pending_bookings' },
+      { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions' },
     ],
   },
   {
-    title: 'Aset dan Monitoring',
+    title: 'Aset dan Pemeliharaan',
     items: [
-      { to: '/monitoring', label: 'Monitoring PC', icon: Monitor, module: 'monitoring' },
-      { to: '/assets', label: 'Inventaris', icon: Boxes, module: 'assets' },
-      { to: '/stock', label: 'Persediaan', icon: Package, module: 'stock' },
-      { to: '/incidents', label: 'Laporan Kerusakan', icon: AlertTriangle, module: 'incidents', badgeKey: 'pending_incidents' },
-      { to: '/work-orders', label: 'Work Order', icon: Wrench, module: 'work-orders' },
-      { to: '/maintenance', label: 'Maintenance', icon: ShieldCheck, module: 'maintenance', badgeKey: 'overdue_maintenance' },
-      { to: '/loans', label: 'Peminjaman', icon: HandHelping, module: 'loans', badgeKey: 'overdue_loans' },
+      { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring' },
+      { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets' },
+      { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock' },
+      { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, module: 'incidents', badgeKey: 'pending_incidents' },
+      { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders' },
+      { to: '/maintenance', label: 'Pemeliharaan Berkala', icon: ShieldCheck, module: 'maintenance', badgeKey: 'overdue_maintenance' },
+      { to: '/loans', label: 'Peminjaman Barang', icon: HandHelping, module: 'loans', badgeKey: 'overdue_loans' },
     ],
   },
   {
     title: 'Informasi',
     items: [
       { to: '/calendar', label: 'Kalender Akademik', icon: CalendarRange, module: 'calendar' },
-      { to: '/reports', label: 'Laporan dan Analitik', icon: BarChart3, module: 'reports' },
+      { to: '/reports', label: 'Laporan & Analitik', icon: BarChart3, module: 'reports' },
       { to: '/notifications', label: 'Notifikasi', icon: Bell, module: 'notifications' },
     ],
   },
@@ -73,12 +72,23 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Administrasi',
     items: [
       { to: '/users', label: 'Pengguna', icon: Users, module: 'users' },
-      { to: '/roles', label: 'Role dan Permission', icon: KeyRound, module: 'roles' },
+      { to: '/roles', label: 'Hak Akses', icon: KeyRound, module: 'roles' },
       { to: '/master-data', label: 'Master Data', icon: Database, module: 'master-data' },
       { to: '/audit-logs', label: 'Audit Log', icon: ScrollText, module: 'audit-logs' },
       { to: '/settings', label: 'Pengaturan', icon: Settings, module: 'settings' },
     ],
   },
 ];
+
+export function getNavGroupsForPermissions(permissions: PermissionMatrix, role: RoleName): NavGroup[] {
+  const canViewSessions = canView(permissions, role, 'sessions');
+  const canViewJournals = canView(permissions, role, 'journals');
+
+  if (canViewSessions || !canViewJournals) return NAV_GROUPS;
+
+  return NAV_GROUPS.map((group) => group.title === 'Operasional'
+    ? { ...group, items: [...group.items, { to: '/journals', label: 'Riwayat & Laporan', icon: ClipboardList, module: 'journals' }] }
+    : group);
+}
 
 export const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);

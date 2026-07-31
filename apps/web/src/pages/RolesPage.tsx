@@ -94,7 +94,7 @@ export function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Role dan Permission" description="Matriks permission per role" icon={<KeyRound className="h-5 w-5" />}
+      <PageHeader title="Hak Akses" description="Kelola hak lihat dan tindakan setiap role pada modul SmartLab." icon={<KeyRound className="h-5 w-5" />}
         actions={<>
           <Button variant="secondary" size="sm" onClick={reset} disabled={!canEdit}>Reset</Button>
           <Button variant="secondary" size="sm" onClick={resetActiveRole} disabled={!canEdit}>Reset Role</Button>

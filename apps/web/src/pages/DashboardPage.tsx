@@ -45,6 +45,7 @@ export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const { activeLabId } = useUIStore();
   const canExport = usePermission('dashboard', 'export');
+  const canCreateIncident = usePermission('incidents', 'create');
 
   const stats = useMemo(() => {
     const activeLabs = db.labs.filter((l) => l.status === 'active').length;
@@ -108,7 +109,7 @@ export function DashboardPage() {
       { metric: 'PC Bermasalah', value: stats.problemPCs },
       { metric: 'Praktikum Hari Ini', value: stats.todaySchedules },
       { metric: 'Tiket Kerusakan Terbuka', value: stats.openIncidents },
-      { metric: 'Maintenance Jatuh Tempo', value: stats.overdueMaintenance },
+      { metric: 'Pemeliharaan Jatuh Tempo', value: stats.overdueMaintenance },
       { metric: 'Barang Dipinjam', value: stats.activeLoans },
       { metric: 'Stok Hampir Habis', value: stats.lowStock },
     ]);
@@ -134,9 +135,9 @@ export function DashboardPage() {
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
               Export
             </Button>}
-            <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
-              Lapor Kerusakan
-            </Button>
+            {canCreateIncident && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
+              Buat Tiket
+            </Button>}
           </>
         }
       />
@@ -148,7 +149,7 @@ export function DashboardPage() {
         <StatCard label="PC Bermasalah" value={stats.problemPCs} icon={<MonitorX className="h-5 w-5" />} tone="danger" delta={-1} deltaLabel="vs minggu lalu" to="/monitoring" />
         <StatCard label="Praktikum Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" delta={0} deltaLabel="vs kemarin" to="/schedules" />
         <StatCard label="Tiket Kerusakan" value={stats.openIncidents} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" delta={3} deltaLabel="vs minggu lalu" to="/incidents" />
-        <StatCard label="Maintenance Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" delta={-1} deltaLabel="vs minggu lalu" to="/maintenance" />
+        <StatCard label="Pemeliharaan Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" delta={-1} deltaLabel="vs minggu lalu" to="/maintenance" />
         <StatCard label="Barang Dipinjam" value={stats.activeLoans} icon={<HandHelping className="h-5 w-5" />} tone="accent" delta={1} deltaLabel="vs minggu lalu" to="/loans" />
         <StatCard label="Stok Hampir Habis" value={stats.lowStock} icon={<Package className="h-5 w-5" />} tone="danger" delta={2} deltaLabel="vs minggu lalu" to="/stock" />
       </div>
@@ -261,7 +262,7 @@ export function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Work Order Teknisi</CardTitle>
+                <CardTitle>Tugas Perbaikan Teknisi</CardTitle>
                 <Link to="/work-orders" className="text-xs text-accent-blue hover:underline">Lihat</Link>
               </CardHeader>
               <CardContent className="space-y-3">
