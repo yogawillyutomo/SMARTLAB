@@ -84,6 +84,66 @@ export interface Laboratory {
   layoutCols: number;
 }
 
+export type LaboratoryLayoutType =
+  | 'grid-classic'
+  | 'perimeter-center-island'
+  | 'u-shape'
+  | 'facing-rows'
+  | 'custom';
+
+export type LaboratoryLayoutStatus =
+  | 'draft'
+  | 'active'
+  | 'archived';
+
+export type LayoutElementType =
+  | 'student_pc'
+  | 'teacher_pc'
+  | 'teacher_desk'
+  | 'projector'
+  | 'printer'
+  | 'network_switch'
+  | 'access_point'
+  | 'door'
+  | 'window'
+  | 'wall'
+  | 'aisle'
+  | 'label'
+  | 'empty';
+
+export type LayoutRotation = 0 | 90 | 180 | 270;
+
+export interface LaboratoryLayout {
+  id: ID;
+  laboratoryId: ID;
+  name: string;
+  layoutType: LaboratoryLayoutType;
+  rows: number;
+  columns: number;
+  version: number;
+  status: LaboratoryLayoutStatus;
+  isActive: boolean;
+  elements: LayoutElement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LayoutElement {
+  id: ID;
+  layoutId: ID;
+  type: LayoutElementType;
+  referenceId?: ID;
+  label?: string;
+  row: number;
+  column: number;
+  rowSpan: number;
+  columnSpan: number;
+  rotation: LayoutRotation;
+  movable: boolean;
+  swappable: boolean;
+  fixed: boolean;
+}
+
 export type MasterDataCategoryKey =
   | 'asset-category'
   | 'asset-model'
