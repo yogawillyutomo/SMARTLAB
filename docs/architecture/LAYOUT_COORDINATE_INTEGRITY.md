@@ -26,7 +26,7 @@ The new `laboratory-layout` domain module is pure TypeScript. It does not access
 - Fixed elements, empty sources, non-movable sources, invalid targets, and unsupported spans return typed failures.
 - Spans are fully validated, but movement of a source or target with a span larger than 1x1 is intentionally rejected in PR 3A.
 
-Successful `moved` and `swapped` operations receive `LayoutOperationOptions.updatedAt`; the supplied timestamp becomes `layout.updatedAt`. This keeps domain operations deterministic and avoids `new Date()` in the engine. A `noop` returns an immutable clone without changing `updatedAt` and does not consume the supplied timestamp.
+Successful `moved` and `swapped` operations receive `LayoutOperationOptions.updatedAt`; the supplied timestamp becomes `layout.updatedAt`. This keeps domain operations deterministic and avoids `new Date()` in the engine. A `noop` applies only to an otherwise eligible movable one-cell source, returns an immutable clone without changing `updatedAt`, and does not consume the supplied timestamp.
 
 ## Validator and migration diagnostics
 

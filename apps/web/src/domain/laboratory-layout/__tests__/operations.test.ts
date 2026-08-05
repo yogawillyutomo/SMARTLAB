@@ -42,6 +42,22 @@ describe('layout operations', () => {
 
   it('rejects an empty source', () => expect(moveLayoutElement(validLayout(), 'empty-2-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'source_is_empty' }));
 
+  it('rejects an empty source dropped onto its own coordinate', () => {
+    expect(moveLayoutElement(validLayout(), 'empty-2-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'source_is_empty' });
+  });
+
+  it('rejects a fixed source dropped onto its own coordinate', () => {
+    const input = validLayout();
+    input.elements[0] = { ...input.elements[0], fixed: true, movable: false };
+    expect(moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'source_fixed' });
+  });
+
+  it('rejects a non-movable source dropped onto its own coordinate', () => {
+    const input = validLayout();
+    input.elements[0] = { ...input.elements[0], movable: false };
+    expect(moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'source_not_movable' });
+  });
+
   it('rejects student PC to teacher desk', () => {
     const input = layout([element('pc-1', 'student_pc', 1, 1), element('empty-1-2', 'empty', 1, 2), element('desk', 'teacher_desk', 2, 1), element('empty-2-2', 'empty', 2, 2)]);
     expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'incompatible_target' });
@@ -74,11 +90,15 @@ describe('layout operations', () => {
   it('rejects an out-of-grid target', () => expect(moveLayoutElement(validLayout(), 'pc-1', { row: 3, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_target_coordinate' }));
   it('rejects a non-integer target', () => expect(moveLayoutElement(validLayout(), 'pc-1', { row: 1.5, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_target_coordinate' }));
 
-  it('reports noop and preserves updatedAt for a same-coordinate drop', () => {
+  it('reports noop only for an eligible source, with an immutable clone and unchanged updatedAt', () => {
     const input = validLayout();
-    const result = moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options);
+    const result = moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, { updatedAt: 'not-a-timestamp' });
     expect(result).toMatchObject({ ok: true, operation: 'noop', sourceElementId: 'pc-1', targetElementId: 'pc-1' });
-    if (result.ok) expect(result.layout.updatedAt).toBe(input.updatedAt);
+    if (!result.ok) return;
+    expect(result.layout).not.toBe(input);
+    expect(result.layout.elements).not.toBe(input.elements);
+    expect(result.layout.elements[0]).not.toBe(input.elements[0]);
+    expect(result.layout.updatedAt).toBe(input.updatedAt);
   });
 
   it('rejects an invalid source layout', () => {
@@ -92,6 +112,11 @@ describe('layout operations', () => {
     expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
   });
 
+  it('rejects a spanning source dropped onto its own coordinate', () => {
+    const input = layout([element('pc-1', 'student_pc', 1, 1, { columnSpan: 2 }), element('empty-2-1', 'empty', 2, 1), element('empty-2-2', 'empty', 2, 2)]);
+    expect(moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
+  });
+
   it('rejects a spanning target move', () => {
     const input = layout([element('pc-1', 'student_pc', 1, 1), element('empty-1-2', 'empty', 1, 2), element('empty-row-2', 'empty', 2, 1, { columnSpan: 2 })]);
     expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
@@ -103,5 +128,19 @@ describe('layout operations', () => {
     const result = swapLayoutElements(validLayout(), 'pc-1', 'pc-2', options);
     expect(result).toMatchObject({ ok: true, operation: 'swapped' });
     if (result.ok) expect(result.layout.updatedAt).toBe(UPDATED_AT);
+  });
+
+  it('reports a missing direct-swap source separately', () => {
+    expect(swapLayoutElements(validLayout(), 'missing', 'pc-2', options)).toMatchObject({ ok: false, reason: 'source_not_found' });
+  });
+
+  it('reports a missing direct-swap target separately', () => {
+    expect(swapLayoutElements(validLayout(), 'pc-1', 'missing', options)).toMatchObject({ ok: false, reason: 'target_not_found' });
+  });
+
+  it('does not allow an ineligible direct same-ID swap to return noop', () => {
+    const input = validLayout();
+    input.elements[0] = { ...input.elements[0], fixed: true, movable: false };
+    expect(swapLayoutElements(input, 'pc-1', 'pc-1', options)).toMatchObject({ ok: false, reason: 'swap_not_allowed' });
   });
 });

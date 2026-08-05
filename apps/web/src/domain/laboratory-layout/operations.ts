@@ -65,23 +65,24 @@ export function swapLayoutElements(
 ): LayoutOperationResult {
   const invalidLayout = validLayoutOrFailure(layout);
   if (invalidLayout) return invalidLayout;
-  const first = layout.elements.find((element) => element.id === firstElementId);
-  const second = layout.elements.find((element) => element.id === secondElementId);
-  if (!first || !second) return failure('source_not_found', 'Elemen yang akan ditukar tidak ditemukan.');
-  if (first.id === second.id) return success(cloneLayout(layout), 'noop', first.id, second.id);
-  if (!isSingleCell(first) || !isSingleCell(second)) return failure('spanning_move_not_supported', 'Swap hanya mendukung elemen satu sel.');
-  if (first.type !== 'student_pc' || second.type !== 'student_pc' || !first.swappable || !second.swappable) {
+  const source = layout.elements.find((element) => element.id === firstElementId);
+  if (!source) return failure('source_not_found', 'Elemen sumber yang akan ditukar tidak ditemukan.');
+  const target = layout.elements.find((element) => element.id === secondElementId);
+  if (!target) return failure('target_not_found', 'Elemen target yang akan ditukar tidak ditemukan.');
+  if (!isSingleCell(source) || !isSingleCell(target)) return failure('spanning_move_not_supported', 'Swap hanya mendukung elemen satu sel.');
+  if (source.type !== 'student_pc' || target.type !== 'student_pc' || !source.swappable || !target.swappable) {
     return failure('swap_not_allowed', 'Hanya student_pc yang dapat ditukar secara otomatis.');
   }
-  if (first.fixed || second.fixed) return failure('swap_not_allowed', 'Elemen fixed tidak dapat ditukar.');
-  if (!first.movable || !second.movable) return failure('swap_not_allowed', 'Elemen yang tidak movable tidak dapat ditukar.');
+  if (source.fixed || target.fixed) return failure('swap_not_allowed', 'Elemen fixed tidak dapat ditukar.');
+  if (!source.movable || !target.movable) return failure('swap_not_allowed', 'Elemen yang tidak movable tidak dapat ditukar.');
+  if (source.id === target.id) return success(cloneLayout(layout), 'noop', source.id, target.id);
 
   const next = cloneLayout(layout);
-  const nextFirst = next.elements.find((element) => element.id === first.id)!;
-  const nextSecond = next.elements.find((element) => element.id === second.id)!;
+  const nextFirst = next.elements.find((element) => element.id === source.id)!;
+  const nextSecond = next.elements.find((element) => element.id === target.id)!;
   [nextFirst.row, nextSecond.row] = [nextSecond.row, nextFirst.row];
   [nextFirst.column, nextSecond.column] = [nextSecond.column, nextFirst.column];
-  return timestampedResult(next, 'swapped', first.id, second.id, options);
+  return timestampedResult(next, 'swapped', source.id, target.id, options);
 }
 
 export function moveLayoutElement(
@@ -94,12 +95,12 @@ export function moveLayoutElement(
   if (invalidLayout) return invalidLayout;
   const source = layout.elements.find((element) => element.id === sourceElementId);
   if (!source) return failure('source_not_found', 'Elemen sumber tidak ditemukan.');
-  if (!isCoordinateInBounds(layout, target)) return failure('invalid_target_coordinate', 'Koordinat target tidak valid.');
-  if (source.row === target.row && source.column === target.column) return success(cloneLayout(layout), 'noop', source.id, source.id);
   if (source.type === 'empty') return failure('source_is_empty', 'Elemen empty tidak dapat dipindahkan.');
   if (source.fixed) return failure('source_fixed', 'Elemen fixed tidak dapat dipindahkan.');
   if (!source.movable) return failure('source_not_movable', 'Elemen ini tidak dapat dipindahkan.');
   if (!isSingleCell(source)) return failure('spanning_move_not_supported', 'Perpindahan elemen multi-sel belum didukung.');
+  if (!isCoordinateInBounds(layout, target)) return failure('invalid_target_coordinate', 'Koordinat target tidak valid.');
+  if (source.row === target.row && source.column === target.column) return success(cloneLayout(layout), 'noop', source.id, source.id);
 
   const targetElement = findElementAt(layout, target);
   if (!targetElement) return failure('target_not_found', 'Target tidak memiliki elemen grid.');
