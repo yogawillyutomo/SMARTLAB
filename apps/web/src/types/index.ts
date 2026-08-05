@@ -66,8 +66,6 @@ export interface Device {
     network: boolean;
     ups: boolean;
   };
-  col: number;
-  row: number;
 }
 
 export interface Laboratory {

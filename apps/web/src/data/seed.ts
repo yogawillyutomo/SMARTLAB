@@ -7,6 +7,7 @@ import type {
   Incident,
   Journal,
   Laboratory,
+  LaboratoryLayout,
   Loan,
   MaintenanceExecution,
   MaintenancePlan,
@@ -20,6 +21,8 @@ import type {
   User,
   WorkOrder,
 } from '@/types';
+import { CURRENT_DB_SCHEMA_VERSION } from '@/lib/dbSchema';
+import { migrateLegacyDeviceCoordinates } from '@/domain/laboratory-layout';
 
 // Deterministic PRNG so data is stable across refreshes
 function seeded(seed: number) {
@@ -30,7 +33,7 @@ function seeded(seed: number) {
   };
 }
 
-const rng = seeded(20260725);
+let rng = seeded(20260725);
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)];
@@ -90,8 +93,13 @@ function pad(n: number, len = 2): string {
   return String(n).padStart(len, '0');
 }
 
-function generateDevices(): Device[] {
-  const devices: Device[] = [];
+interface SeedDeviceWithLegacyCoordinate extends Device {
+  col: number;
+  row: number;
+}
+
+function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
+  const devices: SeedDeviceWithLegacyCoordinate[] = [];
   LABS.forEach((lab, labIdx) => {
     for (let i = 0; i < lab.pcCount; i++) {
       const n = i + 1;
@@ -697,9 +705,11 @@ function generateUsers(): User[] {
 }
 
 export interface SeedData {
+  schemaVersion: typeof CURRENT_DB_SCHEMA_VERSION;
   labs: Laboratory[];
   masterData: MasterDataCollection;
   devices: Device[];
+  layouts: LaboratoryLayout[];
   schedules: Schedule[];
   bookings: Booking[];
   sessions: Session[];
@@ -717,16 +727,41 @@ export interface SeedData {
 }
 
 export function generateSeedData(): SeedData {
-  const devices = generateDevices();
+  rng = seeded(20260725);
+  const legacyDevices = generateDevices();
+  const layouts = LABS.map((laboratory) => {
+    const layoutId = `layout:${laboratory.id}:v1`;
+    const migrated = migrateLegacyDeviceCoordinates({
+      layoutId,
+      laboratory,
+      devices: legacyDevices,
+      name: `${laboratory.name} — Denah Aktif`,
+      createdAt: '2026-07-25T00:00:00.000Z',
+      updatedAt: '2026-07-25T00:00:00.000Z',
+      layoutType: 'grid-classic',
+      version: 1,
+      status: 'active',
+      isActive: true,
+    });
+    if (!migrated.ok) throw new Error(`Seed denah ${laboratory.id} tidak valid.`);
+    return migrated.layout;
+  });
+  const devices = legacyDevices.map(({ row, col, ...device }) => {
+    void row;
+    void col;
+    return device;
+  });
   const incidents = generateIncidents();
   const workOrders = generateWorkOrders(incidents);
   const assets = generateAssets(devices);
   const stock = generateStock();
   const maintenance = generateMaintenance();
   return {
+    schemaVersion: CURRENT_DB_SCHEMA_VERSION,
     labs: LABS,
     masterData: generateMasterData(),
     devices,
+    layouts,
     schedules: generateSchedules(),
     bookings: generateBookings(),
     sessions: generateSessions(),

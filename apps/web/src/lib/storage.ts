@@ -1,7 +1,8 @@
+import { CURRENT_STORAGE_VERSION } from './dbSchema';
+
 const PREFIX = 'smartlab_pplg_';
 const VERSION_KEY = `${PREFIX}version`;
 const DATA_KEY = `${PREFIX}data`;
-const CURRENT_VERSION = '1.0.0';
 
 function readFromStorage<T>(storage: Storage, key: string, fallback: T): T {
   try {
@@ -64,7 +65,7 @@ export function getStoredVersion(): string | null {
 }
 
 export function setStoredVersion(): void {
-  localStorage.setItem(VERSION_KEY, CURRENT_VERSION);
+  localStorage.setItem(VERSION_KEY, CURRENT_STORAGE_VERSION);
 }
 
 export function getDataRaw(): string | null {

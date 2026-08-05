@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import {
   FlaskConical,
   Plus,
@@ -24,11 +24,24 @@ import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils';
-import type { Laboratory, Device } from '@/types';
+import { uid } from '@/utils';
+import {
+  cloneLaboratoryLayout,
+  createLaboratoryWithInitialLayout,
+  deleteLaboratorySafely,
+  getActiveLaboratoryLayout,
+  layoutFingerprint,
+  layoutsEquivalent,
+  moveLayoutElement,
+  saveActiveLaboratoryLayout,
+} from '@/domain/laboratory-layout';
+import type { Device, Laboratory, LaboratoryLayout } from '@/types';
 
 export function LaboratoriesPage() {
-  const { db, mutate } = useAppData();
+  const { db, mutate, replaceDB } = useAppData();
+  const user = useAuthStore((state) => state.user);
   const canCreate = usePermission('laboratories', 'create');
   const canUpdate = usePermission('laboratories', 'update');
   const [open, setOpen] = useState(false);
@@ -51,52 +64,57 @@ export function LaboratoriesPage() {
       toast('Nama dan kode laboratorium wajib diisi', 'error');
       return;
     }
-    mutate((d) => {
-      if (editing) {
+    if (editing) {
+      const safeEdits = { ...form };
+      delete safeEdits.pcCount;
+      delete safeEdits.layoutRows;
+      delete safeEdits.layoutCols;
+      mutate((d) => {
         const idx = d.labs.findIndex((l) => l.id === editing.id);
-        if (idx >= 0) d.labs[idx] = { ...d.labs[idx], ...form };
-      } else {
-        const id = `lab-${Date.now()}`;
-        d.labs.push({ ...form, id } as Laboratory);
-        // Generate devices for the new lab
-        const cols = form.layoutCols ?? 6;
-        const rows = form.layoutRows ?? 6;
-        const count = form.pcCount ?? cols * rows;
-        for (let i = 0; i < count; i++) {
-          const n = i + 1;
-          d.devices.push({
-            id: `dev-${form.code}-${String(n).padStart(2, '0')}`,
-            positionCode: `PC-${String(n).padStart(2, '0')}`,
-            hostname: `PC-${form.code}-${String(n).padStart(2, '0')}`,
-            laboratoryId: id,
-            assetCode: `AST-${form.code}-${String(n).padStart(3, '0')}`,
-            ipAddress: `10.10.99.${n}`,
-            macAddress: `02:00:99:${String(n).padStart(2, '0')}:${String(n + 1).padStart(2, '0')}:${String(n + 2).padStart(2, '0')}`,
-            serialNumber: `SN${form.code}${String(n).padStart(3, '0')}2026`,
-            brand: 'Dell',
-            model: 'OptiPlex 7090',
-            yearAcquired: 2026,
-            processor: 'Intel Core i5-11400',
-            ramGB: 16,
-            storageGB: 512,
-            gpu: 'Intel UHD Graphics 730',
-            monitor: 'Dell 24"',
-            os: 'Windows 11 Pro',
-            status: 'Offline',
-            cpuUsage: 0,
-            ramUsage: 0,
-            diskUsage: 40,
-            temperature: 45,
-            uptimeHours: 0,
-            network: 'Disconnected',
-            lastHeartbeat: new Date().toISOString(),
-            peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
-            col: (i % cols) + 1,
-            row: Math.floor(i / cols) + 1,
-          });
-        }
+        if (idx >= 0) d.labs[idx] = { ...d.labs[idx], ...safeEdits };
+      });
+    } else {
+      const id = `lab-${Date.now()}`;
+      const rows = form.layoutRows ?? 6;
+      const cols = form.layoutCols ?? 6;
+      const count = form.pcCount ?? 0;
+      const laboratory = { ...form, id, layoutRows: rows, layoutCols: cols, pcCount: count } as Laboratory;
+      const devices: Device[] = Array.from({ length: count }, (_, index) => {
+        const n = index + 1;
+        return {
+          id: `dev-${form.code}-${String(n).padStart(2, '0')}`,
+          positionCode: `PC-${String(n).padStart(2, '0')}`,
+          hostname: `PC-${form.code}-${String(n).padStart(2, '0')}`,
+          laboratoryId: id,
+          assetCode: `AST-${form.code}-${String(n).padStart(3, '0')}`,
+          ipAddress: `10.10.99.${n}`,
+          macAddress: `02:00:99:${String(n).padStart(2, '0')}:${String(n + 1).padStart(2, '0')}:${String(n + 2).padStart(2, '0')}`,
+          serialNumber: `SN${form.code}${String(n).padStart(3, '0')}2026`,
+          brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026, processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
+          gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro', status: 'Offline', cpuUsage: 0, ramUsage: 0,
+          diskUsage: 40, temperature: 45, uptimeHours: 0, network: 'Disconnected', lastHeartbeat: new Date().toISOString(),
+          peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
+        };
+      });
+      const created = createLaboratoryWithInitialLayout({
+        db,
+        laboratory,
+        devices,
+        createdAt: new Date().toISOString(),
+        layoutId: `layout:${id}:v1`,
+        actor: { name: user?.name ?? 'Admin', role: user?.role ?? 'Admin Lab', device: 'Web' },
+        auditId: uid('al'),
+      });
+      if (!created.ok) {
+        toast(created.error, 'error');
+        return;
       }
-    });
+      const saved = replaceDB(created.db);
+      if (!saved.ok) {
+        toast(saved.error, 'error');
+        return;
+      }
+    }
     toast(editing ? 'Laboratorium diperbarui' : 'Laboratorium ditambahkan', 'success');
     setOpen(false);
   }
@@ -109,10 +127,22 @@ export function LaboratoriesPage() {
   }
   function remove() {
     if (!confirmDel) return;
-    mutate((d) => {
-      d.labs = d.labs.filter((l) => l.id !== confirmDel.id);
-      d.devices = d.devices.filter((dv) => dv.laboratoryId !== confirmDel.id);
+    const result = deleteLaboratorySafely({
+      db,
+      laboratoryId: confirmDel.id,
+      deletedAt: new Date().toISOString(),
+      actor: { name: user?.name ?? 'Admin', role: user?.role ?? 'Admin Lab', device: 'Web' },
+      auditId: uid('al'),
     });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    const saved = replaceDB(result.db);
+    if (!saved.ok) {
+      toast(saved.error, 'error');
+      return;
+    }
     toast('Laboratorium dihapus', 'success');
     setConfirmDel(null);
   }
@@ -204,14 +234,15 @@ export function LaboratoriesPage() {
           <Input label="Kapasitas (orang)" type="number" value={form.capacity ?? 0} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} />
           <Input label="Kepala Lab" value={form.headName ?? ''} onChange={(e) => setForm({ ...form, headName: e.target.value })} />
           <Input label="Teknisi" value={form.technicianName ?? ''} onChange={(e) => setForm({ ...form, technicianName: e.target.value })} />
-          <Input label="Jumlah PC" type="number" value={form.pcCount ?? 0} onChange={(e) => setForm({ ...form, pcCount: Number(e.target.value) })} />
-          <Input label="Baris Denah" type="number" value={form.layoutRows ?? 6} onChange={(e) => setForm({ ...form, layoutRows: Number(e.target.value) })} />
-          <Input label="Kolom Denah" type="number" value={form.layoutCols ?? 6} onChange={(e) => setForm({ ...form, layoutCols: Number(e.target.value) })} />
+          <Input label="Jumlah PC" type="number" value={form.pcCount ?? 0} disabled={Boolean(editing)} onChange={(e) => setForm({ ...form, pcCount: Number(e.target.value) })} />
+          <Input label="Baris Denah" type="number" value={form.layoutRows ?? 6} disabled={Boolean(editing)} onChange={(e) => setForm({ ...form, layoutRows: Number(e.target.value) })} />
+          <Input label="Kolom Denah" type="number" value={form.layoutCols ?? 6} disabled={Boolean(editing)} onChange={(e) => setForm({ ...form, layoutCols: Number(e.target.value) })} />
+          {editing && <p className="sm:col-span-2 text-xs text-ink-muted">Jumlah PC dan ukuran denah tidak dapat diubah pada tahap ini. Perubahan struktur tersedia pada tahap editor berikutnya.</p>}
           <Select label="Status" value={form.status ?? 'active'} onChange={(e) => setForm({ ...form, status: e.target.value as Laboratory['status'] })} options={[{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]} />
         </div>
       </FormDialog>
 
-      <ConfirmDialog open={Boolean(confirmDel)} onClose={() => setConfirmDel(null)} onConfirm={remove} message={`Hapus laboratorium "${confirmDel?.name}"? Semua data PC di lab ini juga akan dihapus.`} confirmLabel="Hapus" />
+      <ConfirmDialog open={Boolean(confirmDel)} onClose={() => setConfirmDel(null)} onConfirm={remove} message={`Hapus laboratorium "${confirmDel?.name}"? Penghapusan hanya dapat dilakukan apabila tidak ada perangkat, jadwal, booking, jurnal, insiden, work order, maintenance, atau data terkait lainnya.`} confirmLabel="Hapus" />
     </div>
   );
 }
@@ -390,58 +421,104 @@ export function LaboratoryDetailPage() {
 export function LaboratoryLayoutPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { db, mutate } = useAppData();
+  const { db, replaceDB } = useAppData();
+  const user = useAuthStore((state) => state.user);
+  const canUpdate = usePermission('laboratories', 'update');
   const lab = db.labs.find((l) => l.id === id);
-  const [cols, setCols] = useState(lab?.layoutCols ?? 6);
+  const activeResult = useMemo(() => lab ? getActiveLaboratoryLayout(db, lab.id) : null, [db, lab]);
+  const activeLayout = activeResult?.ok ? activeResult.layout : null;
+  const activeKey = activeLayout ? `${activeLayout.updatedAt}:${layoutFingerprint(activeLayout)}` : '';
+  const [baseline, setBaseline] = useState<LaboratoryLayout | null>(null);
+  const [draft, setDraft] = useState<LaboratoryLayout | null>(null);
+  const [saving, setSaving] = useState(false);
+  const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
+  const blocker = useBlocker(dirty);
+
+  useEffect(() => {
+    if (activeLayout && !dirty) {
+      setBaseline(cloneLaboratoryLayout(activeLayout));
+      setDraft(cloneLaboratoryLayout(activeLayout));
+    }
+  }, [activeKey, activeLayout, dirty]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [dirty]);
 
   if (!lab) return <EmptyState title="Laboratorium tidak ditemukan" action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
-
+  if (!activeResult?.ok || !baseline || !draft) {
+    return <EmptyState title="Denah aktif tidak dapat dimuat" description={activeResult?.ok ? 'Menyiapkan denah...' : activeResult?.error ?? 'Data denah tidak valid.'} action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
+  }
   const currentLab = lab;
-  const devices = db.devices.filter((d) => d.laboratoryId === currentLab.id);
-
-  function moveDevice(device: Device, newCol: number, newRow: number) {
-    mutate((d) => {
-      const idx = d.devices.findIndex((x) => x.id === device.id);
-      if (idx >= 0) {
-        d.devices[idx].col = newCol;
-        d.devices[idx].row = newRow;
-      }
-    });
-  }
-
-  function addElement(type: 'teacher' | 'projector' | 'printer' | 'switch' | 'ap') {
-    toast(`Elemen ${type} ditambahkan ke denah (demo)`, 'info');
-  }
-
-  function resetLayout() {
-    mutate((d) => {
-      d.devices.filter((x) => x.laboratoryId === currentLab.id).forEach((dev, i) => {
-        const idx = d.devices.findIndex((x) => x.id === dev.id);
-        d.devices[idx].col = (i % cols) + 1;
-        d.devices[idx].row = Math.floor(i / cols) + 1;
-      });
-    });
-    toast('Denah direset ke posisi default', 'success');
-  }
-
-  const grid = Array.from({ length: currentLab.layoutRows * cols }, (_, i) => {
-    const col = (i % cols) + 1;
-    const row = Math.floor(i / cols) + 1;
-    return devices.find((d) => d.col === col && d.row === row) ?? null;
+  const baselineLayout = baseline;
+  const draftLayout = draft;
+  const cols = draft.columns;
+  const devices = db.devices.filter((device) => device.laboratoryId === currentLab.id);
+  const grid = Array.from({ length: draft.rows * cols }, (_, index) => {
+    const col = (index % cols) + 1;
+    const row = Math.floor(index / cols) + 1;
+    return draft.elements.find((element) => element.row === row && element.column === col) ?? null;
   });
+
+  function moveElement(sourceElementId: string, column: number, row: number) {
+    if (!canUpdate) return;
+    const result = moveLayoutElement(draftLayout, sourceElementId, { row, column }, { updatedAt: new Date().toISOString() });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    if (result.operation !== 'noop') setDraft(result.layout);
+  }
+
+  function cancelChanges() {
+    setDraft(cloneLaboratoryLayout(baselineLayout));
+  }
+
+  function saveChanges() {
+    if (!canUpdate || !dirty || saving) return;
+    setSaving(true);
+    const result = saveActiveLaboratoryLayout({
+      db, laboratoryId: currentLab.id, draft: draftLayout,
+      actor: { name: user?.name ?? 'Admin', role: user?.role ?? 'Admin Lab', device: 'Web' },
+      savedAt: new Date().toISOString(), auditId: uid('al'),
+    });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      setSaving(false);
+      return;
+    }
+    if (result.changed) {
+      const persisted = replaceDB(result.db);
+      if (!persisted.ok) {
+        toast(persisted.error, 'error');
+        setSaving(false);
+        return;
+      }
+      toast('Denah berhasil disimpan', 'success');
+    }
+    setBaseline(cloneLaboratoryLayout(result.layout));
+    setDraft(cloneLaboratoryLayout(result.layout));
+    setSaving(false);
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Denah ${currentLab.name}`}
-        description="Editor tata letak laboratorium - drag PC ke posisi yang diinginkan"
+        description="Editor tata letak laboratorium. Posisi perangkat disimpan setelah Anda menekan Simpan."
         icon={<MapIcon className="h-5 w-5" />}
         actions={
-          <>
-            <Select value={String(cols)} onChange={(e) => setCols(Number(e.target.value))} options={[4, 5, 6, 7, 8].map((n) => ({ value: String(n), label: `${n} kolom` }))} />
-            <Button variant="secondary" size="sm" onClick={resetLayout}>Reset</Button>
-            <Button size="sm" onClick={() => toast('Denah disimpan', 'success')}>Simpan</Button>
-          </>
+          <div className="flex items-center gap-2">
+            <Badge tone={!canUpdate ? 'muted' : dirty ? 'warning' : 'success'}>{!canUpdate ? 'Mode hanya baca' : dirty ? 'Perubahan belum disimpan' : 'Tersimpan'}</Badge>
+            {canUpdate && <Button variant="secondary" size="sm" disabled={!dirty || saving} onClick={cancelChanges}>Batalkan Perubahan</Button>}
+            {canUpdate && <Button size="sm" disabled={!dirty || saving} loading={saving} onClick={saveChanges}>Simpan</Button>}
+          </div>
         }
       />
 
@@ -457,34 +534,36 @@ export function LaboratoryLayoutPage() {
             </div>
             <div className="overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-                {grid.map((device, i) => {
+                {grid.map((element, i) => {
                   const col = (i % cols) + 1;
                   const row = Math.floor(i / cols) + 1;
+                  const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
+                  const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
                   return (
                     <div
-                      key={i}
+                      key={element?.id ?? `${row}:${col}`}
+                      style={element ? { gridRow: `${element.row} / span ${element.rowSpan}`, gridColumn: `${element.column} / span ${element.columnSpan}` } : undefined}
                       className="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-base-700 bg-base-800/40"
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e) => { if (canUpdate) e.preventDefault(); }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        const devId = e.dataTransfer.getData('text/plain');
-                        const dev = devices.find((d) => d.id === devId);
-                        if (dev) moveDevice(dev, col, row);
+                        if (element) moveElement(e.dataTransfer.getData('text/plain'), col, row);
                       }}
                     >
-                      {device && (
+                      {isPc && device ? (
                         <div
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData('text/plain', device.id)}
+                          draggable={canUpdate && Boolean(element?.movable)}
+                          onDragStart={(e) => e.dataTransfer.setData('text/plain', element!.id)}
                           className={cn(
-                            'flex h-full w-full cursor-grab flex-col items-center justify-center rounded-lg border-2 transition-colors active:cursor-grabbing',
+                            'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
+                            canUpdate && element?.movable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
                             device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground'
                           )}
                         >
                           <Monitor className="h-5 w-5" />
                           <span className="mt-1 text-[10px] font-semibold">{device.positionCode}</span>
                         </div>
-                      )}
+                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
                     </div>
                   );
                 })}
@@ -494,32 +573,29 @@ export function LaboratoryLayoutPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Tambah Elemen</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Status Denah</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {[
-              { type: 'teacher' as const, label: 'Meja Guru', icon: <Users className="h-4 w-4" /> },
-              { type: 'projector' as const, label: 'Proyektor', icon: <Monitor className="h-4 w-4" /> },
-              { type: 'printer' as const, label: 'Printer', icon: <Monitor className="h-4 w-4" /> },
-              { type: 'switch' as const, label: 'Switch', icon: <Monitor className="h-4 w-4" /> },
-              { type: 'ap' as const, label: 'Access Point', icon: <Monitor className="h-4 w-4" /> },
-            ].map((el) => (
-              <button key={el.type} onClick={() => addElement(el.type)} className="flex w-full items-center gap-2 rounded-lg border border-base-700 bg-base-800/60 p-3 text-left text-sm text-ink-secondary transition-colors hover:border-accent-content/50 hover:bg-base-700/40">
-                {el.icon}
-                {el.label}
-                <Plus className="ml-auto h-4 w-4 text-ink-muted" />
-              </button>
-            ))}
-            <div className="border-t border-base-700 pt-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Statistik</p>
-              <div className="space-y-1 text-xs text-ink-muted">
-                <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{devices.length}</span></div>
-                <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{devices.filter((d) => d.status === 'Online').length}</span></div>
-                <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{devices.filter((d) => ['Warning', 'Critical', 'Offline'].includes(d.status)).length}</span></div>
-              </div>
+            <div className="space-y-1 text-xs text-ink-muted">
+              <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{draft.elements.filter((element) => element.type === 'student_pc' || element.type === 'teacher_pc').length}</span></div>
+              <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{draft.elements.filter((element) => element.referenceId && devices.find((device) => device.id === element.referenceId)?.status === 'Online').length}</span></div>
+              <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{draft.elements.filter((element) => element.referenceId && ['Warning', 'Critical', 'Offline'].includes(devices.find((device) => device.id === element.referenceId)?.status ?? '')).length}</span></div>
             </div>
+            <p className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">Template, pengubahan ukuran grid, furniture, dan elemen infrastruktur akan tersedia pada Stage 4.</p>
           </CardContent>
         </Card>
       </div>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => {
+          cancelChanges();
+          blocker.proceed?.();
+        }}
+        title="Buang perubahan denah?"
+        message="Perubahan denah belum disimpan. Buang perubahan dan lanjutkan ke halaman lain?"
+        confirmLabel="Buang perubahan dan lanjutkan"
+        cancelLabel="Tetap di halaman"
+      />
     </div>
   );
 }

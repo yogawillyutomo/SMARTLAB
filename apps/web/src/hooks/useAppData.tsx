@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { loadDB, normalizeDB, saveDB, type AppDB } from '@/lib/db';
-import { generateSeedData } from '@/data/seed';
+import { loadDB, normalizeDB, resetDB, saveDB, type AppDB, type DatabaseSaveResult } from '@/lib/db';
 
 interface AppDataCtx {
   db: AppDB;
   ready: boolean;
   refresh: () => void;
   mutate: (fn: (db: AppDB) => void) => void;
+  replaceDB: (next: AppDB) => DatabaseSaveResult;
   reset: () => void;
   importDB: (raw: string) => boolean;
   exportDB: () => string;
@@ -28,24 +28,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const mutate = useCallback((fn: (d: AppDB) => void) => {
     const next = loadDB();
     fn(next);
-    saveDB(next);
-    setDb({ ...next });
+    const saved = saveDB(next);
+    if (!saved.ok) throw new Error(saved.error);
+    setDb({ ...saved.db });
+  }, []);
+
+  const replaceDB = useCallback((next: AppDB): DatabaseSaveResult => {
+    const saved = saveDB(next);
+    if (saved.ok) setDb({ ...saved.db });
+    return saved;
   }, []);
 
   const reset = useCallback(() => {
-    const seed = generateSeedData();
-    saveDB(seed);
-    setDb({ ...seed });
+    setDb({ ...resetDB() });
   }, []);
 
   const importDB = useCallback((raw: string) => {
     try {
-      const parsed = JSON.parse(raw) as AppDB;
-      if (!parsed || typeof parsed !== 'object') return false;
-      if (!parsed.labs || !parsed.devices) return false;
+      const parsed: unknown = JSON.parse(raw);
       const normalized = normalizeDB(parsed);
-      saveDB(normalized);
-      setDb({ ...normalized });
+      if (!normalized.ok) return false;
+      const saved = saveDB(normalized.db);
+      if (!saved.ok) return false;
+      setDb({ ...saved.db });
       return true;
     } catch {
       return false;
@@ -54,7 +59,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const exportDB = useCallback(() => JSON.stringify(db, null, 2), [db]);
 
-  const value = useMemo<AppDataCtx>(() => ({ db, ready, refresh, mutate, reset, importDB, exportDB }), [db, ready, refresh, mutate, reset, importDB, exportDB]);
+  const value = useMemo<AppDataCtx>(() => ({ db, ready, refresh, mutate, replaceDB, reset, importDB, exportDB }), [db, ready, refresh, mutate, replaceDB, reset, importDB, exportDB]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -38,4 +38,20 @@ Validation returns structured issues rather than throwing for ordinary invalid d
 
 `inspectLaboratoryDependencies` returns a complete zero-inclusive count record for every current laboratory-bound collection and a `canHardDelete` decision. It is not integrated with the existing deletion UI in PR 3A.
 
-PR 3B can introduce persistence, migration execution, UI/editor integration, authorization, audit, and atomic save behavior after this pure engine and its contract are reviewed.
+Stage 3B introduces persistence, migration execution, UI/editor integration, authorization checks, audit, and atomic save behavior on top of the reviewed pure engine.
+
+## Stage 3B persistence integration
+
+Stage 3B introduces schema version 2 inside the single AppDB/localStorage blob. `SeedData` now contains `schemaVersion: 2` and `layouts: LaboratoryLayout[]`. Fresh and reset data create one deterministic, active `grid-classic` layout per laboratory. Every cell is represented, device elements reference stable device IDs, and all remaining cells are explicit `empty` elements.
+
+After Stage 3B, LaboratoryLayout is the persisted source of truth for laboratory coordinates. Device records no longer store row or col.
+
+Old backups without `schemaVersion` are treated as version 1. Normalization migrates every laboratory through `migrateLegacyDeviceCoordinates` using an injected timestamp, strips legacy device coordinates, and validates the complete result before writing it. The migration is all-or-nothing: malformed dimensions, missing or duplicate coordinates, invalid generated layouts, or broken layout/device references preserve the original raw localStorage value. A validated seed is used only in memory for that session, so the original backup remains recoverable. Valid version-2 data is idempotent: it keeps element ordering and timestamps unchanged and is not rewritten unless normalization made a real change.
+
+Persisted integrity verifies individual layout validity, an existing laboratory owner, matching grid dimensions, exactly one active layout per laboratory, and one same-laboratory PC reference per device in each active layout. It rejects stale Device `row`/`col` properties, orphan layouts, missing device references, and duplicated or missing active-layout device references.
+
+The layout editor holds a separate persisted baseline and editable draft. Drag/drop runs the pure move/swap engine against the draft only. Save replaces the active layout atomically with one audit log; a business-equivalent no-op does not update timestamps, add an audit log, or write storage. Cancel restores the baseline without persistence. Dirty comparison canonicalizes element positions and flags, ignores `updatedAt`, protects browser unload, and uses the React Router data-router blocker for internal navigation.
+
+Laboratory creation atomically creates its devices and active complete layout. Existing laboratory forms keep PC count and dimensions read-only in Stage 3B. Deletion consults the complete dependency inspector at confirmation time; when dependencies exist it leaves the laboratory, devices, and layout untouched. Import/export always uses normalized version-2 data, and failed imports never replace the active database.
+
+Stage 4 remains responsible for grid resizing, multiple templates, non-PC element tools, layout publishing/version history, and richer editor controls.
