@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { toast } from '@/stores/toastStore';
-import { clearAllStorage, downloadJSON } from '@/utils';
+import { downloadJSON } from '@/utils';
 import { cn } from '@/utils';
+import { canClearAllStorage, clearAllStorageIfAllowed } from '@/lib/storageRecovery';
 
 const TABS = [
   { key: 'general', label: 'Umum', icon: SettingsIcon },
@@ -51,7 +52,7 @@ export function SettingsPage() {
   function handleClear() {
     if (!canManage) return;
     if (recovery) { toast('Database asli sedang dipertahankan. Gunakan impor backup valid atau Reset Data Demo.', 'error'); return; }
-    clearAllStorage();
+    if (!clearAllStorageIfAllowed(Boolean(recovery))) return;
     toast('Semua data lokal dihapus', 'success');
     setConfirmClear(false);
     setTimeout(() => window.location.reload(), 500);
@@ -195,7 +196,7 @@ export function SettingsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2 pt-2">
                     <Button variant="warning" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setConfirmReset(true)} disabled={!canManage}>Reset Data Demo</Button>
-                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)} disabled={!canManage || Boolean(recovery)}>Hapus Semua Data</Button>
+                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)} disabled={!canManage || !canClearAllStorage(Boolean(recovery))}>Hapus Semua Data</Button>
                   </div>
                   {recovery && <p className="text-xs text-warning-foreground">Pemulihan aktif: database asli hanya dapat diganti melalui impor backup valid atau Reset Data Demo.</p>}
                 </CardContent>

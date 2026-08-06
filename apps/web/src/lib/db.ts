@@ -41,6 +41,14 @@ export function loadDB(): DatabaseLoadResult {
   if (normalized.changed) {
     const saved = persistDB(normalized.db, { writeVersion: true, allowRecoveryReplace: true });
     if (!saved.ok) return { ok: false, db: normalized.db, mode: 'recovery', issues: saved.issues, rawPreserved: true };
+    return {
+      ok: true,
+      db: saved.db,
+      mode: 'persisted',
+      migrated: normalized.migratedFromVersion !== null,
+      warnings: saved.warnings,
+      versionWriteOk: saved.versionWriteOk,
+    };
   } else {
     const version = readStoredVersion();
     if (!version.ok) return { ok: true, db: normalized.db, mode: 'persisted', migrated: false, warnings: ['Versi penyimpanan tidak dapat dibaca.'], versionWriteOk: false };

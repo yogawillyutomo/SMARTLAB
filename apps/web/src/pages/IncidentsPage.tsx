@@ -15,6 +15,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, relativeTime } from '@/utils';
+import { mutationSucceeded } from '@/lib/mutationOutcome';
 import type { Incident, IncidentCategory, Priority } from '@/types';
 
 const CATEGORIES: IncidentCategory[] = ['hardware', 'software', 'jaringan', 'listrik', 'periferal', 'fasilitas', 'kebersihan', 'keamanan', 'lainnya'];
@@ -88,7 +89,7 @@ export function IncidentsPage() {
         status: 'Dilaporkan', comments: [], timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: form.reporterName ?? 'User' }],
       });
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast('Tiket kerusakan dibuat', 'success');
     setOpen(false);
   }

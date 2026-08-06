@@ -36,6 +36,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { cn, relativeTime } from '@/utils';
+import { mutationSucceeded, runHeartbeat } from '@/lib/mutationOutcome';
 import type { Asset, Device, DeviceStatus, Incident, MaintenanceExecution } from '@/types';
 
 const STATUS_FILTERS: (DeviceStatus | 'all')[] = ['all', 'Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
@@ -89,10 +90,9 @@ export function MonitoringPage() {
 
   async function handleSimulate() {
     if (!canUpdateMonitoring) return;
-    setSimulating(true);
-    try { await deviceRepository.simulateHeartbeat(selectedLab); refresh(); toast('Heartbeat disimulasikan. Metrik PC online diperbarui.', 'success'); }
-    catch (error) { toast(error instanceof Error ? error.message : 'Heartbeat tidak dapat disimulasikan.', 'error'); }
-    finally { setSimulating(false); }
+    const outcome = await runHeartbeat(() => deviceRepository.simulateHeartbeat(selectedLab), setSimulating);
+    if (outcome.ok) { refresh(); toast('Heartbeat disimulasikan. Metrik PC online diperbarui.', 'success'); }
+    else { toast(outcome.error instanceof Error ? outcome.error.message : 'Heartbeat tidak dapat disimulasikan.', 'error'); }
   }
 
   function handleStatusChange(device: Device, newStatus: DeviceStatus) {
@@ -113,7 +113,7 @@ export function MonitoringPage() {
         }
       }
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     setSelected((s) => (s && s.id === device.id ? { ...s, status: newStatus } : s));
     toast(`Status ${device.hostname} diubah menjadi ${newStatus}`, 'success');
   }
@@ -141,7 +141,7 @@ export function MonitoringPage() {
         timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: user?.name ?? 'User' }],
       });
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(`Tiket kerusakan dibuat untuk ${device.hostname}`, 'success');
     setSelected(null);
   }
@@ -161,7 +161,7 @@ export function MonitoringPage() {
         status: 'active',
       });
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(`Pemeliharaan terjadwal untuk ${device.hostname}`, 'success');
   }
 

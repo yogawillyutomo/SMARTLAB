@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV } from '@/utils';
+import { mutationSucceeded } from '@/lib/mutationOutcome';
 import type { MaintenancePlan, MaintenanceExecution, MaintenanceFrequency, AssetCondition } from '@/types';
 
 const FREQS: MaintenanceFrequency[] = ['mingguan', 'bulanan', 'tiga bulanan', 'semester', 'tahunan', 'custom'];
@@ -63,7 +64,7 @@ export function MaintenancePage() {
         d.maintenance.plans.push({ ...form, id: `mp-${Date.now()}` } as MaintenancePlan);
       }
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(editing ? 'Rencana diperbarui' : 'Rencana ditambahkan', 'success');
     setOpen(false);
   }
@@ -71,7 +72,7 @@ export function MaintenancePage() {
   function remove() {
     if (!confirmDel || !canDelete) return;
     const result = mutate((d) => { d.maintenance.plans = d.maintenance.plans.filter((p) => p.id !== confirmDel.id); });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast('Rencana dihapus', 'success');
     setConfirmDel(null);
   }
@@ -92,7 +93,7 @@ export function MaintenancePage() {
         if (idx >= 0) d.maintenance.plans[idx].nextSchedule = execForm.nextSchedule ?? '';
       }
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast('Eksekusi pemeliharaan tersimpan', 'success');
     setExecOpen(false);
   }
