@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSeedData } from '@/data/seed';
 import { loadDB } from '@/lib/db';
 import { normalizeDatabase } from '@/lib/dbMigrations';
-import { STORAGE_KEYS } from '@/lib/storage';
+import { STORAGE_KEYS, readStorageJSON } from '@/lib/storage';
 import {
   cloneLaboratoryLayout,
   createInitialLaboratoryDevices,
@@ -342,5 +342,13 @@ describe('layout persistence integration', () => {
     const normalized = normalizeDatabase(unknown, { migratedAt: MIGRATED_AT });
     if (!normalized.ok) throw new Error('expected canonical success');
     expect(normalized.db).not.toHaveProperty('unexpected');
+  });
+
+  it('distinguishes missing, parsed, malformed, and failed database storage reads', () => {
+    expect(readStorageJSON('db')).toMatchObject({ ok: true, status: 'missing', value: null });
+    storage.setItem('smartlab_pplg_db', '{"valid":true}');
+    expect(readStorageJSON<{ valid: boolean }>('db')).toMatchObject({ ok: true, status: 'parsed', value: { valid: true } });
+    storage.setItem('smartlab_pplg_db', '{broken');
+    expect(readStorageJSON('db')).toMatchObject({ ok: false, status: 'malformed', raw: '{broken' });
   });
 });

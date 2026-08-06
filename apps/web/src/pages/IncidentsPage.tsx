@@ -79,7 +79,7 @@ export function IncidentsPage() {
     if (dup) {
       toast(`Kemungkinan duplikat: ${dup.ticketNumber} sudah ada dengan judul sama`, 'info');
     }
-    mutate((d) => {
+    const result = mutate((d) => {
       const num = `INC-2026-${String(d.incidents.length + 1).padStart(4, '0')}`;
       d.incidents.unshift({
         id: `inc-${Date.now()}`, ticketNumber: num, reporterName: form.reporterName ?? '', laboratoryId: form.laboratoryId ?? '', assetCode: form.assetCode,
@@ -88,6 +88,7 @@ export function IncidentsPage() {
         status: 'Dilaporkan', comments: [], timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: form.reporterName ?? 'User' }],
       });
     });
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast('Tiket kerusakan dibuat', 'success');
     setOpen(false);
   }

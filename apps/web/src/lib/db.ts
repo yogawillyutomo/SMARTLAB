@@ -1,7 +1,7 @@
 import { generateSeedData, type SeedData } from '@/data/seed';
 import { normalizeDatabase, type DatabaseMigrationIssue, type DatabaseNormalizationResult } from './dbMigrations';
 import { CURRENT_STORAGE_VERSION } from './dbSchema';
-import { STORAGE_KEYS, getStoredVersion, readStorageJSON, setStoredVersion, writeStorage } from './storage';
+import { STORAGE_KEYS, readStorageJSON, readStoredVersion, setStoredVersion, writeStorage } from './storage';
 
 export type AppDB = SeedData;
 export type { DatabaseMigrationIssue } from './dbMigrations';
@@ -10,7 +10,7 @@ export type DatabaseSaveResult =
   | { ok: true; db: AppDB; versionWriteOk: boolean; warnings: string[] }
   | { ok: false; error: string; issues: DatabaseMigrationIssue[]; storageError?: unknown };
 export type DatabaseLoadResult =
-  | { ok: true; db: AppDB; mode: 'persisted'; migrated: boolean }
+  | { ok: true; db: AppDB; mode: 'persisted'; migrated: boolean; warnings: string[]; versionWriteOk: boolean }
   | { ok: false; db: AppDB; mode: 'recovery'; issues: DatabaseMigrationIssue[]; rawPreserved: true };
 
 const DB_KEY = 'db';
@@ -31,7 +31,7 @@ export function loadDB(): DatabaseLoadResult {
     const db = generateSeedData();
     const saved = persistDB(db, { writeVersion: true, allowRecoveryReplace: true });
     if (!saved.ok) throw new Error(saved.error);
-    return { ok: true, db: saved.db, mode: 'persisted', migrated: false };
+    return { ok: true, db: saved.db, mode: 'persisted', migrated: false, warnings: saved.warnings, versionWriteOk: saved.versionWriteOk };
   }
   const normalized = normalizeDB(stored.value);
   if (!normalized.ok) {
@@ -41,10 +41,15 @@ export function loadDB(): DatabaseLoadResult {
   if (normalized.changed) {
     const saved = persistDB(normalized.db, { writeVersion: true, allowRecoveryReplace: true });
     if (!saved.ok) return { ok: false, db: normalized.db, mode: 'recovery', issues: saved.issues, rawPreserved: true };
-  } else if (getStoredVersion() !== CURRENT_STORAGE_VERSION) {
-    setStoredVersion();
+  } else {
+    const version = readStoredVersion();
+    if (!version.ok) return { ok: true, db: normalized.db, mode: 'persisted', migrated: false, warnings: ['Versi penyimpanan tidak dapat dibaca.'], versionWriteOk: false };
+    if (version.value !== CURRENT_STORAGE_VERSION) {
+      const repaired = setStoredVersion();
+      return { ok: true, db: normalized.db, mode: 'persisted', migrated: false, warnings: repaired.ok ? [] : ['Versi penyimpanan tidak dapat diperbarui.'], versionWriteOk: repaired.ok };
+    }
   }
-  return { ok: true, db: normalized.db, mode: 'persisted', migrated: normalized.migratedFromVersion !== null };
+  return { ok: true, db: normalized.db, mode: 'persisted', migrated: normalized.migratedFromVersion !== null, warnings: [], versionWriteOk: true };
 }
 
 function rawIsRecovery(): DatabaseMigrationIssue[] | null {
@@ -85,5 +90,5 @@ export function updateDB(mutator: (db: AppDB) => void): AppDB {
   if (!saved.ok) throw new Error(saved.error);
   return saved.db;
 }
-export { STORAGE_KEYS, getStoredVersion, setStoredVersion };
+export { STORAGE_KEYS, readStoredVersion, setStoredVersion };
 export function delay(ms = 250): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }

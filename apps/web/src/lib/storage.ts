@@ -20,6 +20,10 @@ export type StorageReadResult<T> =
   | { ok: true; status: 'parsed'; raw: string; value: T }
   | { ok: false; status: 'malformed'; raw: string; error: unknown }
   | { ok: false; status: 'read-failed'; raw: null; error: unknown };
+export type StorageTextReadResult =
+  | { ok: true; status: 'missing'; value: null }
+  | { ok: true; status: 'present'; value: string }
+  | { ok: false; status: 'read-failed'; error: unknown };
 
 export function readStorageJSON<T>(key: string): StorageReadResult<T> {
   try {
@@ -28,6 +32,11 @@ export function readStorageJSON<T>(key: string): StorageReadResult<T> {
     try { return { ok: true, status: 'parsed', raw, value: JSON.parse(raw) as T }; }
     catch (error) { return { ok: false, status: 'malformed', raw, error }; }
   } catch (error) { return { ok: false, status: 'read-failed', raw: null, error }; }
+}
+
+export function readStoredVersion(): StorageTextReadResult {
+  try { const value = localStorage.getItem(VERSION_KEY); return value === null ? { ok: true, status: 'missing', value: null } : { ok: true, status: 'present', value }; }
+  catch (error) { return { ok: false, status: 'read-failed', error }; }
 }
 
 function writeToStorage<T>(storage: Storage, key: string, value: T): StorageWriteResult {
@@ -78,7 +87,8 @@ export function clearAllStorage(): void {
 }
 
 export function getStoredVersion(): string | null {
-  return localStorage.getItem(VERSION_KEY);
+  const result = readStoredVersion();
+  return result.ok ? result.value : null;
 }
 
 export function setStoredVersion(): StorageWriteResult {
