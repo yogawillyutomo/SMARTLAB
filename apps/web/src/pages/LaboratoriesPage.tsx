@@ -69,10 +69,11 @@ export function LaboratoriesPage() {
       delete safeEdits.pcCount;
       delete safeEdits.layoutRows;
       delete safeEdits.layoutCols;
-      mutate((d) => {
+      const result = mutate((d) => {
         const idx = d.labs.findIndex((l) => l.id === editing.id);
         if (idx >= 0) d.labs[idx] = { ...d.labs[idx], ...safeEdits };
       });
+      if (!result.ok) { toast(result.error, 'error'); return; }
     } else {
       const id = `lab-${Date.now()}`;
       const rows = form.layoutRows ?? 6;
@@ -119,10 +120,11 @@ export function LaboratoriesPage() {
     setOpen(false);
   }
   function toggleStatus(lab: Laboratory) {
-    mutate((d) => {
+    const result = mutate((d) => {
       const idx = d.labs.findIndex((l) => l.id === lab.id);
       if (idx >= 0) d.labs[idx].status = d.labs[idx].status === 'active' ? 'inactive' : 'active';
     });
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast(`Laboratorium ${lab.status === 'active' ? 'dinonaktifkan' : 'diaktifkan'}`, 'success');
   }
   function remove() {
@@ -134,10 +136,7 @@ export function LaboratoriesPage() {
       actor: { name: user?.name ?? 'Admin', role: user?.role ?? 'Admin Lab', device: 'Web' },
       auditId: uid('al'),
     });
-    if (!result.ok) {
-      toast(result.error, 'error');
-      return;
-    }
+    if (!result.ok) { toast(result.error, 'error'); return; }
     const saved = replaceDB(result.db);
     if (!saved.ok) {
       toast(saved.error, 'error');

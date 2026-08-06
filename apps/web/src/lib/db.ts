@@ -1,7 +1,7 @@
 import { generateSeedData, type SeedData } from '@/data/seed';
 import { normalizeDatabase, type DatabaseMigrationIssue, type DatabaseNormalizationResult } from './dbMigrations';
 import { CURRENT_STORAGE_VERSION } from './dbSchema';
-import { STORAGE_KEYS, getStoredVersion, readStorage, setStoredVersion, writeStorage } from './storage';
+import { STORAGE_KEYS, getStoredVersion, readStorageJSON, setStoredVersion, writeStorage } from './storage';
 
 export type AppDB = SeedData;
 export type { DatabaseMigrationIssue } from './dbMigrations';
@@ -22,14 +22,18 @@ export function normalizeDB(value: unknown, migratedAt = currentTimestamp()): Da
 }
 
 export function loadDB(): DatabaseLoadResult {
-  const existing = readStorage<unknown>(DB_KEY, null);
-  if (existing === null) {
+  const stored = readStorageJSON<unknown>(DB_KEY);
+  if (!stored.ok) {
+    const issue: DatabaseMigrationIssue = { code: 'malformed-storage-json', message: stored.status === 'malformed' ? 'Database lokal tidak dapat dibaca karena JSON rusak.' : 'Penyimpanan browser tidak dapat dibaca.', path: 'smartlab_pplg_db' };
+    return { ok: false, db: generateSeedData(), mode: 'recovery', issues: [issue], rawPreserved: true };
+  }
+  if (stored.status === 'missing') {
     const db = generateSeedData();
     const saved = persistDB(db, { writeVersion: true, allowRecoveryReplace: true });
     if (!saved.ok) throw new Error(saved.error);
     return { ok: true, db: saved.db, mode: 'persisted', migrated: false };
   }
-  const normalized = normalizeDB(existing);
+  const normalized = normalizeDB(stored.value);
   if (!normalized.ok) {
     console.error('Migrasi database SmartLab gagal. Data localStorage asli dipertahankan.', normalized.issues);
     return { ok: false, db: generateSeedData(), mode: 'recovery', issues: normalized.issues, rawPreserved: true };
@@ -44,9 +48,10 @@ export function loadDB(): DatabaseLoadResult {
 }
 
 function rawIsRecovery(): DatabaseMigrationIssue[] | null {
-  const raw = readStorage<unknown>(DB_KEY, null);
-  if (raw === null) return null;
-  const normalized = normalizeDB(raw);
+  const stored = readStorageJSON<unknown>(DB_KEY);
+  if (!stored.ok) return [{ code: 'malformed-storage-json', message: stored.status === 'malformed' ? 'Database lokal tidak dapat dibaca karena JSON rusak.' : 'Penyimpanan browser tidak dapat dibaca.', path: 'smartlab_pplg_db' }];
+  if (stored.status === 'missing') return null;
+  const normalized = normalizeDB(stored.value);
   return normalized.ok ? null : normalized.issues;
 }
 

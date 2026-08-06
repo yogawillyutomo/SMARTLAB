@@ -15,6 +15,20 @@ function readFromStorage<T>(storage: Storage, key: string, fallback: T): T {
 }
 
 export type StorageWriteResult = { ok: true } | { ok: false; error: unknown };
+export type StorageReadResult<T> =
+  | { ok: true; status: 'missing'; raw: null; value: null }
+  | { ok: true; status: 'parsed'; raw: string; value: T }
+  | { ok: false; status: 'malformed'; raw: string; error: unknown }
+  | { ok: false; status: 'read-failed'; raw: null; error: unknown };
+
+export function readStorageJSON<T>(key: string): StorageReadResult<T> {
+  try {
+    const raw = localStorage.getItem(`${PREFIX}${key}`);
+    if (raw === null) return { ok: true, status: 'missing', raw: null, value: null };
+    try { return { ok: true, status: 'parsed', raw, value: JSON.parse(raw) as T }; }
+    catch (error) { return { ok: false, status: 'malformed', raw, error }; }
+  } catch (error) { return { ok: false, status: 'read-failed', raw: null, error }; }
+}
 
 function writeToStorage<T>(storage: Storage, key: string, value: T): StorageWriteResult {
   try {

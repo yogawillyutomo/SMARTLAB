@@ -29,7 +29,7 @@ const ACCENT_OPTIONS: AccentOption[] = [
 ];
 
 export function SettingsPage() {
-  const { db, reset, exportDB, importDB } = useAppData();
+  const { db, recovery, reset, exportDB, importDB } = useAppData();
   const canUpdate = usePermission('settings', 'update');
   const canManage = usePermission('settings', 'manage');
   const { theme, setTheme, accent, setAccent, compactTable, setCompactTable, academicYear, setAcademicYear, semester, setSemester } = useUIStore();
@@ -50,6 +50,7 @@ export function SettingsPage() {
 
   function handleClear() {
     if (!canManage) return;
+    if (recovery) { toast('Database asli sedang dipertahankan. Gunakan impor backup valid atau Reset Data Demo.', 'error'); return; }
     clearAllStorage();
     toast('Semua data lokal dihapus', 'success');
     setConfirmClear(false);
@@ -194,8 +195,9 @@ export function SettingsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2 pt-2">
                     <Button variant="warning" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setConfirmReset(true)} disabled={!canManage}>Reset Data Demo</Button>
-                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)} disabled={!canManage}>Hapus Semua Data</Button>
+                    <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmClear(true)} disabled={!canManage || Boolean(recovery)}>Hapus Semua Data</Button>
                   </div>
+                  {recovery && <p className="text-xs text-warning-foreground">Pemulihan aktif: database asli hanya dapat diganti melalui impor backup valid atau Reset Data Demo.</p>}
                 </CardContent>
               </Card>
             </>

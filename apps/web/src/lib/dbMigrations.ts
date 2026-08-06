@@ -6,6 +6,7 @@ import { CURRENT_DB_SCHEMA_VERSION } from './dbSchema';
 
 export type DatabaseMigrationIssueCode =
   | 'invalid-database'
+  | 'malformed-storage-json'
   | 'missing-collection'
   | 'invalid-collection'
   | 'invalid-nested-collection'

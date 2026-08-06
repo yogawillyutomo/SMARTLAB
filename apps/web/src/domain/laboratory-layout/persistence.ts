@@ -19,7 +19,10 @@ export type PersistedLayoutIntegrityIssueCode =
   | 'duplicate-device-id'
   | 'duplicate-laboratory-id'
   | 'duplicate-layout-id'
-  | 'orphan-device-laboratory';
+  | 'orphan-device-laboratory'
+  | 'invalid-laboratory-id'
+  | 'invalid-layout-id'
+  | 'invalid-device-id';
 
 export interface PersistedLayoutIntegrityIssue {
   code: PersistedLayoutIntegrityIssueCode;
@@ -298,8 +301,15 @@ export function createLaboratoryWithInitialLayout(input: CreateLaboratoryWithIni
   if (!isPositiveInteger(laboratory.layoutRows) || !isPositiveInteger(laboratory.layoutCols) || !Number.isInteger(laboratory.pcCount) || laboratory.pcCount < 0 || laboratory.pcCount > laboratory.layoutRows * laboratory.layoutCols) {
     return failure('Struktur laboratorium tidak valid.', [{ code: 'layout-dimension-mismatch', message: 'Baris, kolom, atau jumlah PC tidak valid.', laboratoryId: laboratory.id }]);
   }
-  if (!laboratory.id.trim() || !input.layoutId.trim() || input.db.layouts.some((layout) => layout.id === input.layoutId) || input.db.labs.some((item) => item.id === laboratory.id) || input.db.devices.some((item) => devices.some((device) => device.id === item.id)) || new Set(devices.map((device) => device.id)).size !== devices.length) {
-    return failure('ID laboratorium atau perangkat duplikat.', [{ code: 'duplicate-device-id', message: 'ID laboratorium atau perangkat duplikat.', laboratoryId: laboratory.id }]);
+  if (!laboratory.id.trim()) return failure('ID laboratorium wajib diisi.', [{ code: 'invalid-laboratory-id', message: 'ID laboratorium wajib diisi.', laboratoryId: laboratory.id }]);
+  if (input.db.labs.some((item) => item.id === laboratory.id)) return failure('ID laboratorium duplikat.', [{ code: 'duplicate-laboratory-id', message: 'ID laboratorium sudah digunakan.', laboratoryId: laboratory.id }]);
+  if (!input.layoutId.trim()) return failure('ID denah wajib diisi.', [{ code: 'invalid-layout-id', message: 'ID denah wajib diisi.', layoutId: input.layoutId }]);
+  if (input.db.layouts.some((layout) => layout.id === input.layoutId)) return failure('ID denah duplikat.', [{ code: 'duplicate-layout-id', message: 'ID denah sudah digunakan.', layoutId: input.layoutId }]);
+  const seenDeviceIds = new Set<ID>();
+  for (const device of devices) {
+    if (!device.id.trim()) return failure('ID perangkat wajib diisi.', [{ code: 'invalid-device-id', message: 'ID perangkat wajib diisi.', deviceId: device.id, laboratoryId: laboratory.id }]);
+    if (seenDeviceIds.has(device.id) || input.db.devices.some((item) => item.id === device.id)) return failure('ID perangkat duplikat.', [{ code: 'duplicate-device-id', message: 'ID perangkat sudah digunakan.', deviceId: device.id, laboratoryId: laboratory.id }]);
+    seenDeviceIds.add(device.id);
   }
   if (devices.length !== laboratory.pcCount || devices.some((device) => device.laboratoryId !== laboratory.id || hasOwn(device, 'row') || hasOwn(device, 'col'))) {
     return failure('Perangkat laboratorium tidak valid.', [{ code: 'legacy-device-coordinate', message: 'Perangkat harus cocok dengan laboratorium dan tidak boleh memiliki row atau col.', laboratoryId: laboratory.id }]);
