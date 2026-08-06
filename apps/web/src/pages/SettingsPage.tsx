@@ -41,7 +41,8 @@ export function SettingsPage() {
 
   function handleReset() {
     if (!canManage) return;
-    reset();
+    const result = reset();
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast('Data demo direset ke kondisi awal', 'success');
     setConfirmReset(false);
     setTimeout(() => window.location.reload(), 500);
@@ -57,8 +58,8 @@ export function SettingsPage() {
 
   function handleExport() {
     if (!canManage) return;
-    downloadJSON('smartlab-backup.json', JSON.parse(exportDB()));
-    toast('Backup data berhasil diunduh', 'success');
+    try { downloadJSON('smartlab-backup.json', JSON.parse(exportDB())); toast('Backup data berhasil diunduh', 'success'); }
+    catch (error) { toast(error instanceof Error ? error.message : 'Backup tidak dapat diekspor', 'error'); }
   }
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -68,11 +69,12 @@ export function SettingsPage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const raw = ev.target?.result as string;
-      if (importDB(raw)) {
+      const result = importDB(raw);
+      if (result.ok) {
         toast('Data berhasil diimpor', 'success');
         setTimeout(() => window.location.reload(), 500);
       } else {
-        toast('File backup tidak valid', 'error');
+        toast(result.error, 'error');
       }
     };
     reader.readAsText(file);

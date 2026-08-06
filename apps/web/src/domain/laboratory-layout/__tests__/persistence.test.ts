@@ -284,7 +284,7 @@ describe('layout persistence integration', () => {
     storage.setItem('smartlab_pplg_db', JSON.stringify(legacy));
     storage.writeCounts.clear();
     const loaded = loadDB();
-    expect(loaded.schemaVersion).toBe(2);
+    expect(loaded.db.schemaVersion).toBe(2);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(1);
     expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe('2.0.0');
     expect(JSON.parse(storage.getItem('smartlab_pplg_db')!).devices.every((device: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
@@ -301,7 +301,7 @@ describe('layout persistence integration', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const fallback = loadDB();
     error.mockRestore();
-    expect(fallback.schemaVersion).toBe(2);
+    expect(fallback.db.schemaVersion).toBe(2);
     expect(storage.getItem('smartlab_pplg_db')).toBe(raw);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(0);
   });
@@ -313,8 +313,34 @@ describe('layout persistence integration', () => {
     storage.writeCounts.clear();
     const first = loadDB();
     const second = loadDB();
-    expect(first.layouts.map((layout) => layout.updatedAt)).toEqual(second.layouts.map((layout) => layout.updatedAt));
+    expect(first.db.layouts.map((layout) => layout.updatedAt)).toEqual(second.db.layouts.map((layout) => layout.updatedAt));
     expect(storage.writesFor('smartlab_pplg_db')).toBe(0);
     expect(storage.writesFor(STORAGE_KEYS.VERSION)).toBe(0);
+  });
+
+  it('returns recovery mode without overwriting invalid raw data', () => {
+    const legacy = legacyDatabase();
+    const devices = legacy.devices as Array<{ row: number; col: number }>;
+    devices[1].row = devices[0].row;
+    devices[1].col = devices[0].col;
+    const raw = JSON.stringify(legacy);
+    storage.setItem('smartlab_pplg_db', raw);
+    storage.writeCounts.clear();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const loaded = loadDB();
+    error.mockRestore();
+    expect(loaded).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(storage.getItem('smartlab_pplg_db')).toBe(raw);
+    expect(storage.writesFor('smartlab_pplg_db')).toBe(0);
+  });
+
+  it('rejects missing required collections and strips unknown top-level values', () => {
+    const missing = generateSeedData() as unknown as Record<string, unknown>;
+    delete missing.auditLogs;
+    expect(normalizeDatabase(missing, { migratedAt: MIGRATED_AT })).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'missing-collection', path: 'auditLogs' })] });
+    const unknown = { ...generateSeedData(), unexpected: 'discarded' };
+    const normalized = normalizeDatabase(unknown, { migratedAt: MIGRATED_AT });
+    if (!normalized.ok) throw new Error('expected canonical success');
+    expect(normalized.db).not.toHaveProperty('unexpected');
   });
 });

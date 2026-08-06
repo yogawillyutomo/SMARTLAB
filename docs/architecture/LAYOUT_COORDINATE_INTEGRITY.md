@@ -55,3 +55,11 @@ The layout editor holds a separate persisted baseline and editable draft. Drag/d
 Laboratory creation atomically creates its devices and active complete layout. Existing laboratory forms keep PC count and dimensions read-only in Stage 3B. Deletion consults the complete dependency inspector at confirmation time; when dependencies exist it leaves the laboratory, devices, and layout untouched. Import/export always uses normalized version-2 data, and failed imports never replace the active database.
 
 Stage 4 remains responsible for grid resizing, multiple templates, non-PC element tools, layout publishing/version history, and richer editor controls.
+
+### Stage 3B recovery hardening
+
+Loading now returns an explicit persisted or recovery result. If a legacy or v2 blob cannot be normalized, its raw storage is never replaced: the application displays a validated in-memory fallback, a persistent warning, and blocks ordinary mutations, repository writes, and layout saves. Only a successful explicit import or deliberate reset can replace preserved raw data and exit recovery.
+
+Normalization constructs a canonical AppDB from approved collections only. Every required top-level array and the `stock`/`maintenance` nested arrays are checked before referential layout validation; unknown top-level keys are omitted from normalized and exported data. Laboratory IDs, layout IDs, and device ownership are unique and referentially valid.
+
+Browser storage writes return results rather than being swallowed. A DB-key write failure leaves provider state unchanged. Ordinary v2 saves write the DB blob once and do not rewrite the version key; initial seed, migration, import, reset, and stale-version repair are the only version-key write paths. A failed version repair is reported without misrepresenting a successful DB write as failed.

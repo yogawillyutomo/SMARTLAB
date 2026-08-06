@@ -14,11 +14,14 @@ function readFromStorage<T>(storage: Storage, key: string, fallback: T): T {
   }
 }
 
-function writeToStorage<T>(storage: Storage, key: string, value: T): void {
+export type StorageWriteResult = { ok: true } | { ok: false; error: unknown };
+
+function writeToStorage<T>(storage: Storage, key: string, value: T): StorageWriteResult {
   try {
     storage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+    return { ok: true };
   } catch (e) {
-    console.error('Failed to write storage', e);
+    return { ok: false, error: e };
   }
 }
 
@@ -34,8 +37,8 @@ export function readStorage<T>(key: string, fallback: T): T {
   return readFromStorage(localStorage, key, fallback);
 }
 
-export function writeStorage<T>(key: string, value: T): void {
-  writeToStorage(localStorage, key, value);
+export function writeStorage<T>(key: string, value: T): StorageWriteResult {
+  return writeToStorage(localStorage, key, value);
 }
 
 export function readSessionStorage<T>(key: string, fallback: T): T {
@@ -64,8 +67,13 @@ export function getStoredVersion(): string | null {
   return localStorage.getItem(VERSION_KEY);
 }
 
-export function setStoredVersion(): void {
-  localStorage.setItem(VERSION_KEY, CURRENT_STORAGE_VERSION);
+export function setStoredVersion(): StorageWriteResult {
+  try {
+    localStorage.setItem(VERSION_KEY, CURRENT_STORAGE_VERSION);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error };
+  }
 }
 
 export function getDataRaw(): string | null {

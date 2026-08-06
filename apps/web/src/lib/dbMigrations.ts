@@ -6,6 +6,9 @@ import { CURRENT_DB_SCHEMA_VERSION } from './dbSchema';
 
 export type DatabaseMigrationIssueCode =
   | 'invalid-database'
+  | 'missing-collection'
+  | 'invalid-collection'
+  | 'invalid-nested-collection'
   | 'unsupported-schema-version'
   | 'invalid-laboratory'
   | 'duplicate-device-id'
@@ -15,6 +18,7 @@ export type DatabaseMigrationIssueCode =
 export interface DatabaseMigrationIssue {
   code: DatabaseMigrationIssueCode;
   message: string;
+  path?: string;
   laboratoryId?: string;
   layoutId?: string;
   deviceId?: string;
@@ -90,8 +94,28 @@ function stripCoordinates(value: unknown): unknown {
   return device;
 }
 
-function baseDatabase(value: Record<string, unknown>, masterData: MasterDataCollection): SeedData {
-  return { ...value, schemaVersion: CURRENT_DB_SCHEMA_VERSION, masterData } as SeedData;
+const ARRAY_COLLECTIONS = ['labs', 'devices', 'layouts', 'schedules', 'bookings', 'sessions', 'journals', 'incidents', 'workOrders', 'assets', 'loans', 'calendarEvents', 'notifications', 'users', 'auditLogs'] as const;
+
+function collectionIssues(value: Record<string, unknown>, requireLayouts: boolean): DatabaseMigrationIssue[] {
+  const issues: DatabaseMigrationIssue[] = [];
+  for (const key of ARRAY_COLLECTIONS) {
+    if (!requireLayouts && key === 'layouts') continue;
+    if (!(key in value)) issues.push({ code: 'missing-collection', message: `Koleksi ${key} wajib tersedia.`, path: key });
+    else if (!Array.isArray(value[key])) issues.push({ code: 'invalid-collection', message: `Koleksi ${key} harus berupa array.`, path: key });
+  }
+  if (!isRecord(value.masterData)) issues.push({ code: 'invalid-collection', message: 'Koleksi masterData harus berupa objek.', path: 'masterData' });
+  for (const key of ['stock', 'maintenance'] as const) {
+    if (!isRecord(value[key])) { issues.push({ code: 'invalid-collection', message: `Koleksi ${key} harus berupa objek.`, path: key }); continue; }
+  }
+  if (isRecord(value.stock)) for (const key of ['items', 'transactions']) if (!Array.isArray(value.stock[key])) issues.push({ code: 'invalid-nested-collection', message: `Koleksi stock.${key} harus berupa array.`, path: `stock.${key}` });
+  if (isRecord(value.maintenance)) for (const key of ['plans', 'executions']) if (!Array.isArray(value.maintenance[key])) issues.push({ code: 'invalid-nested-collection', message: `Koleksi maintenance.${key} harus berupa array.`, path: `maintenance.${key}` });
+  return issues;
+}
+
+function baseDatabase(value: Record<string, unknown>, masterData: MasterDataCollection, layouts: unknown[]): SeedData {
+  return {
+    schemaVersion: CURRENT_DB_SCHEMA_VERSION, labs: value.labs as SeedData['labs'], masterData, devices: value.devices as SeedData['devices'], layouts: layouts as SeedData['layouts'], schedules: value.schedules as SeedData['schedules'], bookings: value.bookings as SeedData['bookings'], sessions: value.sessions as SeedData['sessions'], journals: value.journals as SeedData['journals'], incidents: value.incidents as SeedData['incidents'], workOrders: value.workOrders as SeedData['workOrders'], assets: value.assets as SeedData['assets'], stock: { items: (value.stock as Record<string, unknown>).items as SeedData['stock']['items'], transactions: (value.stock as Record<string, unknown>).transactions as SeedData['stock']['transactions'] }, loans: value.loans as SeedData['loans'], maintenance: { plans: (value.maintenance as Record<string, unknown>).plans as SeedData['maintenance']['plans'], executions: (value.maintenance as Record<string, unknown>).executions as SeedData['maintenance']['executions'] }, calendarEvents: value.calendarEvents as SeedData['calendarEvents'], notifications: value.notifications as SeedData['notifications'], users: value.users as SeedData['users'], auditLogs: value.auditLogs as SeedData['auditLogs'],
+  };
 }
 
 function validateDatabase(db: SeedData): DatabaseMigrationIssue[] {
@@ -106,27 +130,31 @@ function validateDatabase(db: SeedData): DatabaseMigrationIssue[] {
 }
 
 export function normalizeDatabase(value: unknown, options: DatabaseNormalizationOptions): DatabaseNormalizationResult {
-  if (!isRecord(value) || !Array.isArray(value.labs) || !Array.isArray(value.devices)) {
+  if (!isRecord(value)) {
     return { ok: false, issues: [{ code: 'invalid-database', message: 'Database harus memiliki koleksi labs dan devices.' }] };
   }
+  const rawVersion = value.schemaVersion;
+  const collectionValidation = collectionIssues(value, rawVersion === CURRENT_DB_SCHEMA_VERSION);
+  if (collectionValidation.length) return { ok: false, issues: collectionValidation };
   const defaults = options.defaults ?? generateMasterData();
   const masterData = normalizeMasterData(value.masterData, defaults);
-  const rawVersion = value.schemaVersion;
   if (rawVersion !== undefined && rawVersion !== CURRENT_DB_SCHEMA_VERSION) {
     return { ok: false, issues: [{ code: 'unsupported-schema-version', message: 'Versi schema database tidak didukung.' }] };
   }
 
   if (rawVersion === CURRENT_DB_SCHEMA_VERSION) {
     if (!Array.isArray(value.layouts)) return { ok: false, issues: [{ code: 'invalid-database', message: 'Database versi 2 harus memiliki koleksi layouts.' }] };
-    const db = baseDatabase(value, masterData);
+    const db = baseDatabase(value, masterData, value.layouts as unknown[]);
     const issues = validateDatabase(db);
     if (issues.length > 0) return { ok: false, issues };
     return { ok: true, db, changed: JSON.stringify(value) !== JSON.stringify(db), migratedFromVersion: null };
   }
 
+  const legacyDevices = value.devices as unknown[];
+  const legacyLabs = value.labs as unknown[];
   const deviceIds = new Set<string>();
   const issues: DatabaseMigrationIssue[] = [];
-  value.devices.forEach((rawDevice) => {
+  legacyDevices.forEach((rawDevice) => {
     if (!isRecord(rawDevice) || typeof rawDevice.id !== 'string' || !rawDevice.id.trim()) {
       issues.push({ code: 'duplicate-device-id', message: 'ID perangkat legacy wajib diisi.' });
       return;
@@ -137,14 +165,14 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
   if (issues.length > 0) return { ok: false, issues };
 
   const layouts = [];
-  for (const rawLaboratory of value.labs) {
+  for (const rawLaboratory of legacyLabs) {
     if (!isRecord(rawLaboratory) || typeof rawLaboratory.id !== 'string' || typeof rawLaboratory.name !== 'string' || typeof rawLaboratory.layoutRows !== 'number' || typeof rawLaboratory.layoutCols !== 'number') {
       issues.push({ code: 'invalid-laboratory', message: 'Laboratorium legacy tidak valid.' });
       continue;
     }
     const laboratory = rawLaboratory as unknown as Laboratory;
-    const devices = value.devices.filter((device) => isLegacyDevice(device) && device.laboratoryId === laboratory.id) as { id: string; laboratoryId: string; positionCode: string; row: number; col: number }[];
-    if (value.devices.some((device) => isRecord(device) && device.laboratoryId === laboratory.id && !isLegacyDevice(device))) {
+    const devices = legacyDevices.filter((device) => isLegacyDevice(device) && device.laboratoryId === laboratory.id) as { id: string; laboratoryId: string; positionCode: string; row: number; col: number }[];
+    if (legacyDevices.some((device) => isRecord(device) && device.laboratoryId === laboratory.id && !isLegacyDevice(device))) {
       issues.push({ code: 'legacy-layout-migration-failed', message: 'Perangkat legacy tidak memiliki koordinat lengkap.', laboratoryId: laboratory.id });
       continue;
     }
@@ -168,7 +196,7 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
     }
   }
   if (issues.length > 0) return { ok: false, issues };
-  const db = { ...baseDatabase(value, masterData), devices: value.devices.map(stripCoordinates), layouts } as SeedData;
+  const db = { ...baseDatabase(value, masterData, layouts), devices: legacyDevices.map(stripCoordinates) as SeedData['devices'] };
   const integrityIssues = validateDatabase(db);
   if (integrityIssues.length > 0) return { ok: false, issues: integrityIssues };
   return { ok: true, db, changed: true, migratedFromVersion: 1 };

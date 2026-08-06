@@ -4,74 +4,81 @@ import { CURRENT_STORAGE_VERSION } from './dbSchema';
 import { STORAGE_KEYS, getStoredVersion, readStorage, setStoredVersion, writeStorage } from './storage';
 
 export type AppDB = SeedData;
-
+export type { DatabaseMigrationIssue } from './dbMigrations';
+export const RECOVERY_WRITE_ERROR = 'Database asli sedang dipertahankan karena migrasi gagal. Impor backup yang valid atau lakukan reset database sebelum menyimpan perubahan.';
 export type DatabaseSaveResult =
-  | { ok: true; db: AppDB }
-  | { ok: false; error: string; issues: DatabaseMigrationIssue[] };
+  | { ok: true; db: AppDB; versionWriteOk: boolean; warnings: string[] }
+  | { ok: false; error: string; issues: DatabaseMigrationIssue[]; storageError?: unknown };
+export type DatabaseLoadResult =
+  | { ok: true; db: AppDB; mode: 'persisted'; migrated: boolean }
+  | { ok: false; db: AppDB; mode: 'recovery'; issues: DatabaseMigrationIssue[]; rawPreserved: true };
 
 const DB_KEY = 'db';
-
-function currentTimestamp(): string {
-  return new Date().toISOString();
-}
-
-function saveNormalization(result: DatabaseNormalizationResult): DatabaseSaveResult {
-  if (!result.ok) return { ok: false, error: 'Database tidak valid dan tidak dapat disimpan.', issues: result.issues };
-  writeStorage(DB_KEY, result.db);
-  setStoredVersion();
-  return { ok: true, db: result.db };
-}
+function currentTimestamp(): string { return new Date().toISOString(); }
+function storageFailure(error: unknown): DatabaseSaveResult { return { ok: false, error: 'Database tidak dapat disimpan ke penyimpanan browser.', issues: [], storageError: error }; }
 
 export function normalizeDB(value: unknown, migratedAt = currentTimestamp()): DatabaseNormalizationResult {
   return normalizeDatabase(value, { migratedAt });
 }
 
-export function loadDB(): AppDB {
+export function loadDB(): DatabaseLoadResult {
   const existing = readStorage<unknown>(DB_KEY, null);
-  if (existing !== null) {
-    const normalized = normalizeDB(existing);
-    if (normalized.ok) {
-      if (normalized.changed) {
-        const saved = saveNormalization(normalized);
-        if (saved.ok) return saved.db;
-      }
-      if (getStoredVersion() !== CURRENT_STORAGE_VERSION) setStoredVersion();
-      return normalized.db;
-    }
-    console.error('Migrasi database SmartLab gagal. Data localStorage asli dipertahankan.', normalized.issues);
-    return generateSeedData();
+  if (existing === null) {
+    const db = generateSeedData();
+    const saved = persistDB(db, { writeVersion: true, allowRecoveryReplace: true });
+    if (!saved.ok) throw new Error(saved.error);
+    return { ok: true, db: saved.db, mode: 'persisted', migrated: false };
   }
-  const seed = generateSeedData();
-  const saved = saveDB(seed);
-  if (!saved.ok) throw new Error('Seed SmartLab tidak valid.');
-  return saved.db;
+  const normalized = normalizeDB(existing);
+  if (!normalized.ok) {
+    console.error('Migrasi database SmartLab gagal. Data localStorage asli dipertahankan.', normalized.issues);
+    return { ok: false, db: generateSeedData(), mode: 'recovery', issues: normalized.issues, rawPreserved: true };
+  }
+  if (normalized.changed) {
+    const saved = persistDB(normalized.db, { writeVersion: true, allowRecoveryReplace: true });
+    if (!saved.ok) return { ok: false, db: normalized.db, mode: 'recovery', issues: saved.issues, rawPreserved: true };
+  } else if (getStoredVersion() !== CURRENT_STORAGE_VERSION) {
+    setStoredVersion();
+  }
+  return { ok: true, db: normalized.db, mode: 'persisted', migrated: normalized.migratedFromVersion !== null };
 }
 
-export function saveDB(db: AppDB): DatabaseSaveResult {
+function rawIsRecovery(): DatabaseMigrationIssue[] | null {
+  const raw = readStorage<unknown>(DB_KEY, null);
+  if (raw === null) return null;
+  const normalized = normalizeDB(raw);
+  return normalized.ok ? null : normalized.issues;
+}
+
+export function persistDB(db: AppDB, options: { allowRecoveryReplace?: boolean; writeVersion?: boolean } = {}): DatabaseSaveResult {
   const normalized = normalizeDB(db);
-  return saveNormalization(normalized);
+  if (!normalized.ok) return { ok: false, error: 'Database tidak valid dan tidak dapat disimpan.', issues: normalized.issues };
+  const recoveryIssues = options.allowRecoveryReplace ? null : rawIsRecovery();
+  if (recoveryIssues) return { ok: false, error: RECOVERY_WRITE_ERROR, issues: recoveryIssues };
+  const write = writeStorage(DB_KEY, normalized.db);
+  if (!write.ok) return storageFailure(write.error);
+  if (!options.writeVersion) return { ok: true, db: normalized.db, versionWriteOk: true, warnings: [] };
+  const version = setStoredVersion();
+  return version.ok
+    ? { ok: true, db: normalized.db, versionWriteOk: true, warnings: [] }
+    : { ok: true, db: normalized.db, versionWriteOk: false, warnings: ['Database tersimpan, tetapi versi penyimpanan belum dapat diperbarui.'] };
 }
 
-export function resetDB(): AppDB {
-  const saved = saveDB(generateSeedData());
-  if (!saved.ok) throw new Error('Reset database SmartLab gagal.');
-  return saved.db;
-}
-
+export function saveDB(db: AppDB): DatabaseSaveResult { return persistDB(db); }
+export function resetDB(): DatabaseSaveResult { return persistDB(generateSeedData(), { allowRecoveryReplace: true, writeVersion: true }); }
 export function getDB(): AppDB {
-  return loadDB();
+  const result = loadDB();
+  if (!result.ok) throw new Error(RECOVERY_WRITE_ERROR);
+  return result.db;
 }
-
 export function updateDB(mutator: (db: AppDB) => void): AppDB {
-  const db = loadDB();
-  mutator(db);
-  const saved = saveDB(db);
+  const loaded = loadDB();
+  if (!loaded.ok) throw new Error(RECOVERY_WRITE_ERROR);
+  const next = JSON.parse(JSON.stringify(loaded.db)) as AppDB;
+  mutator(next);
+  const saved = saveDB(next);
   if (!saved.ok) throw new Error(saved.error);
   return saved.db;
 }
-
 export { STORAGE_KEYS, getStoredVersion, setStoredVersion };
-
-export function delay(ms = 250): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export function delay(ms = 250): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
