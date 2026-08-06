@@ -3,7 +3,7 @@ import { generateSeedData } from '@/data/seed';
 import { loadDB, persistDB, resetDB, updateDB } from '@/lib/db';
 import { STORAGE_KEYS, readStorageJSON, readStoredVersion } from '@/lib/storage';
 import { clearAllStorageIfAllowed, canClearAllStorage } from '@/lib/storageRecovery';
-import { storageHealthOf } from '@/lib/storageHealth';
+import { mergeStorageHealthAfterSave, storageHealthOf } from '@/lib/storageHealth';
 
 const DB_KEY = 'smartlab_pplg_db';
 
@@ -188,5 +188,57 @@ describe('recovery protection and observable storage health', () => {
 
     storage.seed(DB_KEY, '{broken');
     expect(storageHealthOf(loadDB())).toEqual({ warnings: [], versionWriteOk: true });
+  });
+});
+
+describe('ordinary-save storage health lifecycle', () => {
+  it('preserves a version read warning through an ordinary successful save without writing the version key', () => {
+    seedCurrentDatabase();
+    storage.readFailures.add(STORAGE_KEYS.VERSION);
+    const initial = storageHealthOf(loadDB());
+    storage.readFailures.delete(STORAGE_KEYS.VERSION);
+    const saved = persistDB(generateSeedData());
+    const next = mergeStorageHealthAfterSave(initial, saved, false);
+    expect(saved.ok).toBe(true);
+    expect(storage.writesFor(DB_KEY)).toBe(1);
+    expect(storage.writesFor(STORAGE_KEYS.VERSION)).toBe(0);
+    expect(next).toBe(initial);
+    expect(next).toEqual({ warnings: ['Versi penyimpanan tidak dapat dibaca.'], versionWriteOk: false });
+  });
+
+  it('preserves a failed stale-version repair warning through an ordinary save, then clears it after a successful refresh', () => {
+    seedCurrentDatabase('1.0.0');
+    storage.writeFailures.add(STORAGE_KEYS.VERSION);
+    const initial = storageHealthOf(loadDB());
+    storage.resetCounts();
+    const saved = persistDB(generateSeedData());
+    const afterSave = mergeStorageHealthAfterSave(initial, saved, false);
+    expect(afterSave).toBe(initial);
+    expect(storage.writesFor(DB_KEY)).toBe(1);
+    expect(storage.attemptsFor(STORAGE_KEYS.VERSION)).toBe(0);
+
+    storage.writeFailures.delete(STORAGE_KEYS.VERSION);
+    storage.resetCounts();
+    const refreshed = loadDB();
+    expect(refreshed).toMatchObject({ ok: true, versionWriteOk: true, warnings: [] });
+    expect(storage.writesFor(DB_KEY)).toBe(0);
+    expect(storage.writesFor(STORAGE_KEYS.VERSION)).toBe(1);
+    expect(storageHealthOf(refreshed)).toEqual({ warnings: [], versionWriteOk: true });
+  });
+
+  it('keeps clean health on an ordinary save and preserves both DB and warning state when that save fails', () => {
+    seedCurrentDatabase();
+    const healthy = storageHealthOf(loadDB());
+    const successful = persistDB(generateSeedData());
+    expect(mergeStorageHealthAfterSave(healthy, successful, false)).toBe(healthy);
+    expect(storage.writesFor(STORAGE_KEYS.VERSION)).toBe(0);
+
+    const warning = { warnings: ['Versi penyimpanan tidak dapat diperbarui.'], versionWriteOk: false };
+    storage.writeFailures.add(DB_KEY);
+    const beforeRaw = storage.getItem(DB_KEY);
+    const failed = persistDB(generateSeedData());
+    expect(failed.ok).toBe(false);
+    expect(storage.getItem(DB_KEY)).toBe(beforeRaw);
+    expect(mergeStorageHealthAfterSave(warning, failed, false)).toBe(warning);
   });
 });

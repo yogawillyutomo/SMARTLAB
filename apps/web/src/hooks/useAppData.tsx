@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { loadDB, normalizeDB, persistDB, resetDB, type AppDB, type DatabaseLoadResult, type DatabaseMigrationIssue, type DatabaseSaveResult, RECOVERY_WRITE_ERROR } from '@/lib/db';
-import { storageHealthOf, storageHealthOfSave, type StorageHealthState } from '@/lib/storageHealth';
+import { mergeStorageHealthAfterSave, storageHealthOf, type StorageHealthState } from '@/lib/storageHealth';
 
 export type AppMutationResult = { ok: true } | { ok: false; error: string; issues?: DatabaseMigrationIssue[] };
 export type ImportDatabaseResult = { ok: true; db: AppDB } | { ok: false; error: string; issues?: DatabaseMigrationIssue[] };
@@ -30,20 +30,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (recovery) return { ok: false, error: RECOVERY_WRITE_ERROR, issues: recovery.issues };
     const next = clone(db); fn(next); const saved = persistDB(next);
     if (!saved.ok) return { ok: false, error: saved.error, issues: saved.issues };
-    setDb(saved.db); setStorageHealth(storageHealthOfSave(saved)); return { ok: true };
+    setDb(saved.db);
+    // Ordinary business saves do not inspect or repair the version key.
+    setStorageHealth((previous) => mergeStorageHealthAfterSave(previous, saved, false));
+    return { ok: true };
   }, [db, recovery]);
   const replaceDB = useCallback((next: AppDB): DatabaseSaveResult => {
     if (recovery) return { ok: false, error: RECOVERY_WRITE_ERROR, issues: recovery.issues };
-    const saved = persistDB(next); if (saved.ok) { setDb(saved.db); setStorageHealth(storageHealthOfSave(saved)); } return saved;
+    const saved = persistDB(next); if (saved.ok) {
+      setDb(saved.db);
+      // Layout and other atomic replacements are ordinary DB saves.
+      setStorageHealth((previous) => mergeStorageHealthAfterSave(previous, saved, false));
+    } return saved;
   }, [recovery]);
   const reset = useCallback((): AppMutationResult => {
     const saved = resetDB(); if (!saved.ok) return { ok: false, error: saved.error, issues: saved.issues };
-    setDb(saved.db); setRecovery(null); setStorageHealth(storageHealthOfSave(saved)); return { ok: true };
+    setDb(saved.db); setRecovery(null); setStorageHealth((previous) => mergeStorageHealthAfterSave(previous, saved, true)); return { ok: true };
   }, []);
   const importDB = useCallback((raw: string): ImportDatabaseResult => {
     try { const normalized = normalizeDB(JSON.parse(raw) as unknown); if (!normalized.ok) return { ok: false, error: 'Backup tidak valid.', issues: normalized.issues };
       const saved = persistDB(normalized.db, { allowRecoveryReplace: true, writeVersion: true }); if (!saved.ok) return { ok: false, error: saved.error, issues: saved.issues };
-      setDb(saved.db); setRecovery(null); setStorageHealth(storageHealthOfSave(saved)); return { ok: true, db: saved.db };
+      setDb(saved.db); setRecovery(null); setStorageHealth((previous) => mergeStorageHealthAfterSave(previous, saved, true)); return { ok: true, db: saved.db };
     } catch { return { ok: false, error: 'File backup tidak dapat dibaca.' }; }
   }, []);
   const exportDB = useCallback(() => { if (recovery) throw new Error('Backup asli sedang dipertahankan. Gunakan impor atau reset sebelum mengekspor data aplikasi.'); const normalized = normalizeDB(db); if (!normalized.ok) throw new Error('Database tidak valid untuk diekspor.'); return JSON.stringify(normalized.db, null, 2); }, [db, recovery]);

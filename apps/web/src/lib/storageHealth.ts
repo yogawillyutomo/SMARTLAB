@@ -16,3 +16,8 @@ export function storageHealthOfSave(result: DatabaseSaveResult): StorageHealthSt
     ? { warnings: result.warnings, versionWriteOk: result.versionWriteOk }
     : { warnings: [], versionWriteOk: true };
 }
+
+export function mergeStorageHealthAfterSave(previous: StorageHealthState, result: DatabaseSaveResult, versionAttempted: boolean): StorageHealthState {
+  if (!result.ok || !versionAttempted) return previous;
+  return storageHealthOfSave(result);
+}
