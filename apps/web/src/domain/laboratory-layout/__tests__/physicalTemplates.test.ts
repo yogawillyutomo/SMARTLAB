@@ -4,6 +4,7 @@ import { normalizeDatabase } from '@/lib/dbMigrations';
 import type { Device, LayoutElement } from '@/types';
 import {
   PHYSICAL_LAYOUT_TEMPLATE_REGISTRY,
+  PHYSICAL_TEMPLATE_AISLE_SLOTS,
   RPL_PERIMETER_CENTER_ISLAND_36,
   generatePhysicalLayoutTemplateDraft,
   moveLayoutElement,
@@ -119,5 +120,62 @@ describe('perimeter + center island physical template', () => {
     expect(db.labs.find((candidate) => candidate.id === laboratory.id)?.layoutRows).toBe(6);
     const normalized = normalizeDatabase(saved.db, { migratedAt: AT });
     expect(normalized).toMatchObject({ ok: true, changed: false });
+  });
+
+  it('rejects 38 devices, nonexistent teachers, invalid timestamps, and preserves deterministic source inputs', () => {
+    const fixture = physicalFixture();
+    const beforeDevices = JSON.stringify(fixture.devices);
+    const beforeLayout = JSON.stringify(fixture.activeLayout);
+    const extra = { ...fixture.devices[0], id: 'extra-device', positionCode: 'PC-38', laboratoryId: fixture.laboratory.id };
+    const tooMany = generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: fixture.laboratory, activeLayout: fixture.activeLayout, devices: [...fixture.devices, extra], teacherDeviceId: fixture.teacher.id, updatedAt: AT });
+    expect(tooMany.ok).toBe(false);
+    if (!tooMany.ok) expect(tooMany.issues.map((issue) => issue.code)).toContain('invalid-device-count');
+    const missingTeacher = generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: fixture.laboratory, activeLayout: fixture.activeLayout, devices: fixture.devices, teacherDeviceId: 'missing-device', updatedAt: AT });
+    expect(missingTeacher).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'teacher-device-not-found' })] });
+    expect(generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: fixture.laboratory, activeLayout: fixture.activeLayout, devices: fixture.devices, teacherDeviceId: fixture.teacher.id, updatedAt: 'invalid' })).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'invalid-timestamp' })] });
+    const first = generated().layout;
+    const second = generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: fixture.laboratory, activeLayout: fixture.activeLayout, devices: fixture.devices, teacherDeviceId: fixture.teacher.id, updatedAt: AT });
+    expect(second).toMatchObject({ ok: true, layout: first });
+    expect(JSON.stringify(fixture.devices)).toBe(beforeDevices);
+    expect(JSON.stringify(fixture.activeLayout)).toBe(beforeLayout);
+  });
+
+  it('enforces all fixed aisle/student/teacher/door structure flags and keeps failed operations immutable', () => {
+    const { layout } = generated();
+    const at = (row: number, column: number) => layout.elements.find((element) => element.row === row && element.column === column)!;
+    Array.from(PHYSICAL_TEMPLATE_AISLE_SLOTS).forEach((slot) => {
+      const [row, column] = slot.split(':').map(Number);
+      expect(at(row, column)).toMatchObject({ type: 'aisle', fixed: true, movable: false, swappable: false });
+    });
+    layout.elements.filter((element) => element.type === 'student_pc').forEach((element) => expect(element).toMatchObject({ fixed: false, movable: true, swappable: true }));
+    expect(at(1, 1)).toMatchObject({ type: 'teacher_pc', fixed: true, movable: false, swappable: false });
+    expect(at(1, 7)).toMatchObject({ type: 'door', fixed: true, movable: false, swappable: false });
+    const student = at(3, 7); const source = JSON.stringify(layout);
+    expect(moveLayoutElement(layout, student.id, { row: 3, column: 2 }, { updatedAt: AT }).ok).toBe(false);
+    expect(JSON.stringify(layout)).toBe(source);
+    expect(moveLayoutElement(layout, student.id, { row: 1, column: 1 }, { updatedAt: AT }).ok).toBe(false);
+    expect(JSON.stringify(layout)).toBe(source);
+    expect(moveLayoutElement(layout, at(1, 1).id, { row: 2, column: 1 }, { updatedAt: AT }).ok).toBe(false);
+    expect(JSON.stringify(layout)).toBe(source);
+  });
+
+  it('rejects arbitrary and structurally invalid dimension changes without audit, while template no-ops remain audit-free', () => {
+    const fixture = physicalFixture();
+    const arbitrary = { ...fixture.activeLayout, rows: 7, columns: 6, elements: fixture.activeLayout.elements.map((element, index) => ({ ...element, row: Math.floor(index / 6) + 1, column: (index % 6) + 1 })) };
+    const before = JSON.stringify(fixture.db);
+    const rejected = saveActiveLaboratoryLayout({ db: fixture.db, laboratoryId: fixture.laboratory.id, draft: arbitrary, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-arbitrary' });
+    expect(rejected).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'unsupported-layout-dimension-change' })] });
+    expect(JSON.stringify(fixture.db)).toBe(before);
+    const { db, laboratory, layout } = generated();
+    const invalid = { ...layout, elements: layout.elements.map((element) => element.row === 3 && element.column === 2 ? { ...element, type: 'door' as const, label: 'Salah' } : { ...element }) };
+    const beforeAudit = db.auditLogs.length;
+    expect(saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: invalid, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-invalid-template' })).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'unsupported-layout-dimension-change' })] });
+    expect(db.auditLogs).toHaveLength(beforeAudit);
+    const saved = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-template' });
+    if (!saved.ok) throw new Error(saved.error);
+    expect(saved.db.auditLogs).toHaveLength(beforeAudit + 1);
+    const noOp = saveActiveLaboratoryLayout({ db: saved.db, laboratoryId: laboratory.id, draft: saved.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-noop' });
+    expect(noOp).toMatchObject({ ok: true, changed: false });
+    if (noOp.ok) expect(noOp.db.auditLogs).toHaveLength(beforeAudit + 1);
   });
 });

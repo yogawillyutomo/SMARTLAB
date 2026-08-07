@@ -560,6 +560,7 @@ export function LaboratoryLayoutPage() {
                   const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
                   const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
                   const isTeacher = element?.type === 'teacher_pc';
+                  const statusClass = !device ? '' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground';
                   return (
                     <div
                       key={element?.id ?? `${row}:${col}`}
@@ -578,7 +579,8 @@ export function LaboratoryLayoutPage() {
                           className={cn(
                             'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
                             canUpdate && element?.movable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-                            isTeacher ? 'border-accent-content/60 bg-accent/15 text-accent-content' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground'
+                            statusClass,
+                            isTeacher && 'ring-2 ring-accent-content/70 ring-offset-1 ring-offset-base-900'
                           )}
                         >
                           <Monitor className="h-5 w-5" />

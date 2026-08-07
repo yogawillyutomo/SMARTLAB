@@ -27,6 +27,7 @@ export type {
 } from './persistence';
 export {
   PHYSICAL_LAYOUT_TEMPLATE_REGISTRY,
+  PHYSICAL_TEMPLATE_AISLE_SLOTS,
   RPL_PERIMETER_CENTER_ISLAND_36,
   checkPhysicalLayoutTemplateCompatibility,
   generatePhysicalLayoutTemplateDraft,
