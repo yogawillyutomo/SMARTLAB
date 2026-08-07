@@ -25,3 +25,20 @@ export type {
   SaveActiveLaboratoryLayoutInput,
   SaveLayoutResult,
 } from './persistence';
+export {
+  PHYSICAL_LAYOUT_TEMPLATE_REGISTRY,
+  RPL_PERIMETER_CENTER_ISLAND_36,
+  checkPhysicalLayoutTemplateCompatibility,
+  generatePhysicalLayoutTemplateDraft,
+  getPhysicalLayoutTemplate,
+  sortTemplateStudentDevices,
+  validatePhysicalLayoutTemplateStructure,
+} from './templates';
+export type {
+  GeneratePhysicalLayoutTemplateInput,
+  GeneratePhysicalLayoutTemplateResult,
+  PhysicalLayoutTemplateDefinition,
+  PhysicalLayoutTemplateId,
+  TemplateCompatibilityIssue,
+  TemplateCompatibilityResult,
+} from './templates';

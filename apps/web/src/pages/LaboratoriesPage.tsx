@@ -10,6 +10,7 @@ import {
   Eye,
   Users,
   Activity,
+  DoorOpen,
 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -36,6 +37,9 @@ import {
   layoutsEquivalent,
   moveLayoutElement,
   saveActiveLaboratoryLayout,
+  RPL_PERIMETER_CENTER_ISLAND_36,
+  checkPhysicalLayoutTemplateCompatibility,
+  generatePhysicalLayoutTemplateDraft,
 } from '@/domain/laboratory-layout';
 import type { Device, Laboratory, LaboratoryLayout } from '@/types';
 
@@ -430,6 +434,8 @@ export function LaboratoryLayoutPage() {
   const [baseline, setBaseline] = useState<LaboratoryLayout | null>(null);
   const [draft, setDraft] = useState<LaboratoryLayout | null>(null);
   const [saving, setSaving] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [teacherDeviceId, setTeacherDeviceId] = useState('');
   const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
   const blocker = useBlocker(dirty);
 
@@ -459,6 +465,7 @@ export function LaboratoryLayoutPage() {
   const draftLayout = draft;
   const cols = draft.columns;
   const devices = db.devices.filter((device) => device.laboratoryId === currentLab.id);
+  const templateCompatibility = checkPhysicalLayoutTemplateCompatibility({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, devices, teacherDeviceId: teacherDeviceId || undefined });
   const grid = Array.from({ length: draft.rows * cols }, (_, index) => {
     const col = (index % cols) + 1;
     const row = Math.floor(index / cols) + 1;
@@ -477,6 +484,20 @@ export function LaboratoryLayoutPage() {
 
   function cancelChanges() {
     setDraft(cloneLaboratoryLayout(baselineLayout));
+  }
+
+  function openTemplate() {
+    if (!canUpdate) return;
+    setTeacherDeviceId('');
+    setTemplateOpen(true);
+  }
+
+  function applyTemplate() {
+    if (!canUpdate) return;
+    const result = generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, activeLayout: draftLayout, devices, teacherDeviceId: teacherDeviceId || undefined, updatedAt: new Date().toISOString() });
+    if (!result.ok) { toast(result.issues[0]?.message ?? 'Template tidak dapat diterapkan.', 'error'); return; }
+    setDraft(result.layout);
+    setTemplateOpen(false);
   }
 
   function saveChanges() {
@@ -525,24 +546,25 @@ export function LaboratoryLayoutPage() {
         <Card>
           <CardContent>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-ink-muted">Grid {currentLab.layoutRows} × {cols}</p>
+              <p className="text-sm text-ink-muted">Grid {draft.rows} × {cols}</p>
               <div className="flex items-center gap-2 text-xs text-ink-muted">
                 <Monitor className="h-4 w-4 text-accent-content" /> PC
-                <Users className="h-4 w-4 text-success-foreground" /> Meja Guru
+                <Users className="h-4 w-4 text-success-foreground" /> PC Guru
               </div>
             </div>
             <div className="overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
-              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+              <div className="grid gap-2" style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '760px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}>
                 {grid.map((element, i) => {
                   const col = (i % cols) + 1;
                   const row = Math.floor(i / cols) + 1;
                   const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
                   const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
+                  const isTeacher = element?.type === 'teacher_pc';
                   return (
                     <div
                       key={element?.id ?? `${row}:${col}`}
                       style={element ? { gridRow: `${element.row} / span ${element.rowSpan}`, gridColumn: `${element.column} / span ${element.columnSpan}` } : undefined}
-                      className="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-base-700 bg-base-800/40"
+                      className={cn('flex aspect-square items-center justify-center rounded-lg', element?.type === 'aisle' ? 'border border-base-700/40 bg-base-800/20' : element?.type === 'door' ? 'border-2 border-warning/40 bg-warning/10' : 'border-2 border-dashed border-base-700 bg-base-800/40')}
                       onDragOver={(e) => { if (canUpdate) e.preventDefault(); }}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -556,13 +578,14 @@ export function LaboratoryLayoutPage() {
                           className={cn(
                             'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
                             canUpdate && element?.movable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-                            device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground'
+                            isTeacher ? 'border-accent-content/60 bg-accent/15 text-accent-content' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground'
                           )}
                         >
                           <Monitor className="h-5 w-5" />
-                          <span className="mt-1 text-[10px] font-semibold">{device.positionCode}</span>
+                          <span className="mt-1 text-[10px] font-semibold">{isTeacher ? 'PC Guru' : device.positionCode}</span>
+                          {isTeacher && <span className="text-[9px] opacity-80">{device.positionCode}</span>}
                         </div>
-                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
+                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="text-[10px] font-medium">Pintu Masuk</span></div> : element?.type === 'aisle' ? null : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
                     </div>
                   );
                 })}
@@ -572,17 +595,31 @@ export function LaboratoryLayoutPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Status Denah</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Template Denah</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <div className="space-y-1 text-xs text-ink-muted">
               <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{draft.elements.filter((element) => element.type === 'student_pc' || element.type === 'teacher_pc').length}</span></div>
               <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{draft.elements.filter((element) => element.referenceId && devices.find((device) => device.id === element.referenceId)?.status === 'Online').length}</span></div>
               <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{draft.elements.filter((element) => element.referenceId && ['Warning', 'Critical', 'Offline'].includes(devices.find((device) => device.id === element.referenceId)?.status ?? '')).length}</span></div>
             </div>
-            <p className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">Template, pengubahan ukuran grid, furniture, dan elemen infrastruktur akan tersedia pada Stage 4.</p>
+            <div className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">
+              <p>Jenis saat ini: <span className="text-ink-primary">{draft.layoutType === 'perimeter-center-island' ? 'Perimeter + Center Island' : 'Grid Klasik'}</span></p>
+              <p className="mt-2 font-medium text-ink-primary">{RPL_PERIMETER_CENTER_ISLAND_36.name}</p>
+              <p>{RPL_PERIMETER_CENTER_ISLAND_36.description}</p>
+              <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 7</p>
+              {devices.length !== 37 && <p className="mt-2 text-warning-foreground">Template membutuhkan 37 perangkat. Laboratorium ini memiliki {devices.length}.</p>}
+              {canUpdate && <Button size="sm" className="mt-3 w-full" disabled={devices.length !== 37} onClick={openTemplate}>Gunakan Template</Button>}
+            </div>
           </CardContent>
         </Card>
       </div>
+      <FormDialog open={templateOpen} onClose={() => setTemplateOpen(false)} title="Gunakan Template Perimeter + Center Island" description="Pilih perangkat nyata yang akan digunakan sebagai PC Guru. Template akan menjadi draft dan belum disimpan." onSubmit={applyTemplate} submitLabel="Terapkan ke Draft" submitDisabled={!templateCompatibility.compatible} size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-ink-secondary">Grid 11 × 7 · 36 PC siswa · 1 PC Guru · 1 pintu masuk.</p>
+          <Select label="PC Guru" value={teacherDeviceId} onChange={(event) => setTeacherDeviceId(event.target.value)} placeholder="Pilih perangkat PC Guru" options={devices.map((device) => ({ value: device.id, label: `${device.positionCode} — ${device.hostname} — ${device.assetCode}` }))} />
+          {!templateCompatibility.compatible && <p className="text-xs text-warning-foreground">{templateCompatibility.issues[0]?.message}</p>}
+        </div>
+      </FormDialog>
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         onClose={() => blocker.reset?.()}
