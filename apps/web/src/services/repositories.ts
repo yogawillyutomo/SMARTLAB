@@ -1,4 +1,5 @@
-import { delay, getDB, updateDB } from '@/lib/db';
+import { delay, getDB, saveDB, updateDB } from '@/lib/db';
+import { createInitialLaboratoryDevices, createLaboratoryWithInitialLayout, deleteLaboratorySafely } from '@/domain/laboratory-layout';
 import type {
   Asset,
   AuditLog,
@@ -83,8 +84,14 @@ export const laboratoryRepository: Repository<Laboratory> = {
       layoutRows: input.layoutRows ?? 6,
       layoutCols: input.layoutCols ?? 6,
     };
-    updateDB((db) => db.labs.push(item));
-    logAudit({ userName: 'Admin', role: 'Admin Lab', module: 'laboratories', action: 'create', object: item.id, newValue: item.name, device: 'Web' });
+    const createdAt = new Date().toISOString();
+    const result = createLaboratoryWithInitialLayout({
+      db: getDB(), laboratory: item, devices: createInitialLaboratoryDevices(item, createdAt), createdAt,
+      layoutId: `layout:${item.id}:v1`, actor: { name: 'Admin', role: 'Admin Lab', device: 'Web' }, auditId: uid('al'),
+    });
+    if (!result.ok) throw new Error(result.error);
+    const saved = saveDB(result.db);
+    if (!saved.ok) throw new Error(saved.error);
     return item;
   },
   async update(id, input) {
@@ -93,7 +100,11 @@ export const laboratoryRepository: Repository<Laboratory> = {
     updateDB((db) => {
       const idx = db.labs.findIndex((l) => l.id === id);
       if (idx >= 0) {
-        db.labs[idx] = { ...db.labs[idx], ...input };
+        const { layoutRows: _layoutRows, layoutCols: _layoutCols, pcCount: _pcCount, ...safeInput } = input;
+        void _layoutRows;
+        void _layoutCols;
+        void _pcCount;
+        db.labs[idx] = { ...db.labs[idx], ...safeInput };
         updated = db.labs[idx];
       }
     });
@@ -102,11 +113,13 @@ export const laboratoryRepository: Repository<Laboratory> = {
   },
   async remove(id) {
     await delay();
-    updateDB((db) => {
-      db.labs = db.labs.filter((l) => l.id !== id);
-      db.devices = db.devices.filter((d) => d.laboratoryId !== id);
+    const result = deleteLaboratorySafely({
+      db: getDB(), laboratoryId: id, deletedAt: new Date().toISOString(),
+      actor: { name: 'Admin', role: 'Admin Lab', device: 'Web' }, auditId: uid('al'),
     });
-    logAudit({ userName: 'Admin', role: 'Admin Lab', module: 'laboratories', action: 'delete', object: id, device: 'Web' });
+    if (!result.ok) throw new Error(result.error);
+    const saved = saveDB(result.db);
+    if (!saved.ok) throw new Error(saved.error);
   },
 };
 
@@ -149,18 +162,6 @@ export const deviceRepository = {
       });
     });
     return labId ? getDB().devices.filter((d) => d.laboratoryId === labId) : getDB().devices;
-  },
-  async updateLayoutPositions(labId: string, positions: { id: string; col: number; row: number }[]): Promise<void> {
-    await delay();
-    updateDB((db) => {
-      positions.forEach((p) => {
-        const idx = db.devices.findIndex((d) => d.id === p.id);
-        if (idx >= 0) {
-          db.devices[idx].col = p.col;
-          db.devices[idx].row = p.row;
-        }
-      });
-    });
   },
 };
 
@@ -1073,21 +1074,6 @@ function masterDataAuditObject(category: string, id: string, name: string): stri
   return `${category}:${id} (${name})`;
 }
 
-function labReferences(db: ReturnType<typeof getDB>, laboratoryId: string): string[] {
-  const references: [string, number][] = [
-    ['device', db.devices.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['asset', db.assets.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['schedule', db.schedules.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['booking', db.bookings.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['session', db.sessions.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['incident', db.incidents.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['work order', db.workOrders.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['maintenance plan', db.maintenance.plans.filter((item) => item.laboratoryId === laboratoryId).length],
-    ['maintenance execution', db.maintenance.executions.filter((item) => item.laboratoryId === laboratoryId).length],
-  ];
-  return references.filter(([, count]) => count > 0).map(([label, count]) => `${label} (${count})`);
-}
-
 export const masterDataRepository = {
   listCategories(): MasterDataCategoryKey[] {
     return [...MASTER_DATA_CATEGORY_KEYS];
@@ -1182,12 +1168,17 @@ export const masterDataRepository = {
       layoutRows: input.layoutRows ?? 6,
       layoutCols: input.layoutCols ?? 6,
     };
-    updateDB((db) => {
-      if (db.labs.some((lab) => lab.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`Nama laboratorium "${name}" sudah ada`);
-      if (db.labs.some((lab) => lab.code.trim().toLowerCase() === code.toLowerCase())) throw new Error(`Kode laboratorium "${code}" sudah ada`);
-      db.labs.push(created);
+    const current = getDB();
+    if (current.labs.some((lab) => lab.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`Nama laboratorium "${name}" sudah ada`);
+    if (current.labs.some((lab) => lab.code.trim().toLowerCase() === code.toLowerCase())) throw new Error(`Kode laboratorium "${code}" sudah ada`);
+    const createdAt = new Date().toISOString();
+    const result = createLaboratoryWithInitialLayout({
+      db: current, laboratory: created, devices: createInitialLaboratoryDevices(created, createdAt), createdAt,
+      layoutId: `layout:${created.id}:v1`, actor: { name: context.user.name, role: context.user.role, device: 'Web' }, auditId: uid('al'),
     });
-    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'create', object: masterDataAuditObject('laboratory', created.id, created.name), newValue: JSON.stringify(created), device: 'Web' });
+    if (!result.ok) throw new Error(result.error);
+    const saved = saveDB(result.db);
+    if (!saved.ok) throw new Error(saved.error);
     return { ...created };
   },
 
@@ -1215,17 +1206,13 @@ export const masterDataRepository = {
   async deleteLaboratory(id: string, context: MasterDataActorContext): Promise<void> {
     assertMasterDataPermission(context, 'delete');
     await delay(100);
-    let removed: Laboratory | undefined;
-    updateDB((db) => {
-      const idx = db.labs.findIndex((lab) => lab.id === id);
-      if (idx < 0) throw new Error('Laboratorium tidak ditemukan');
-      const references = labReferences(db, id);
-      if (references.length > 0) throw new Error(`Laboratorium "${db.labs[idx].name}" masih digunakan oleh ${references.join(', ')}`);
-      removed = db.labs[idx];
-      db.labs.splice(idx, 1);
+    const result = deleteLaboratorySafely({
+      db: getDB(), laboratoryId: id, deletedAt: new Date().toISOString(),
+      actor: { name: context.user.name, role: context.user.role, device: 'Web' }, auditId: uid('al'),
     });
-    if (!removed) throw new Error('Laboratorium tidak dapat dihapus');
-    logAudit({ userName: context.user.name, role: context.user.role, module: 'master-data', action: 'delete', object: masterDataAuditObject('laboratory', removed.id, removed.name), oldValue: JSON.stringify(removed), device: 'Web' });
+    if (!result.ok) throw new Error(result.error);
+    const saved = saveDB(result.db);
+    if (!saved.ok) throw new Error(saved.error);
   },
 };
 

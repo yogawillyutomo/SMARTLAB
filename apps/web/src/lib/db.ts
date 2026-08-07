@@ -1,127 +1,102 @@
-import type { SeedData } from '@/data/seed';
-import { generateMasterData, generateSeedData } from '@/data/seed';
-import { MASTER_DATA_CATEGORY_KEYS } from './masterData';
-import type { MasterDataCategoryKey, MasterDataCollection, MasterDataItem } from '@/types';
-import { STORAGE_KEYS, getStoredVersion, readStorage, setStoredVersion, writeStorage } from './storage';
+import { generateSeedData, type SeedData } from '@/data/seed';
+import { normalizeDatabase, type DatabaseMigrationIssue, type DatabaseNormalizationResult } from './dbMigrations';
+import { CURRENT_STORAGE_VERSION } from './dbSchema';
+import { STORAGE_KEYS, readStorageJSON, readStoredVersion, setStoredVersion, writeStorage } from './storage';
 
-// App database stored in localStorage as a single blob for simplicity of backup/restore
 export type AppDB = SeedData;
+export type { DatabaseMigrationIssue } from './dbMigrations';
+export const RECOVERY_WRITE_ERROR = 'Database asli sedang dipertahankan karena migrasi gagal. Impor backup yang valid atau lakukan reset database sebelum menyimpan perubahan.';
+export type DatabaseSaveResult =
+  | { ok: true; db: AppDB; versionWriteOk: boolean; warnings: string[] }
+  | { ok: false; error: string; issues: DatabaseMigrationIssue[]; storageError?: unknown };
+export type DatabaseLoadResult =
+  | { ok: true; db: AppDB; mode: 'persisted'; migrated: boolean; warnings: string[]; versionWriteOk: boolean }
+  | { ok: false; db: AppDB; mode: 'recovery'; issues: DatabaseMigrationIssue[]; rawPreserved: true };
 
 const DB_KEY = 'db';
+function currentTimestamp(): string { return new Date().toISOString(); }
+function storageFailure(error: unknown): DatabaseSaveResult { return { ok: false, error: 'Database tidak dapat disimpan ke penyimpanan browser.', issues: [], storageError: error }; }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+export function normalizeDB(value: unknown, migratedAt = currentTimestamp()): DatabaseNormalizationResult {
+  return normalizeDatabase(value, { migratedAt });
 }
 
-function isMasterDataItem(value: unknown, category: MasterDataCategoryKey): value is MasterDataItem {
-  if (!isRecord(value) || value.category !== category || typeof value.id !== 'string' || !value.id.trim() || typeof value.name !== 'string' || !value.name.trim()) return false;
-  if (value.code !== undefined && typeof value.code !== 'string') return false;
-  if (value.isActive !== undefined && typeof value.isActive !== 'boolean') return false;
-  if (value.createdAt !== undefined && typeof value.createdAt !== 'string') return false;
-  if (value.updatedAt !== undefined && typeof value.updatedAt !== 'string') return false;
-  return true;
-}
-
-function normalizeMasterDataItem(value: unknown, category: MasterDataCategoryKey): MasterDataItem | null {
-  if (!isMasterDataItem(value, category)) return null;
-
-  const normalized: MasterDataItem = {
-    id: value.id,
-    category,
-    name: value.name.trim(),
-    isActive: value.isActive,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-  };
-  const code = value.code?.trim();
-  if (code) normalized.code = code;
-  return normalized;
-}
-
-function normalizeMasterData(value: unknown, defaults: MasterDataCollection): MasterDataCollection {
-  const source = isRecord(value) ? value : {};
-  return Object.fromEntries(MASTER_DATA_CATEGORY_KEYS.map((category) => {
-    const rawItems = source[category];
-    if (!Array.isArray(rawItems)) return [category, defaults[category].map((item) => ({ ...item }))];
-    const ids = new Set<string>();
-    const items: MasterDataItem[] = [];
-    for (const rawItem of rawItems) {
-      const item = normalizeMasterDataItem(rawItem, category);
-      if (!item || ids.has(item.id)) continue;
-      ids.add(item.id);
-      items.push(item);
-    }
-    return [category, items];
-  })) as MasterDataCollection;
-}
-
-function masterDataItemMatches(value: unknown, item: MasterDataItem): boolean {
-  return isRecord(value)
-    && value.id === item.id
-    && value.category === item.category
-    && value.name === item.name
-    && value.code === item.code
-    && value.isActive === item.isActive
-    && value.createdAt === item.createdAt
-    && value.updatedAt === item.updatedAt;
-}
-
-function needsMasterDataNormalization(value: unknown, normalized: MasterDataCollection): boolean {
-  if (!isRecord(value)) return true;
-  return MASTER_DATA_CATEGORY_KEYS.some((category) => {
-    const rawItems = value[category];
-    return !Array.isArray(rawItems)
-      || rawItems.length !== normalized[category].length
-      || rawItems.some((item, index) => !masterDataItemMatches(item, normalized[category][index]));
-  });
-}
-
-export function normalizeDB(value: unknown, defaults = generateMasterData()): AppDB {
-  if (!isRecord(value)) return generateSeedData();
-  return { ...value, masterData: normalizeMasterData(value.masterData, defaults) } as AppDB;
-}
-
-export function loadDB(): AppDB {
-  const existing = readStorage<unknown>(DB_KEY, null);
-  if (isRecord(existing)) {
-    const defaults = generateMasterData();
-    const normalized = normalizeDB(existing, defaults);
-    if (needsMasterDataNormalization(existing.masterData, normalized.masterData)) writeStorage(DB_KEY, normalized);
-    return normalized;
+export function loadDB(): DatabaseLoadResult {
+  const stored = readStorageJSON<unknown>(DB_KEY);
+  if (!stored.ok) {
+    const issue: DatabaseMigrationIssue = { code: 'malformed-storage-json', message: stored.status === 'malformed' ? 'Database lokal tidak dapat dibaca karena JSON rusak.' : 'Penyimpanan browser tidak dapat dibaca.', path: 'smartlab_pplg_db' };
+    return { ok: false, db: generateSeedData(), mode: 'recovery', issues: [issue], rawPreserved: true };
   }
-
-  const seed = generateSeedData();
-  writeStorage(DB_KEY, seed);
-  setStoredVersion();
-  return seed;
+  if (stored.status === 'missing') {
+    const db = generateSeedData();
+    const saved = persistDB(db, { writeVersion: true, allowRecoveryReplace: true });
+    if (!saved.ok) throw new Error(saved.error);
+    return { ok: true, db: saved.db, mode: 'persisted', migrated: false, warnings: saved.warnings, versionWriteOk: saved.versionWriteOk };
+  }
+  const normalized = normalizeDB(stored.value);
+  if (!normalized.ok) {
+    console.error('Migrasi database SmartLab gagal. Data localStorage asli dipertahankan.', normalized.issues);
+    return { ok: false, db: generateSeedData(), mode: 'recovery', issues: normalized.issues, rawPreserved: true };
+  }
+  if (normalized.changed) {
+    const saved = persistDB(normalized.db, { writeVersion: true, allowRecoveryReplace: true });
+    if (!saved.ok) return { ok: false, db: normalized.db, mode: 'recovery', issues: saved.issues, rawPreserved: true };
+    return {
+      ok: true,
+      db: saved.db,
+      mode: 'persisted',
+      migrated: normalized.migratedFromVersion !== null,
+      warnings: saved.warnings,
+      versionWriteOk: saved.versionWriteOk,
+    };
+  } else {
+    const version = readStoredVersion();
+    if (!version.ok) return { ok: true, db: normalized.db, mode: 'persisted', migrated: false, warnings: ['Versi penyimpanan tidak dapat dibaca.'], versionWriteOk: false };
+    if (version.value !== CURRENT_STORAGE_VERSION) {
+      const repaired = setStoredVersion();
+      return { ok: true, db: normalized.db, mode: 'persisted', migrated: false, warnings: repaired.ok ? [] : ['Versi penyimpanan tidak dapat diperbarui.'], versionWriteOk: repaired.ok };
+    }
+  }
+  return { ok: true, db: normalized.db, mode: 'persisted', migrated: normalized.migratedFromVersion !== null, warnings: [], versionWriteOk: true };
 }
 
-export function saveDB(db: AppDB): void {
-  writeStorage(DB_KEY, db);
+function rawIsRecovery(): DatabaseMigrationIssue[] | null {
+  const stored = readStorageJSON<unknown>(DB_KEY);
+  if (!stored.ok) return [{ code: 'malformed-storage-json', message: stored.status === 'malformed' ? 'Database lokal tidak dapat dibaca karena JSON rusak.' : 'Penyimpanan browser tidak dapat dibaca.', path: 'smartlab_pplg_db' }];
+  if (stored.status === 'missing') return null;
+  const normalized = normalizeDB(stored.value);
+  return normalized.ok ? null : normalized.issues;
 }
 
-export function resetDB(): AppDB {
-  const seed = generateSeedData();
-  writeStorage(DB_KEY, seed);
-  setStoredVersion();
-  return seed;
+export function persistDB(db: AppDB, options: { allowRecoveryReplace?: boolean; writeVersion?: boolean } = {}): DatabaseSaveResult {
+  const normalized = normalizeDB(db);
+  if (!normalized.ok) return { ok: false, error: 'Database tidak valid dan tidak dapat disimpan.', issues: normalized.issues };
+  const recoveryIssues = options.allowRecoveryReplace ? null : rawIsRecovery();
+  if (recoveryIssues) return { ok: false, error: RECOVERY_WRITE_ERROR, issues: recoveryIssues };
+  const write = writeStorage(DB_KEY, normalized.db);
+  if (!write.ok) return storageFailure(write.error);
+  if (!options.writeVersion) return { ok: true, db: normalized.db, versionWriteOk: true, warnings: [] };
+  const version = setStoredVersion();
+  return version.ok
+    ? { ok: true, db: normalized.db, versionWriteOk: true, warnings: [] }
+    : { ok: true, db: normalized.db, versionWriteOk: false, warnings: ['Database tersimpan, tetapi versi penyimpanan belum dapat diperbarui.'] };
 }
 
+export function saveDB(db: AppDB): DatabaseSaveResult { return persistDB(db); }
+export function resetDB(): DatabaseSaveResult { return persistDB(generateSeedData(), { allowRecoveryReplace: true, writeVersion: true }); }
 export function getDB(): AppDB {
-  return loadDB();
+  const result = loadDB();
+  if (!result.ok) throw new Error(RECOVERY_WRITE_ERROR);
+  return result.db;
 }
-
 export function updateDB(mutator: (db: AppDB) => void): AppDB {
-  const db = loadDB();
-  mutator(db);
-  saveDB(db);
-  return db;
+  const loaded = loadDB();
+  if (!loaded.ok) throw new Error(RECOVERY_WRITE_ERROR);
+  const next = JSON.parse(JSON.stringify(loaded.db)) as AppDB;
+  mutator(next);
+  const saved = saveDB(next);
+  if (!saved.ok) throw new Error(saved.error);
+  return saved.db;
 }
-
-// Re-export storage keys for convenience
-export { STORAGE_KEYS, getStoredVersion, setStoredVersion };
-
-// Simulated latency so loading states are testable
-export function delay(ms = 250): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export { STORAGE_KEYS, readStoredVersion, setStoredVersion };
+export function delay(ms = 250): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }

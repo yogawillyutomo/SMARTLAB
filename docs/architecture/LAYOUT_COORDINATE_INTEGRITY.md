@@ -38,4 +38,38 @@ Validation returns structured issues rather than throwing for ordinary invalid d
 
 `inspectLaboratoryDependencies` returns a complete zero-inclusive count record for every current laboratory-bound collection and a `canHardDelete` decision. It is not integrated with the existing deletion UI in PR 3A.
 
-PR 3B can introduce persistence, migration execution, UI/editor integration, authorization, audit, and atomic save behavior after this pure engine and its contract are reviewed.
+Stage 3B introduces persistence, migration execution, UI/editor integration, authorization checks, audit, and atomic save behavior on top of the reviewed pure engine.
+
+## Stage 3B persistence integration
+
+Stage 3B introduces schema version 2 inside the single AppDB/localStorage blob. `SeedData` now contains `schemaVersion: 2` and `layouts: LaboratoryLayout[]`. Fresh and reset data create one deterministic, active `grid-classic` layout per laboratory. Every cell is represented, device elements reference stable device IDs, and all remaining cells are explicit `empty` elements.
+
+After Stage 3B, LaboratoryLayout is the persisted source of truth for laboratory coordinates. Device records no longer store row or col.
+
+Old backups without `schemaVersion` are treated as version 1. Normalization migrates every laboratory through `migrateLegacyDeviceCoordinates` using an injected timestamp, strips legacy device coordinates, and validates the complete result before writing it. The migration is all-or-nothing: malformed dimensions, missing or duplicate coordinates, invalid generated layouts, or broken layout/device references preserve the original raw localStorage value. A validated seed is used only in memory for that session, so the original backup remains recoverable. Valid version-2 data is idempotent: it keeps element ordering and timestamps unchanged and is not rewritten unless normalization made a real change.
+
+Persisted integrity verifies individual layout validity, an existing laboratory owner, matching grid dimensions, exactly one active layout per laboratory, and one same-laboratory PC reference per device in each active layout. It rejects stale Device `row`/`col` properties, orphan layouts, missing device references, and duplicated or missing active-layout device references.
+
+The layout editor holds a separate persisted baseline and editable draft. Drag/drop runs the pure move/swap engine against the draft only. Save replaces the active layout atomically with one audit log; a business-equivalent no-op does not update timestamps, add an audit log, or write storage. Cancel restores the baseline without persistence. Dirty comparison canonicalizes element positions and flags, ignores `updatedAt`, protects browser unload, and uses the React Router data-router blocker for internal navigation.
+
+Laboratory creation atomically creates its devices and active complete layout. Existing laboratory forms keep PC count and dimensions read-only in Stage 3B. Deletion consults the complete dependency inspector at confirmation time; when dependencies exist it leaves the laboratory, devices, and layout untouched. Import/export always uses normalized version-2 data, and failed imports never replace the active database.
+
+Stage 4 remains responsible for grid resizing, multiple templates, non-PC element tools, layout publishing/version history, and richer editor controls.
+
+### Stage 3B recovery hardening
+
+Loading now returns an explicit persisted or recovery result. If a legacy or v2 blob cannot be normalized, its raw storage is never replaced: the application displays a validated in-memory fallback, a persistent warning, and blocks ordinary mutations, repository writes, and layout saves. Only a successful explicit import or deliberate reset can replace preserved raw data and exit recovery.
+
+Normalization constructs a canonical AppDB from approved collections only. Every required top-level array and the `stock`/`maintenance` nested arrays are checked before referential layout validation; unknown top-level keys are omitted from normalized and exported data. Laboratory IDs, layout IDs, and device ownership are unique and referentially valid.
+
+Browser storage writes return results rather than being swallowed. A DB-key write failure leaves provider state unchanged. Ordinary v2 saves write the DB blob once and do not rewrite the version key; initial seed, migration, import, reset, and stale-version repair are the only version-key write paths. A failed version repair is reported without misrepresenting a successful DB write as failed.
+
+Storage reads distinguish a missing database key from malformed raw JSON and storage-read failure. Only a genuinely missing key creates a seed. Malformed or unreadable raw database content enters recovery unchanged, and ordinary writes remain blocked. During recovery, Settings disables clear-all because it would violate raw-data preservation; valid import and deliberate reset remain the explicit recovery exits. Mutation callers must inspect their typed results before showing success UI, and laboratory creation reports precise invalid/duplicate laboratory, layout, and device identity diagnostics.
+
+Version-key reads are typed as well. A read or repair failure never makes a valid database unusable and never rewrites the DB blob; load results carry a warning and `versionWriteOk` state so a later load can retry repair. Monitoring status/incident/maintenance actions inspect mutation results, while heartbeat simulation always clears its loading state in `finally`.
+
+Migration follows the same storage-health contract: when a normalized legacy blob is written successfully but its version-key write fails, the successful load returns the exact `persistDB` warning and `versionWriteOk: false` rather than replacing it with a clean default. `AppDataProvider` exposes this non-blocking state as `storageHealth` (`warnings` and `versionWriteOk`) and refreshes it for its bootstrap reload, explicit refresh, reset, and import paths. The app shell shows a concise retry-on-reload warning only when recovery is not active; recovery remains a separate, write-blocking/raw-preserving state.
+
+Focused regression coverage uses deterministic storage doubles to exercise `getItem` read failures and version-key write failures. It asserts that unreadable DB storage never seeds over the original value, valid DB data stays usable when only the version key fails, current versions write neither key, stale or missing versions repair only the version key, failed repairs retry on later loads without rewriting the DB, and migration writes its DB blob exactly once while propagating a failed version write. The same suite covers malformed raw preservation, blocked ordinary writes and clear-all during recovery, explicit import/reset recovery exits, exact laboratory/layout/device identity failure codes, and failure guards for monitoring, incident, maintenance, and heartbeat UI flows.
+
+Ordinary business saves intentionally do not read, validate, repair, or write the storage-version key. Consequently, `mutate` and ordinary `replaceDB` preserve the provider's current storage-health state after a successful DB write; they cannot turn an unresolved version warning into a healthy result. Only a load/refresh or explicitly version-aware initial seed, migration, import, or reset may replace storage health. A later successful version repair clears the warning, while a failed DB save preserves both the in-memory AppDB state and the existing storage-health warning.

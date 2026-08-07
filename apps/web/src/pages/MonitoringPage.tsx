@@ -36,6 +36,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { cn, relativeTime } from '@/utils';
+import { mutationSucceeded, runHeartbeat } from '@/lib/mutationOutcome';
 import type { Asset, Device, DeviceStatus, Incident, MaintenanceExecution } from '@/types';
 
 const STATUS_FILTERS: (DeviceStatus | 'all')[] = ['all', 'Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
@@ -89,16 +90,14 @@ export function MonitoringPage() {
 
   async function handleSimulate() {
     if (!canUpdateMonitoring) return;
-    setSimulating(true);
-    await deviceRepository.simulateHeartbeat(selectedLab);
-    refresh();
-    setSimulating(false);
-    toast('Heartbeat disimulasikan. Metrik PC online diperbarui.', 'success');
+    const outcome = await runHeartbeat(() => deviceRepository.simulateHeartbeat(selectedLab), setSimulating);
+    if (outcome.ok) { refresh(); toast('Heartbeat disimulasikan. Metrik PC online diperbarui.', 'success'); }
+    else { toast(outcome.error instanceof Error ? outcome.error.message : 'Heartbeat tidak dapat disimulasikan.', 'error'); }
   }
 
   function handleStatusChange(device: Device, newStatus: DeviceStatus) {
     if (!canUpdateMonitoring) return;
-    mutate((d) => {
+    const result = mutate((d) => {
       const idx = d.devices.findIndex((x) => x.id === device.id);
       if (idx >= 0) {
         d.devices[idx].status = newStatus;
@@ -114,13 +113,14 @@ export function MonitoringPage() {
         }
       }
     });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     setSelected((s) => (s && s.id === device.id ? { ...s, status: newStatus } : s));
     toast(`Status ${device.hostname} diubah menjadi ${newStatus}`, 'success');
   }
 
   function createIncidentFromDevice(device: Device) {
     if (!canCreateIncident) return;
-    mutate((d) => {
+    const result = mutate((d) => {
       const num = `INC-2026-${String(d.incidents.length + 1).padStart(4, '0')}`;
       d.incidents.unshift({
         id: `inc-${Date.now()}`,
@@ -141,13 +141,14 @@ export function MonitoringPage() {
         timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: user?.name ?? 'User' }],
       });
     });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(`Tiket kerusakan dibuat untuk ${device.hostname}`, 'success');
     setSelected(null);
   }
 
   function scheduleMaintenance(device: Device) {
     if (!canScheduleMaintenance) return;
-    mutate((d) => {
+    const result = mutate((d) => {
       d.maintenance.plans.push({
         id: `mp-${Date.now()}`,
         name: `Maintenance ${device.hostname}`,
@@ -160,6 +161,7 @@ export function MonitoringPage() {
         status: 'active',
       });
     });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(`Pemeliharaan terjadwal untuk ${device.hostname}`, 'success');
   }
 

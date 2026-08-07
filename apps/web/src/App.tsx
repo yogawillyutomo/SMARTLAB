@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Route, RouterProvider, Routes } from 'react-router-dom';
 import { AppDataProvider } from '@/hooks/useAppData';
 import { AppLayout } from '@/layouts/AppLayout';
 import { RequireAuth, RequirePermission, NotFoundPage } from '@/routes/guards';
@@ -79,6 +79,8 @@ function AppRoutes() {
   );
 }
 
+const appRouter = createBrowserRouter([{ path: '*', element: <AppRoutes /> }]);
+
 function AppBootstrap() {
   const { db, ready } = useAppData();
   const hydrateAuth = useAuthStore((state) => state.hydrate);
@@ -117,7 +119,7 @@ function AppBootstrap() {
 
   return (
     <>
-      <AppRoutes />
+      <RouterProvider router={appRouter} />
       <Toaster />
     </>
   );
@@ -126,9 +128,7 @@ function AppBootstrap() {
 export default function App() {
   return (
     <AppDataProvider>
-      <BrowserRouter>
-        <AppBootstrap />
-      </BrowserRouter>
+      <AppBootstrap />
     </AppDataProvider>
   );
 }

@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV } from '@/utils';
+import { mutationSucceeded } from '@/lib/mutationOutcome';
 import type { MaintenancePlan, MaintenanceExecution, MaintenanceFrequency, AssetCondition } from '@/types';
 
 const FREQS: MaintenanceFrequency[] = ['mingguan', 'bulanan', 'tiga bulanan', 'semester', 'tahunan', 'custom'];
@@ -55,7 +56,7 @@ export function MaintenancePage() {
   function save() {
     if (editing ? !canUpdate : !canCreate) return;
     if (!form.name) { toast('Nama rencana wajib diisi', 'error'); return; }
-    mutate((d) => {
+    const result = mutate((d) => {
       if (editing) {
         const idx = d.maintenance.plans.findIndex((p) => p.id === editing.id);
         if (idx >= 0) d.maintenance.plans[idx] = { ...d.maintenance.plans[idx], ...form } as MaintenancePlan;
@@ -63,13 +64,15 @@ export function MaintenancePage() {
         d.maintenance.plans.push({ ...form, id: `mp-${Date.now()}` } as MaintenancePlan);
       }
     });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast(editing ? 'Rencana diperbarui' : 'Rencana ditambahkan', 'success');
     setOpen(false);
   }
 
   function remove() {
     if (!confirmDel || !canDelete) return;
-    mutate((d) => { d.maintenance.plans = d.maintenance.plans.filter((p) => p.id !== confirmDel.id); });
+    const result = mutate((d) => { d.maintenance.plans = d.maintenance.plans.filter((p) => p.id !== confirmDel.id); });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast('Rencana dihapus', 'success');
     setConfirmDel(null);
   }
@@ -83,13 +86,14 @@ export function MaintenancePage() {
   function saveExecution() {
     if (!canCreate) return;
     if (!execForm.laboratoryId) { toast('Pilih lab', 'error'); return; }
-    mutate((d) => {
+    const result = mutate((d) => {
       d.maintenance.executions.unshift({ ...execForm, id: `me-${Date.now()}`, assetCode: execForm.assetCode ?? '', findings: execForm.findings ?? '', action: execForm.action ?? '', spareParts: [] } as MaintenanceExecution);
       if (execForm.planId) {
         const idx = d.maintenance.plans.findIndex((p) => p.id === execForm.planId);
         if (idx >= 0) d.maintenance.plans[idx].nextSchedule = execForm.nextSchedule ?? '';
       }
     });
+    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
     toast('Eksekusi pemeliharaan tersimpan', 'success');
     setExecOpen(false);
   }
