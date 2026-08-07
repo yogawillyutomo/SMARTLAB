@@ -3,6 +3,7 @@ import type { SeedData } from '@/data/seed';
 import { migrateLegacyDeviceCoordinates } from './legacyMigration';
 import { inspectLaboratoryDependencies } from './laboratoryDependencies';
 import { isPositiveInteger, validateLaboratoryLayout } from './validation';
+import { validatePhysicalLayoutTemplateStructure } from './templates';
 
 export type PersistedLayoutIntegrityIssueCode =
   | 'invalid-layout'
@@ -22,7 +23,8 @@ export type PersistedLayoutIntegrityIssueCode =
   | 'orphan-device-laboratory'
   | 'invalid-laboratory-id'
   | 'invalid-layout-id'
-  | 'invalid-device-id';
+  | 'invalid-device-id'
+  | 'unsupported-layout-dimension-change';
 
 export interface PersistedLayoutIntegrityIssue {
   code: PersistedLayoutIntegrityIssueCode;
@@ -228,12 +230,17 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     return failure('Draft tidak sesuai dengan denah aktif laboratorium.', [{ code: 'invalid-layout', message: 'ID denah atau laboratorium draft tidak sesuai.', laboratoryId: input.laboratoryId, layoutId: input.draft.id }]);
   }
   const laboratory = input.db.labs.find((candidate) => candidate.id === input.laboratoryId)!;
-  if (input.draft.rows !== laboratory.layoutRows || input.draft.columns !== laboratory.layoutCols) {
-    return failure('Dimensi draft tidak sesuai dengan laboratorium.', [{ code: 'layout-dimension-mismatch', message: 'Dimensi draft tidak sesuai dengan laboratorium.', laboratoryId: input.laboratoryId, layoutId: input.draft.id }]);
+  const dimensionsChanged = input.draft.rows !== laboratory.layoutRows || input.draft.columns !== laboratory.layoutCols;
+  if (dimensionsChanged && !validatePhysicalLayoutTemplateStructure(input.draft).valid) {
+    return failure('Perubahan ukuran denah hanya diperbolehkan melalui template fisik yang didukung.', [{ code: 'unsupported-layout-dimension-change', message: 'Perubahan dimensi harus menggunakan struktur template fisik yang valid.', laboratoryId: input.laboratoryId, layoutId: input.draft.id }]);
   }
   if (layoutsEquivalent(active.layout, input.draft)) return { ok: true, changed: false, db: input.db, layout: active.layout };
 
   const next = clone(input.db);
+  if (dimensionsChanged) {
+    const laboratoryIndex = next.labs.findIndex((candidate) => candidate.id === input.laboratoryId);
+    next.labs[laboratoryIndex] = { ...next.labs[laboratoryIndex], layoutRows: input.draft.rows, layoutCols: input.draft.columns };
+  }
   const index = next.layouts.findIndex((layout) => layout.id === active.layout.id);
   const savedLayout = { ...cloneLaboratoryLayout(input.draft), updatedAt: input.savedAt };
   next.layouts[index] = savedLayout;
@@ -250,7 +257,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     action: 'layout.save',
     object: savedLayout.id,
     oldValue: `updatedAt=${active.layout.updatedAt}`,
-    newValue: `updatedAt=${savedLayout.updatedAt}; repositioned=${movedElements}`,
+    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${movedElements}`,
     device: input.actor.device ?? 'Web',
   };
   next.auditLogs.unshift(audit);
