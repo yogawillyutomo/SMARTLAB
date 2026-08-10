@@ -76,8 +76,27 @@ Ordinary business saves intentionally do not read, validate, repair, or write th
 
 ## Stage 4A physical layout templates
 
-Stage 4A adds a pure physical-template registry with `rpl-perimeter-center-island-36`: an exact 11×7 grid containing 36 `student_pc` elements, one real-device `teacher_pc`, one entrance door, and 39 fixed walking aisles. The teacher designation belongs to `LayoutElement.type`; no Device role field, fake Device, template ID persistence, or schema-version change is introduced. Compatibility requires exactly 37 same-laboratory Device records and an explicit teacher selection, so a 36-device lab remains safely incompatible.
+Stage 4A adds a pure physical-template registry with `rpl-perimeter-center-island-36`: an exact 11×6 grid containing 66 cells: 36 `student_pc` elements, one real-device `teacher_pc`, one entrance door, and 28 fixed walking aisles. The teacher designation belongs to `LayoutElement.type`; no Device role field, fake Device, template ID persistence, or schema-version change is introduced. Compatibility requires exactly 37 same-laboratory Device records and an explicit teacher selection, so a 36-device lab remains safely incompatible.
 
-The generated template is local editor draft state until the existing Simpan action persists it. Student devices are naturally sorted by position code and occupy the perimeter/center slots deterministically; their references may subsequently swap within valid student slots through the Stage 3A engine. Teacher, door, and aisle elements are fixed. The structure validator recognizes the exact supported arrangement, including template-controlled 11×7 dimensions. `saveActiveLaboratoryLayout` permits a dimension change only for that valid structure, atomically updates Laboratory dimensions and the active layout, creates one audit log, and still rejects arbitrary resizing. Stage 4B/4C retain generic palettes, infrastructure editing, free resizing, spans, rotation, undo/redo, and versioning.
+The generated template is local editor draft state until the existing Simpan action persists it. Student devices are naturally sorted by position code and occupy the four deterministic banks: right (column 6, PC-01 through PC-09), center-right (column 4, PC-18 through PC-10), center-left (column 3, PC-19 through PC-27), and left (column 1, PC-36 through PC-28). PC Guru is fixed at row 1/column 1; Pintu Masuk is fixed at row 1/column 6; row 1 columns 2–5, all of row 2, and columns 2 and 5 in rows 3–11 are fixed aisles. Student references may subsequently swap within valid student slots through the Stage 3A engine. The structure validator recognizes this exact supported arrangement, including template-controlled 11×6 dimensions. `saveActiveLaboratoryLayout` permits a dimension change only for that valid structure, atomically updates Laboratory dimensions and the active layout, creates one audit log, and still rejects arbitrary resizing.
 
-Manual UAT: create a temporary 37-device `LAB UAT PHYSICAL` (for example 6×7), open Denah, select the template and PC-37 as PC Guru, confirm the dirty draft, expected banks/aisles/door, fixed teacher, student swap and aisle rejection, cancel restore, then save and refresh to verify the persisted 11×7 layout and monitoring references. Check 1280×900, 768×1024, and 375×812; narrow layouts may scroll horizontally but must retain readable cells.
+### Template and Custom architecture
+
+Laboratory layouts have two future editing modes:
+
+```text
+Denah Laboratorium
+├── Template
+│   ├── Grid Classic
+│   ├── Perimeter + Center Island
+│   ├── U-Shape
+│   └── Facing Rows
+└── Custom
+    └── freely resize and arrange elements
+```
+
+A Template has a recognized structural pattern and generates a validated local draft. A student-PC-to-student-PC seat swap within valid slots does not alter that topology, so it retains the template `layoutType`. Future Stage 4C operations that alter topology—arbitrary row or column resizing; adding/removing structural cells, aisles, walls, or windows; moving the door or structural furniture away from the template definition; or any other change that no longer validates as the named template—should convert the layout to `custom`.
+
+Custom editing is not implemented in Stage 4A. Stage 4B will add an element palette for PC siswa, PC guru, teacher desk, door, window, wall, aisle, printer, network switch, access point, and label. Stage 4C will add template-to-custom conversion, row/column resizing, safe grid expansion/shrinking, free valid arrangement, element properties, and supported rotation/span operations. Expansion must create explicit `empty` cells. Shrinking must reject any operation that would clip a non-empty, structural, or device element; it must never silently delete a Device or structural element. Both future stages retain the local-draft → validation → Save/Cancel flow and the existing persistence, recovery, and audit contracts.
+
+Manual UAT: create a temporary 37-device `LAB UAT PHYSICAL` (for example 6×6), open Denah, select the template and PC-37 as PC Guru, confirm the dirty draft, expected banks/aisles/door, fixed teacher, student swap and aisle rejection, cancel restore, then save and refresh to verify the persisted 11×6 layout and monitoring references. Check 1280×900, 768×1024, and 375×812; narrow layouts may scroll horizontally inside the canvas but must retain readable cells and contained surrounding content.

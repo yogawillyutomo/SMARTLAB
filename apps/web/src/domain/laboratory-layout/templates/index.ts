@@ -19,7 +19,7 @@ export const RPL_PERIMETER_CENTER_ISLAND_36: PhysicalLayoutTemplateDefinition = 
   id: 'rpl-perimeter-center-island-36',
   name: 'Perimeter + Center Island — 36 PC',
   description: 'Denah fisik dengan 36 PC siswa, 1 PC Guru, dua area tengah, perimeter kiri/kanan, jalur utama, dan pintu masuk.',
-  layoutType: 'perimeter-center-island', rows: 11, columns: 7,
+  layoutType: 'perimeter-center-island', rows: 11, columns: 6,
   requiredStudentPcCount: 36, requiredTeacherPcCount: 1, requiredTotalDeviceCount: 37,
 };
 
@@ -55,18 +55,17 @@ export type GeneratePhysicalLayoutTemplateResult =
   | { ok: false; issues: TemplateCompatibilityIssue[] };
 
 const STUDENT_SLOTS: readonly [number, number, number][] = [
-  ...Array.from({ length: 9 }, (_, index) => [index + 1, index + 3, 7] as [number, number, number]),
+  ...Array.from({ length: 9 }, (_, index) => [index + 1, index + 3, 6] as [number, number, number]),
   ...Array.from({ length: 9 }, (_, index) => [18 - index, index + 3, 4] as [number, number, number]),
   ...Array.from({ length: 9 }, (_, index) => [index + 19, index + 3, 3] as [number, number, number]),
   ...Array.from({ length: 9 }, (_, index) => [36 - index, index + 3, 1] as [number, number, number]),
 ];
 const STUDENT_SLOT_KEYS = new Set(STUDENT_SLOTS.map(([, row, column]) => `${row}:${column}`));
 const AISLE_SLOT_KEYS = new Set<string>([
-  ...Array.from({ length: 5 }, (_, index) => `1:${index + 2}`),
-  ...Array.from({ length: 7 }, (_, index) => `2:${index + 1}`),
+  ...Array.from({ length: 4 }, (_, index) => `1:${index + 2}`),
+  ...Array.from({ length: 6 }, (_, index) => `2:${index + 1}`),
   ...Array.from({ length: 9 }, (_, index) => `${index + 3}:2`),
   ...Array.from({ length: 9 }, (_, index) => `${index + 3}:5`),
-  ...Array.from({ length: 9 }, (_, index) => `${index + 3}:6`),
 ]);
 
 function validTimestamp(value: string): boolean { return value.trim().length > 0 && !Number.isNaN(Date.parse(value)); }
@@ -108,10 +107,10 @@ export function generatePhysicalLayoutTemplateDraft(input: GeneratePhysicalLayou
   const layoutId = input.activeLayout.id;
   const elements: LayoutElement[] = [
     { ...fixedElement(`${layoutId}:teacher:${teacher.id}`, layoutId, 'teacher_pc', 1, 1, 'PC Guru'), referenceId: teacher.id },
-    fixedElement(`${layoutId}:door:entrance`, layoutId, 'door', 1, 7, 'Pintu Masuk'),
+    fixedElement(`${layoutId}:door:entrance`, layoutId, 'door', 1, 6, 'Pintu Masuk'),
   ];
   for (let row = 1; row <= definition.rows; row += 1) for (let column = 1; column <= definition.columns; column += 1) {
-    if (key(row, column) === '1:1' || key(row, column) === '1:7' || STUDENT_SLOT_KEYS.has(key(row, column))) continue;
+    if (key(row, column) === '1:1' || key(row, column) === '1:6' || STUDENT_SLOT_KEYS.has(key(row, column))) continue;
     elements.push(fixedElement(`${layoutId}:aisle:${row}:${column}`, layoutId, 'aisle', row, column));
   }
   STUDENT_SLOTS.forEach(([studentNumber, row, column]) => {
@@ -127,20 +126,21 @@ export function generatePhysicalLayoutTemplateDraft(input: GeneratePhysicalLayou
 export interface PhysicalTemplateStructureValidation { valid: boolean; issues: string[]; }
 export function validatePhysicalLayoutTemplateStructure(layout: LaboratoryLayout): PhysicalTemplateStructureValidation {
   const issues: string[] = [];
-  if (layout.layoutType !== 'perimeter-center-island' || layout.rows !== 11 || layout.columns !== 7 || layout.elements.length !== 77) issues.push('Dimensi atau jenis template fisik tidak sesuai.');
+  if (layout.layoutType !== 'perimeter-center-island' || layout.rows !== 11 || layout.columns !== 6 || layout.elements.length !== 66) issues.push('Dimensi atau jenis template fisik tidak sesuai.');
   const at = (row: number, column: number) => layout.elements.find((element) => element.row === row && element.column === column);
-  const teacher = at(1, 1); const door = at(1, 7);
-  if (!teacher || teacher.type !== 'teacher_pc' || !teacher.fixed || teacher.movable || teacher.swappable) issues.push('PC Guru harus berada tetap di depan kiri.');
-  if (!door || door.type !== 'door' || !door.fixed || door.movable || door.swappable) issues.push('Pintu harus berada tetap di depan kanan.');
-  for (let row = 1; row <= 11; row += 1) for (let column = 1; column <= 7; column += 1) {
+  const teacher = at(1, 1); const door = at(1, 6);
+  if (!teacher || teacher.type !== 'teacher_pc' || teacher.label !== 'PC Guru' || !teacher.fixed || teacher.movable || teacher.swappable || teacher.rowSpan !== 1 || teacher.columnSpan !== 1) issues.push('PC Guru harus berada tetap di depan kiri.');
+  if (!door || door.type !== 'door' || door.label !== 'Pintu Masuk' || !door.fixed || door.movable || door.swappable || door.rowSpan !== 1 || door.columnSpan !== 1) issues.push('Pintu harus berada tetap di depan kanan.');
+  for (let row = 1; row <= 11; row += 1) for (let column = 1; column <= 6; column += 1) {
     const element = at(row, column); const slot = key(row, column);
     if (!element) { issues.push('Grid template tidak lengkap.'); continue; }
+    if (element.rowSpan !== 1 || element.columnSpan !== 1) issues.push('Elemen template fisik tidak boleh memiliki span.');
     if (AISLE_SLOT_KEYS.has(slot) && (element.type !== 'aisle' || !element.fixed || element.movable || element.swappable)) issues.push('Jalur harus tetap dan tidak dapat dipindahkan.');
     if (STUDENT_SLOT_KEYS.has(slot) && (element.type !== 'student_pc' || element.fixed || !element.movable || !element.swappable)) issues.push('Slot siswa harus berisi student_pc yang dapat ditukar.');
     if (element.type === 'empty') issues.push('Template fisik tidak memiliki sel empty.');
   }
   if (layout.elements.filter((element) => element.type === 'student_pc').length !== 36) issues.push('Template harus memiliki 36 PC siswa.');
-  if (layout.elements.filter((element) => element.type === 'teacher_pc').length !== 1 || layout.elements.filter((element) => element.type === 'door').length !== 1 || layout.elements.filter((element) => element.type === 'aisle').length !== 39) issues.push('Komposisi elemen template tidak sesuai.');
+  if (layout.elements.filter((element) => element.type === 'teacher_pc').length !== 1 || layout.elements.filter((element) => element.type === 'door').length !== 1 || layout.elements.filter((element) => element.type === 'aisle').length !== 28) issues.push('Komposisi elemen template tidak sesuai.');
   return { valid: issues.length === 0, issues };
 }
 

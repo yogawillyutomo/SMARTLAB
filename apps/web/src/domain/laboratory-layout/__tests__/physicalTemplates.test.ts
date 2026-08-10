@@ -23,17 +23,17 @@ function physicalFixture() {
   const baseDevices = db.devices.filter((device) => device.laboratoryId === lab.id).slice(0, 36);
   const teacher: Device = { ...original, id: `${original.id}-37`, positionCode: 'PC-37', hostname: 'PC-RPL1-37', assetCode: 'AST-RPL1-037', ipAddress: '10.10.99.37', macAddress: '02:00:99:37:38:39', serialNumber: 'SNRPL10372026' };
   db.devices = [...db.devices.filter((device) => device.laboratoryId !== lab.id), ...baseDevices, teacher];
-  db.labs[0] = { ...lab, pcCount: 37, layoutRows: 6, layoutCols: 7 };
+  db.labs[0] = { ...lab, pcCount: 37, layoutRows: 7, layoutCols: 6 };
   const devices = db.devices.filter((device) => device.laboratoryId === lab.id);
   const layout = db.layouts.find((candidate) => candidate.laboratoryId === lab.id)!;
   const elements: LayoutElement[] = Array.from({ length: 42 }, (_, index) => {
-    const row = Math.floor(index / 7) + 1; const column = (index % 7) + 1;
+    const row = Math.floor(index / 6) + 1; const column = (index % 6) + 1;
     const device = devices[index];
     return device
       ? { id: `${layout.id}:legacy:${device.id}`, layoutId: layout.id, type: 'student_pc', referenceId: device.id, row, column, rowSpan: 1, columnSpan: 1, rotation: 0, movable: true, swappable: true, fixed: false }
       : { id: `${layout.id}:empty:${row}:${column}`, layoutId: layout.id, type: 'empty', row, column, rowSpan: 1, columnSpan: 1, rotation: 0, movable: false, swappable: false, fixed: false };
   });
-  db.layouts[db.layouts.findIndex((candidate) => candidate.id === layout.id)] = { ...layout, rows: 6, columns: 7, elements };
+  db.layouts[db.layouts.findIndex((candidate) => candidate.id === layout.id)] = { ...layout, rows: 7, columns: 6, elements };
   const activeLayout = db.layouts.find((candidate) => candidate.id === layout.id)!;
   return { db, laboratory: db.labs[0], activeLayout, devices, teacher };
 }
@@ -46,33 +46,41 @@ function generated() {
 }
 
 describe('perimeter + center island physical template', () => {
-  it('registers the exact 11 by 7, 36 student and one teacher definition', () => {
+  it('registers the exact 11 by 6, 36 student and one teacher definition', () => {
     expect(PHYSICAL_LAYOUT_TEMPLATE_REGISTRY).toContainEqual(RPL_PERIMETER_CENTER_ISLAND_36);
-    expect(RPL_PERIMETER_CENTER_ISLAND_36).toMatchObject({ rows: 11, columns: 7, requiredStudentPcCount: 36, requiredTeacherPcCount: 1, requiredTotalDeviceCount: 37 });
+    expect(RPL_PERIMETER_CENTER_ISLAND_36).toMatchObject({ rows: 11, columns: 6, requiredStudentPcCount: 36, requiredTeacherPcCount: 1, requiredTotalDeviceCount: 37 });
   });
 
   it('generates deterministic real-device physical elements with the exact counts and structure', () => {
     const { layout, activeLayout, devices, teacher } = generated();
-    expect(layout.elements).toHaveLength(77);
+    expect(layout.elements).toHaveLength(66);
     expect(layout.elements.filter((element) => element.type === 'student_pc')).toHaveLength(36);
     expect(layout.elements.filter((element) => element.type === 'teacher_pc')).toHaveLength(1);
     expect(layout.elements.filter((element) => element.type === 'door')).toHaveLength(1);
-    expect(layout.elements.filter((element) => element.type === 'aisle')).toHaveLength(39);
+    expect(layout.elements.filter((element) => element.type === 'aisle')).toHaveLength(28);
     expect(layout.elements.filter((element) => element.type === 'empty')).toHaveLength(0);
-    expect(layout.elements.find((element) => element.type === 'teacher_pc')).toMatchObject({ row: 1, column: 1, referenceId: teacher.id, fixed: true, movable: false, swappable: false });
-    expect(layout.elements.find((element) => element.type === 'door')).toMatchObject({ row: 1, column: 7, fixed: true, movable: false, swappable: false });
+    expect(layout.elements.find((element) => element.type === 'teacher_pc')).toMatchObject({ row: 1, column: 1, label: 'PC Guru', referenceId: teacher.id, fixed: true, movable: false, swappable: false });
+    expect(layout.elements.find((element) => element.type === 'door')).toMatchObject({ row: 1, column: 6, label: 'Pintu Masuk', fixed: true, movable: false, swappable: false });
+    const aisleSlots = layout.elements.filter((element) => element.type === 'aisle').map((element) => `${element.row}:${element.column}`).sort();
+    const expectedAisleSlots = [
+      ...Array.from({ length: 4 }, (_, index) => `1:${index + 2}`),
+      ...Array.from({ length: 6 }, (_, index) => `2:${index + 1}`),
+      ...Array.from({ length: 9 }, (_, index) => `${index + 3}:2`),
+      ...Array.from({ length: 9 }, (_, index) => `${index + 3}:5`),
+    ].sort();
+    expect(aisleSlots).toEqual(expectedAisleSlots);
     expect(new Set(layout.elements.filter((element) => element.referenceId).map((element) => element.referenceId)).size).toBe(37);
     expect(layout.elements.filter((element) => element.referenceId).every((element) => devices.some((device) => device.id === element.referenceId))).toBe(true);
     expect(validateLaboratoryLayout(layout).valid).toBe(true);
     expect(validatePhysicalLayoutTemplateStructure(layout).valid).toBe(true);
-    expect(activeLayout.rows).toBe(6);
+    expect(activeLayout.rows).toBe(7);
   });
 
   it('maps numeric student positions to the required banks without mutating source devices or layout', () => {
     const { layout, activeLayout, devices, teacher } = generated();
     const at = (row: number, column: number) => layout.elements.find((element) => element.row === row && element.column === column);
-    expect(at(3, 7)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-01')?.id);
-    expect(at(11, 7)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-09')?.id);
+    expect(at(3, 6)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-01')?.id);
+    expect(at(11, 6)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-09')?.id);
     expect(at(3, 4)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-18')?.id);
     expect(at(11, 4)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-10')?.id);
     expect(at(3, 3)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-19')?.id);
@@ -81,6 +89,24 @@ describe('perimeter + center island physical template', () => {
     expect(at(11, 1)?.referenceId).toBe(devices.find((device) => device.positionCode === 'PC-28')?.id);
     expect(activeLayout.elements[0].row).toBe(1);
     expect(teacher.positionCode).toBe('PC-37');
+  });
+
+  it('rejects the previous complete 11 by 7 physical structure', () => {
+    const { layout } = generated();
+    const legacyAisle = (row: number, column: number): LayoutElement => ({ id: `${layout.id}:legacy-aisle:${row}:${column}`, layoutId: layout.id, type: 'aisle', row, column, rowSpan: 1, columnSpan: 1, rotation: 0, movable: false, swappable: false, fixed: true });
+    const oldStructure = {
+      ...layout,
+      columns: 7,
+      elements: [
+        ...layout.elements.map((element) => element.type === 'door' || (element.type === 'student_pc' && element.column === 6) ? { ...element, column: 7 } : { ...element }),
+        legacyAisle(1, 6),
+        legacyAisle(2, 7),
+        ...Array.from({ length: 9 }, (_, index) => legacyAisle(index + 3, 6)),
+      ],
+    };
+    expect(oldStructure.elements).toHaveLength(77);
+    expect(validateLaboratoryLayout(oldStructure).valid).toBe(true);
+    expect(validatePhysicalLayoutTemplateStructure(oldStructure).valid).toBe(false);
   });
 
   it('rejects missing, wrong-laboratory, and incompatible teacher/device bindings', () => {
@@ -97,8 +123,8 @@ describe('perimeter + center island physical template', () => {
 
   it('preserves Stage 3A student swaps while rejecting aisle, teacher, and fixed teacher movement', () => {
     const { layout } = generated();
-    const student = layout.elements.find((element) => element.row === 3 && element.column === 7)!;
-    const swapped = moveLayoutElement(layout, student.id, { row: 4, column: 7 }, { updatedAt: AT });
+    const student = layout.elements.find((element) => element.row === 3 && element.column === 6)!;
+    const swapped = moveLayoutElement(layout, student.id, { row: 4, column: 6 }, { updatedAt: AT });
     expect(swapped).toMatchObject({ ok: true, operation: 'swapped' });
     if (swapped.ok) expect(validatePhysicalLayoutTemplateStructure(swapped.layout).valid).toBe(true);
     expect(moveLayoutElement(layout, student.id, { row: 3, column: 2 }, { updatedAt: AT })).toMatchObject({ ok: false, reason: 'incompatible_target' });
@@ -113,11 +139,11 @@ describe('perimeter + center island physical template', () => {
     const saved = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-physical' });
     expect(saved).toMatchObject({ ok: true, changed: true });
     if (!saved.ok) return;
-    expect(saved.db.labs.find((candidate) => candidate.id === laboratory.id)).toMatchObject({ layoutRows: 11, layoutCols: 7 });
+    expect(saved.db.labs.find((candidate) => candidate.id === laboratory.id)).toMatchObject({ layoutRows: 11, layoutCols: 6 });
     expect(saved.layout.layoutType).toBe('perimeter-center-island');
-    expect(saved.db.auditLogs[0]).toMatchObject({ action: 'layout.save', newValue: expect.stringContaining('dimensions=11x7') });
+    expect(saved.db.auditLogs[0]).toMatchObject({ action: 'layout.save', newValue: expect.stringContaining('dimensions=11x6') });
     expect(validatePersistedLaboratoryLayouts(saved.db).valid).toBe(true);
-    expect(db.labs.find((candidate) => candidate.id === laboratory.id)?.layoutRows).toBe(6);
+    expect(db.labs.find((candidate) => candidate.id === laboratory.id)?.layoutRows).toBe(7);
     const normalized = normalizeDatabase(saved.db, { migratedAt: AT });
     expect(normalized).toMatchObject({ ok: true, changed: false });
   });
@@ -149,8 +175,8 @@ describe('perimeter + center island physical template', () => {
     });
     layout.elements.filter((element) => element.type === 'student_pc').forEach((element) => expect(element).toMatchObject({ fixed: false, movable: true, swappable: true }));
     expect(at(1, 1)).toMatchObject({ type: 'teacher_pc', fixed: true, movable: false, swappable: false });
-    expect(at(1, 7)).toMatchObject({ type: 'door', fixed: true, movable: false, swappable: false });
-    const student = at(3, 7); const source = JSON.stringify(layout);
+    expect(at(1, 6)).toMatchObject({ type: 'door', fixed: true, movable: false, swappable: false });
+    const student = at(3, 6); const source = JSON.stringify(layout);
     expect(moveLayoutElement(layout, student.id, { row: 3, column: 2 }, { updatedAt: AT }).ok).toBe(false);
     expect(JSON.stringify(layout)).toBe(source);
     expect(moveLayoutElement(layout, student.id, { row: 1, column: 1 }, { updatedAt: AT }).ok).toBe(false);
@@ -161,7 +187,7 @@ describe('perimeter + center island physical template', () => {
 
   it('rejects arbitrary and structurally invalid dimension changes without audit, while template no-ops remain audit-free', () => {
     const fixture = physicalFixture();
-    const arbitrary = { ...fixture.activeLayout, rows: 7, columns: 6, elements: fixture.activeLayout.elements.map((element, index) => ({ ...element, row: Math.floor(index / 6) + 1, column: (index % 6) + 1 })) };
+    const arbitrary = { ...fixture.activeLayout, rows: 3, columns: 14, elements: fixture.activeLayout.elements.map((element, index) => ({ ...element, row: Math.floor(index / 14) + 1, column: (index % 14) + 1 })) };
     const before = JSON.stringify(fixture.db);
     const rejected = saveActiveLaboratoryLayout({ db: fixture.db, laboratoryId: fixture.laboratory.id, draft: arbitrary, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-arbitrary' });
     expect(rejected).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'unsupported-layout-dimension-change' })] });

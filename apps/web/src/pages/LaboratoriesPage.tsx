@@ -553,7 +553,7 @@ export function LaboratoryLayoutPage() {
               </div>
             </div>
             <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
-              <div className="grid gap-2" style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '760px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}>
+              <div className="grid gap-2" style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '660px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}>
                 {grid.map((element, i) => {
                   const col = (i % cols) + 1;
                   const row = Math.floor(i / cols) + 1;
@@ -608,7 +608,7 @@ export function LaboratoryLayoutPage() {
               <p>Jenis saat ini: <span className="text-ink-primary">{draft.layoutType === 'perimeter-center-island' ? 'Perimeter + Center Island' : 'Grid Klasik'}</span></p>
               <p className="mt-2 font-medium text-ink-primary">{RPL_PERIMETER_CENTER_ISLAND_36.name}</p>
               <p>{RPL_PERIMETER_CENTER_ISLAND_36.description}</p>
-              <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 7</p>
+              <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 6</p>
               {devices.length !== 37 && <p className="mt-2 text-warning-foreground">Template membutuhkan 37 perangkat. Laboratorium ini memiliki {devices.length}.</p>}
               {canUpdate && <Button size="sm" className="mt-3 w-full" disabled={devices.length !== 37} onClick={openTemplate}>Gunakan Template</Button>}
             </div>
@@ -617,7 +617,7 @@ export function LaboratoryLayoutPage() {
       </div>
       <FormDialog open={templateOpen} onClose={() => setTemplateOpen(false)} title="Gunakan Template Perimeter + Center Island" description="Pilih perangkat nyata yang akan digunakan sebagai PC Guru. Template akan menjadi draft dan belum disimpan." onSubmit={applyTemplate} submitLabel="Terapkan ke Draft" submitDisabled={!templateCompatibility.compatible} size="md">
         <div className="space-y-4">
-          <p className="text-sm text-ink-secondary">Grid 11 × 7 · 36 PC siswa · 1 PC Guru · 1 pintu masuk.</p>
+          <p className="text-sm text-ink-secondary">Grid 11 × 6 · 36 PC siswa · 1 PC Guru · 1 pintu masuk.</p>
           <Select label="PC Guru" value={teacherDeviceId} onChange={(event) => setTeacherDeviceId(event.target.value)} placeholder="Pilih perangkat PC Guru" options={devices.map((device) => ({ value: device.id, label: `${device.positionCode} — ${device.hostname} — ${device.assetCode}` }))} />
           {!templateCompatibility.compatible && <p className="text-xs text-warning-foreground">{templateCompatibility.issues[0]?.message}</p>}
         </div>
