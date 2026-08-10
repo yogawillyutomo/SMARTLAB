@@ -542,7 +542,7 @@ export function LaboratoryLayoutPage() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_280px]">
         <Card>
           <CardContent>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
