@@ -201,7 +201,7 @@ export function AppTopbar() {
 
   return (
     <>
-      <header className="print-hidden sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-base-700 bg-base-900/90 px-3 backdrop-blur sm:px-4">
+      <header className="print-hidden sticky top-0 z-30 flex h-16 min-w-0 items-center gap-2 border-b border-base-700 bg-base-900/90 px-3 backdrop-blur sm:px-4">
         <button
           onClick={() => setMobileSidebar(true)}
           className="rounded-lg p-2 text-ink-secondary hover:bg-base-700 hover:text-ink-primary lg:hidden"
@@ -211,16 +211,16 @@ export function AppTopbar() {
         </button>
 
         {/* Breadcrumb */}
-        <nav className="hidden items-center gap-1 text-xs text-ink-muted md:flex">
+        <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-xs text-ink-muted md:flex">
           {crumbs.map((c, i) => (
-            <span key={i} className="flex items-center gap-1">
+            <span key={i} className={cn('flex min-w-0 items-center gap-1', i === crumbs.length - 1 && 'truncate')}>
               {i > 0 && <span className="opacity-50">/</span>}
               {c.to && i < crumbs.length - 1 ? (
-                <Link to={c.to} className="hover:text-ink-secondary">
+                <Link to={c.to} className="truncate hover:text-ink-secondary">
                   {c.label}
                 </Link>
               ) : (
-                <span className={cn(i === crumbs.length - 1 && 'font-medium text-ink-secondary')}>{c.label}</span>
+                <span className={cn('truncate', i === crumbs.length - 1 && 'font-medium text-ink-secondary')}>{c.label}</span>
               )}
             </span>
           ))}
@@ -229,15 +229,15 @@ export function AppTopbar() {
         {/* Search trigger */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="ml-auto flex items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm text-ink-muted transition-colors hover:border-base-600 hover:text-ink-secondary sm:ml-2"
+          className="ml-auto flex shrink-0 items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm text-ink-muted transition-colors hover:border-base-600 hover:text-ink-secondary sm:ml-2"
         >
           <Search className="h-4 w-4" />
-          <span className="hidden lg:inline">Cari apa saja...</span>
-          <kbd className="hidden rounded border border-base-600 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted lg:inline">⌘K</kbd>
+          <span className="hidden 2xl:inline">Cari apa saja...</span>
+          <kbd className="hidden rounded border border-base-600 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted 2xl:inline">⌘K</kbd>
         </button>
 
         {/* Active lab selector */}
-        <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm xl:flex">
+        <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm 2xl:flex">
           <FlaskConical className="h-4 w-4 text-accent-content" />
           <select
             value={activeLabId}
@@ -254,7 +254,7 @@ export function AppTopbar() {
         </div>
 
         {/* Academic year */}
-        <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-xs text-ink-secondary lg:flex">
+        <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-xs text-ink-secondary 2xl:flex">
           <Calendar className="h-4 w-4 text-ink-muted" />
           <span>{academicYear}</span>
           <span className="text-ink-muted">·</span>
@@ -262,7 +262,7 @@ export function AppTopbar() {
         </div>
 
         {/* Today */}
-        <div className="hidden items-center rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-xs text-ink-secondary lg:flex">
+        <div className="hidden items-center rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-xs text-ink-secondary 2xl:flex">
           {new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })}
         </div>
 
@@ -335,7 +335,7 @@ export function AppTopbar() {
             className="hidden items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:brightness-110 sm:flex"
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden md:inline">Buat Tiket</span>
+            <span className="hidden 2xl:inline">Buat Tiket</span>
           </button>
         )}
 

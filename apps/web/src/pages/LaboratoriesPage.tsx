@@ -542,9 +542,9 @@ export function LaboratoryLayoutPage() {
         }
       />
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_280px]">
-        <Card>
-          <CardContent>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[minmax(0,1fr)_280px]">
+        <Card className="min-w-0">
+          <CardContent className="min-w-0">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-ink-muted">Grid {draft.rows} × {cols}</p>
               <div className="flex items-center gap-2 text-xs text-ink-muted">
@@ -552,7 +552,7 @@ export function LaboratoryLayoutPage() {
                 <Users className="h-4 w-4 text-success-foreground" /> PC Guru
               </div>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
+            <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
               <div className="grid gap-2" style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '760px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}>
                 {grid.map((element, i) => {
                   const col = (i % cols) + 1;
@@ -596,9 +596,9 @@ export function LaboratoryLayoutPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader><CardTitle>Template Denah</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="min-w-0 space-y-2">
             <div className="space-y-1 text-xs text-ink-muted">
               <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{draft.elements.filter((element) => element.type === 'student_pc' || element.type === 'teacher_pc').length}</span></div>
               <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{draft.elements.filter((element) => element.referenceId && devices.find((device) => device.id === element.referenceId)?.status === 'Online').length}</span></div>
