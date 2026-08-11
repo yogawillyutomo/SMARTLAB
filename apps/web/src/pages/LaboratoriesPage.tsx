@@ -23,6 +23,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/States';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
+import { LayoutElementPalette, LAYOUT_PALETTE_DRAG_MIME } from '@/components/laboratory/LayoutElementPalette';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -31,15 +32,20 @@ import { uid } from '@/utils';
 import {
   cloneLaboratoryLayout,
   createLaboratoryWithInitialLayout,
+  canEditLayoutStructure,
   deleteLaboratorySafely,
   getActiveLaboratoryLayout,
   layoutFingerprint,
   layoutsEquivalent,
+  LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES,
   moveLayoutElement,
+  placeLayoutElement,
+  removeLayoutElement,
   saveActiveLaboratoryLayout,
   RPL_PERIMETER_CENTER_ISLAND_36,
   checkPhysicalLayoutTemplateCompatibility,
   generatePhysicalLayoutTemplateDraft,
+  type PalettePlaceableElementType,
 } from '@/domain/laboratory-layout';
 import type { Device, Laboratory, LaboratoryLayout } from '@/types';
 
@@ -436,6 +442,9 @@ export function LaboratoryLayoutPage() {
   const [saving, setSaving] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [teacherDeviceId, setTeacherDeviceId] = useState('');
+  const [selectedPaletteType, setSelectedPaletteType] = useState<PalettePlaceableElementType | null>(null);
+  const [paletteLabel, setPaletteLabel] = useState('');
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
   const blocker = useBlocker(dirty);
 
@@ -456,6 +465,18 @@ export function LaboratoryLayoutPage() {
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
   }, [dirty]);
 
+  useEffect(() => {
+    if (!selectedPaletteType) return undefined;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedPaletteType(null);
+        setPaletteLabel('');
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedPaletteType]);
+
   if (!lab) return <EmptyState title="Laboratorium tidak ditemukan" action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
   if (!activeResult?.ok || !baseline || !draft) {
     return <EmptyState title="Denah aktif tidak dapat dimuat" description={activeResult?.ok ? 'Menyiapkan denah...' : activeResult?.error ?? 'Data denah tidak valid.'} action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
@@ -465,6 +486,9 @@ export function LaboratoryLayoutPage() {
   const draftLayout = draft;
   const cols = draft.columns;
   const devices = db.devices.filter((device) => device.laboratoryId === currentLab.id);
+  const structureEditable = canEditLayoutStructure(draftLayout);
+  const selectedElement = selectedElementId ? draft.elements.find((element) => element.id === selectedElementId) ?? null : null;
+  const canRemoveSelected = Boolean(canUpdate && structureEditable && selectedElement && selectedElement.type !== 'empty' && selectedElement.type !== 'student_pc' && selectedElement.type !== 'teacher_pc' && !selectedElement.fixed);
   const templateCompatibility = checkPhysicalLayoutTemplateCompatibility({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, devices, teacherDeviceId: teacherDeviceId || undefined });
   const grid = Array.from({ length: draft.rows * cols }, (_, index) => {
     const col = (index % cols) + 1;
@@ -482,8 +506,46 @@ export function LaboratoryLayoutPage() {
     if (result.operation !== 'noop') setDraft(result.layout);
   }
 
+  function placeElement(type: PalettePlaceableElementType, column: number, row: number) {
+    if (!canUpdate || !structureEditable) return;
+    const result = placeLayoutElement({ layout: draftLayout, type, target: { row, column }, elementId: uid('le'), updatedAt: new Date().toISOString(), label: paletteLabel });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    setDraft(result.layout);
+    setSelectedElementId(result.elementId);
+    setSelectedPaletteType(null);
+    setPaletteLabel('');
+  }
+
+  function removeSelectedElement() {
+    if (!canUpdate || !structureEditable || !selectedElement) return;
+    const result = removeLayoutElement({ layout: draftLayout, elementId: selectedElement.id, emptyElementId: uid('empty'), updatedAt: new Date().toISOString() });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    setDraft(result.layout);
+    setSelectedElementId(null);
+  }
+
+  function clearPaletteSelection() {
+    setSelectedPaletteType(null);
+    setPaletteLabel('');
+  }
+
+  function selectPaletteType(type: PalettePlaceableElementType) {
+    if (!canUpdate || !structureEditable) return;
+    setSelectedPaletteType(type);
+    setSelectedElementId(null);
+    if (type !== 'label') setPaletteLabel('');
+  }
+
   function cancelChanges() {
     setDraft(cloneLaboratoryLayout(baselineLayout));
+    setSelectedElementId(null);
+    clearPaletteSelection();
   }
 
   function openTemplate() {
@@ -497,6 +559,8 @@ export function LaboratoryLayoutPage() {
     const result = generatePhysicalLayoutTemplateDraft({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, activeLayout: draftLayout, devices, teacherDeviceId: teacherDeviceId || undefined, updatedAt: new Date().toISOString() });
     if (!result.ok) { toast(result.issues[0]?.message ?? 'Template tidak dapat diterapkan.', 'error'); return; }
     setDraft(result.layout);
+    setSelectedElementId(null);
+    clearPaletteSelection();
     setTemplateOpen(false);
   }
 
@@ -560,16 +624,36 @@ export function LaboratoryLayoutPage() {
                   const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
                   const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
                   const isTeacher = element?.type === 'teacher_pc';
+                  const isMovableNonPc = Boolean(element && !isPc && element.type !== 'empty' && element.movable);
                   const statusClass = !device ? '' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground';
                   return (
                     <div
                       key={element?.id ?? `${row}:${col}`}
                       style={element ? { gridRow: `${element.row} / span ${element.rowSpan}`, gridColumn: `${element.column} / span ${element.columnSpan}` } : undefined}
-                      className={cn('flex aspect-square items-center justify-center rounded-lg', element?.type === 'aisle' ? 'border border-base-700/40 bg-base-800/20' : element?.type === 'door' ? 'border-2 border-warning/40 bg-warning/10' : 'border-2 border-dashed border-base-700 bg-base-800/40')}
+                      draggable={canUpdate && isMovableNonPc}
+                      className={cn('flex aspect-square items-center justify-center rounded-lg', canUpdate && isMovableNonPc && 'cursor-grab active:cursor-grabbing', selectedElementId === element?.id && 'ring-2 ring-accent-content ring-offset-1 ring-offset-base-900', element?.type === 'aisle' ? 'border border-base-700/40 bg-base-800/20' : element?.type === 'door' ? 'border-2 border-warning/40 bg-warning/10' : 'border-2 border-dashed border-base-700 bg-base-800/40')}
+                      onClick={() => {
+                        if (!element) return;
+                        if (selectedPaletteType) {
+                          placeElement(selectedPaletteType, col, row);
+                          return;
+                        }
+                        setSelectedElementId(element.id);
+                      }}
+                      onDragStart={(event) => {
+                        if (isMovableNonPc) event.dataTransfer.setData('text/plain', element!.id);
+                      }}
                       onDragOver={(e) => { if (canUpdate) e.preventDefault(); }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        if (element) moveElement(e.dataTransfer.getData('text/plain'), col, row);
+                        if (!element || !canUpdate) return;
+                        const paletteType = e.dataTransfer.getData(LAYOUT_PALETTE_DRAG_MIME) as PalettePlaceableElementType;
+                        if (paletteType) {
+                          placeElement(paletteType, col, row);
+                          return;
+                        }
+                        const sourceElementId = e.dataTransfer.getData('text/plain');
+                        if (sourceElementId) moveElement(sourceElementId, col, row);
                       }}
                     >
                       {isPc && device ? (
@@ -587,7 +671,7 @@ export function LaboratoryLayoutPage() {
                           <span className="mt-1 text-[10px] font-semibold">{isTeacher ? 'PC Guru' : device.positionCode}</span>
                           {isTeacher && <span className="text-[9px] opacity-80">{device.positionCode}</span>}
                         </div>
-                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="text-[10px] font-medium">Pintu Masuk</span></div> : element?.type === 'aisle' ? null : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
+                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="px-2 text-center text-[10px] font-medium">{element.label ?? 'Pintu'}</span></div> : element?.type === 'aisle' ? null : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
                     </div>
                   );
                 })}
@@ -596,24 +680,38 @@ export function LaboratoryLayoutPage() {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0">
-          <CardHeader><CardTitle>Template Denah</CardTitle></CardHeader>
-          <CardContent className="min-w-0 space-y-2">
-            <div className="space-y-1 text-xs text-ink-muted">
-              <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{draft.elements.filter((element) => element.type === 'student_pc' || element.type === 'teacher_pc').length}</span></div>
-              <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{draft.elements.filter((element) => element.referenceId && devices.find((device) => device.id === element.referenceId)?.status === 'Online').length}</span></div>
-              <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{draft.elements.filter((element) => element.referenceId && ['Warning', 'Critical', 'Offline'].includes(devices.find((device) => device.id === element.referenceId)?.status ?? '')).length}</span></div>
-            </div>
-            <div className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">
-              <p>Jenis saat ini: <span className="text-ink-primary">{draft.layoutType === 'perimeter-center-island' ? 'Perimeter + Center Island' : 'Grid Klasik'}</span></p>
-              <p className="mt-2 font-medium text-ink-primary">{RPL_PERIMETER_CENTER_ISLAND_36.name}</p>
-              <p>{RPL_PERIMETER_CENTER_ISLAND_36.description}</p>
-              <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 6</p>
-              {devices.length !== 37 && <p className="mt-2 text-warning-foreground">Template membutuhkan 37 perangkat. Laboratorium ini memiliki {devices.length}.</p>}
-              {canUpdate && <Button size="sm" className="mt-3 w-full" disabled={devices.length !== 37} onClick={openTemplate}>Gunakan Template</Button>}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="min-w-0 space-y-4">
+          <Card className="min-w-0">
+            <CardHeader><CardTitle>Template Denah</CardTitle></CardHeader>
+            <CardContent className="min-w-0 space-y-2">
+              <div className="space-y-1 text-xs text-ink-muted">
+                <div className="flex justify-between"><span>Total PC</span><span className="text-ink-primary">{draft.elements.filter((element) => element.type === 'student_pc' || element.type === 'teacher_pc').length}</span></div>
+                <div className="flex justify-between"><span>Online</span><span className="text-success-foreground">{draft.elements.filter((element) => element.referenceId && devices.find((device) => device.id === element.referenceId)?.status === 'Online').length}</span></div>
+                <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{draft.elements.filter((element) => element.referenceId && ['Warning', 'Critical', 'Offline'].includes(devices.find((device) => device.id === element.referenceId)?.status ?? '')).length}</span></div>
+              </div>
+              <div className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">
+                <p>Jenis saat ini: <span className="text-ink-primary">{LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES[draft.layoutType]}</span></p>
+                <p className="mt-2 font-medium text-ink-primary">{RPL_PERIMETER_CENTER_ISLAND_36.name}</p>
+                <p>{RPL_PERIMETER_CENTER_ISLAND_36.description}</p>
+                <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 6</p>
+                {devices.length !== 37 && <p className="mt-2 text-warning-foreground">Template membutuhkan 37 perangkat. Laboratorium ini memiliki {devices.length}.</p>}
+                {canUpdate && <Button size="sm" className="mt-3 w-full" disabled={devices.length !== 37} onClick={openTemplate}>Gunakan Template</Button>}
+              </div>
+            </CardContent>
+          </Card>
+          <LayoutElementPalette
+            canUpdate={canUpdate}
+            structureEditable={structureEditable}
+            selectedPaletteType={selectedPaletteType}
+            labelText={paletteLabel}
+            selectedElement={selectedElement}
+            canRemoveSelected={canRemoveSelected}
+            onSelectPaletteType={selectPaletteType}
+            onClearPaletteSelection={clearPaletteSelection}
+            onLabelTextChange={setPaletteLabel}
+            onRemoveSelected={removeSelectedElement}
+          />
+        </div>
       </div>
       <FormDialog open={templateOpen} onClose={() => setTemplateOpen(false)} title="Gunakan Template Perimeter + Center Island" description="Pilih perangkat nyata yang akan digunakan sebagai PC Guru. Template akan menjadi draft dan belum disimpan." onSubmit={applyTemplate} submitLabel="Terapkan ke Draft" submitDisabled={!templateCompatibility.compatible} size="md">
         <div className="space-y-4">

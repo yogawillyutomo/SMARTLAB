@@ -107,6 +107,21 @@ export function layoutsEquivalent(left: LaboratoryLayout, right: LaboratoryLayou
   return layoutFingerprint(left) === layoutFingerprint(right);
 }
 
+function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number } {
+  const activeNonEmptyById = new Map(activeLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
+  const savedNonEmptyById = new Map(savedLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
+  const repositioned = savedLayout.elements.filter((element) => {
+    if (element.type === 'empty') return false;
+    const previous = activeNonEmptyById.get(element.id);
+    return previous && (previous.row !== element.row || previous.column !== element.column);
+  }).length;
+  return {
+    repositioned,
+    added: savedLayout.elements.filter((element) => element.type !== 'empty' && !activeNonEmptyById.has(element.id)).length,
+    removed: activeLayout.elements.filter((element) => element.type !== 'empty' && !savedNonEmptyById.has(element.id)).length,
+  };
+}
+
 export function validatePersistedLaboratoryLayouts(db: Pick<SeedData, 'labs' | 'devices' | 'layouts'>): PersistedLayoutIntegrityResult {
   const issues: PersistedLayoutIntegrityIssue[] = [];
   const labsById = new Map<ID, Laboratory>();
@@ -244,10 +259,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
   const index = next.layouts.findIndex((layout) => layout.id === active.layout.id);
   const savedLayout = { ...cloneLaboratoryLayout(input.draft), updatedAt: input.savedAt };
   next.layouts[index] = savedLayout;
-  const movedElements = savedLayout.elements.filter((element) => {
-    const previous = active.layout.elements.find((candidate) => candidate.id === element.id);
-    return previous && (previous.row !== element.row || previous.column !== element.column);
-  }).length;
+  const changes = summarizeLayoutChanges(active.layout, savedLayout);
   const audit: AuditLog = {
     id: input.auditId,
     at: input.savedAt,
@@ -257,7 +269,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     action: 'layout.save',
     object: savedLayout.id,
     oldValue: `updatedAt=${active.layout.updatedAt}`,
-    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${movedElements}`,
+    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}`,
     device: input.actor.device ?? 'Web',
   };
   next.auditLogs.unshift(audit);
