@@ -11,6 +11,8 @@ import {
   getActiveLaboratoryLayout,
   layoutsEquivalent,
   moveLayoutElement,
+  placeLayoutElement,
+  removeLayoutElement,
   saveActiveLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
 } from '../index';
@@ -182,6 +184,35 @@ describe('layout persistence integration', () => {
     expect(saved.db.auditLogs).toHaveLength(4);
     expect(saved.db.auditLogs[0]).toMatchObject({ action: 'layout.save' });
     expect(validatePersistedLaboratoryLayouts(saved.db).valid).toBe(true);
+  });
+
+  it('persists placed and removed palette elements with one audit per save and exact device coverage', () => {
+    const seed = generateSeedData();
+    const laboratory = { ...seed.labs[0], id: 'lab-palette', code: 'PALETTE', name: 'Lab Palette', pcCount: 1, layoutRows: 2, layoutCols: 2 };
+    const created = createLaboratoryWithInitialLayout({ db: seed, laboratory, devices: createInitialLaboratoryDevices(laboratory, MIGRATED_AT), createdAt: MIGRATED_AT, layoutId: 'layout:lab-palette:v1' });
+    if (!created.ok) throw new Error('expected laboratory creation');
+    const db = created.db;
+    const active = getActiveLaboratoryLayout(db, laboratory.id);
+    if (!active.ok) throw new Error('expected active layout');
+    const target = active.layout.elements.find((element) => element.type === 'empty')!;
+    const placed = placeLayoutElement({ layout: active.layout, type: 'printer', target: { row: target.row, column: target.column }, elementId: 'palette-printer', updatedAt: MIGRATED_AT });
+    if (!placed.ok) throw new Error('expected placement');
+    const savedPlaced = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: placed.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-palette-place' });
+    expect(savedPlaced).toMatchObject({ ok: true, changed: true });
+    if (!savedPlaced.ok) return;
+    expect(savedPlaced.db.auditLogs).toHaveLength(db.auditLogs.length + 1);
+    expect(savedPlaced.db.auditLogs[0].newValue).toContain('repositioned=0; added=1; removed=1');
+    expect(validatePersistedLaboratoryLayouts(savedPlaced.db).valid).toBe(true);
+
+    const savedActive = getActiveLaboratoryLayout(savedPlaced.db, laboratory.id);
+    if (!savedActive.ok) throw new Error('expected saved active layout');
+    const removed = removeLayoutElement({ layout: savedActive.layout, elementId: 'palette-printer', emptyElementId: 'empty-after-printer', updatedAt: MIGRATED_AT });
+    if (!removed.ok) throw new Error('expected removal');
+    const savedRemoved = saveActiveLaboratoryLayout({ db: savedPlaced.db, laboratoryId: laboratory.id, draft: removed.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-palette-remove' });
+    expect(savedRemoved).toMatchObject({ ok: true, changed: true });
+    if (!savedRemoved.ok) return;
+    expect(savedRemoved.db.auditLogs[0].newValue).toContain('repositioned=0; added=1; removed=1');
+    expect(validatePersistedLaboratoryLayouts(savedRemoved.db).valid).toBe(true);
   });
 
   it('treats an equivalent draft as a no-op regardless of element ordering or updatedAt', () => {

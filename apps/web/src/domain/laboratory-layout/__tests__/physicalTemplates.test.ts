@@ -8,6 +8,7 @@ import {
   RPL_PERIMETER_CENTER_ISLAND_36,
   generatePhysicalLayoutTemplateDraft,
   moveLayoutElement,
+  placeLayoutElement,
   saveActiveLaboratoryLayout,
   validateLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
@@ -131,6 +132,13 @@ describe('perimeter + center island physical template', () => {
     expect(moveLayoutElement(layout, student.id, { row: 1, column: 1 }, { updatedAt: AT })).toMatchObject({ ok: false, reason: 'incompatible_target' });
     const teacher = layout.elements.find((element) => element.type === 'teacher_pc')!;
     expect(moveLayoutElement(layout, teacher.id, { row: 2, column: 1 }, { updatedAt: AT })).toMatchObject({ ok: false, reason: 'source_fixed' });
+  });
+
+  it('rejects palette structural placement before mutating the physical template draft', () => {
+    const { layout } = generated();
+    const before = JSON.stringify(layout);
+    expect(placeLayoutElement({ layout, type: 'printer', target: { row: 2, column: 1 }, elementId: 'palette-printer', updatedAt: AT })).toMatchObject({ ok: false, reason: 'palette_edit_not_allowed' });
+    expect(JSON.stringify(layout)).toBe(before);
   });
 
   it('saves a generated template with an atomic controlled dimension change and audit', () => {

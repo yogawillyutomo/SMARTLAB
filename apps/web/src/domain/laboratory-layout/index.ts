@@ -1,6 +1,17 @@
 export * from './types';
 export { validateLaboratoryLayout } from './validation';
 export { moveLayoutElement, swapLayoutElements } from './operations';
+export {
+  PALETTE_DEVICE_MANAGED_ELEMENT_TYPES,
+  PALETTE_ELEMENT_DISPLAY_NAMES,
+  PALETTE_PLACEABLE_ELEMENT_TYPES,
+  canEditLayoutStructure,
+  getPaletteElementDefaults,
+  placeLayoutElement,
+  removeLayoutElement,
+  type PaletteOperationResult,
+  type PalettePlaceableElementType,
+} from './paletteOperations';
 export { migrateLegacyDeviceCoordinates } from './legacyMigration';
 export { inspectLaboratoryDependencies } from './laboratoryDependencies';
 export {
