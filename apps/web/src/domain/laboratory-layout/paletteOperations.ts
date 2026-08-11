@@ -1,4 +1,4 @@
-import type { ID, LaboratoryLayout, LayoutElement, LayoutElementType } from '@/types';
+import type { ID, LaboratoryLayout, LaboratoryLayoutType, LayoutElement, LayoutElementType } from '@/types';
 import type { LayoutCoordinate } from './types';
 import { isCoordinateInBounds, isSingleCell, validateLaboratoryLayout } from './validation';
 
@@ -28,6 +28,14 @@ export const PALETTE_ELEMENT_DISPLAY_NAMES: Record<PalettePlaceableElementType, 
   wall: 'Dinding',
   aisle: 'Jalur',
   label: 'Label',
+};
+
+export const LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES: Record<LaboratoryLayoutType, string> = {
+  'grid-classic': 'Grid Klasik',
+  'perimeter-center-island': 'Perimeter + Center Island',
+  'u-shape': 'U-Shape',
+  'facing-rows': 'Facing Rows',
+  custom: 'Custom',
 };
 
 export interface PaletteElementDefaults {

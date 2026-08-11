@@ -108,16 +108,17 @@ export function layoutsEquivalent(left: LaboratoryLayout, right: LaboratoryLayou
 }
 
 function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number } {
-  const activeById = new Map(activeLayout.elements.map((element) => [element.id, element]));
-  const savedById = new Map(savedLayout.elements.map((element) => [element.id, element]));
+  const activeNonEmptyById = new Map(activeLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
+  const savedNonEmptyById = new Map(savedLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
   const repositioned = savedLayout.elements.filter((element) => {
-    const previous = activeById.get(element.id);
+    if (element.type === 'empty') return false;
+    const previous = activeNonEmptyById.get(element.id);
     return previous && (previous.row !== element.row || previous.column !== element.column);
   }).length;
   return {
     repositioned,
-    added: savedLayout.elements.filter((element) => !activeById.has(element.id)).length,
-    removed: activeLayout.elements.filter((element) => !savedById.has(element.id)).length,
+    added: savedLayout.elements.filter((element) => element.type !== 'empty' && !activeNonEmptyById.has(element.id)).length,
+    removed: activeLayout.elements.filter((element) => element.type !== 'empty' && !savedNonEmptyById.has(element.id)).length,
   };
 }
 

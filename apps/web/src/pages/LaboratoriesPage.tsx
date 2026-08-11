@@ -37,6 +37,7 @@ import {
   getActiveLaboratoryLayout,
   layoutFingerprint,
   layoutsEquivalent,
+  LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES,
   moveLayoutElement,
   placeLayoutElement,
   removeLayoutElement,
@@ -467,7 +468,10 @@ export function LaboratoryLayoutPage() {
   useEffect(() => {
     if (!selectedPaletteType) return undefined;
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelectedPaletteType(null);
+      if (event.key === 'Escape') {
+        setSelectedPaletteType(null);
+        setPaletteLabel('');
+      }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
@@ -686,7 +690,7 @@ export function LaboratoryLayoutPage() {
                 <div className="flex justify-between"><span>Bermasalah</span><span className="text-warning-foreground">{draft.elements.filter((element) => element.referenceId && ['Warning', 'Critical', 'Offline'].includes(devices.find((device) => device.id === element.referenceId)?.status ?? '')).length}</span></div>
               </div>
               <div className="border-t border-base-700 pt-3 text-xs leading-relaxed text-ink-muted">
-                <p>Jenis saat ini: <span className="text-ink-primary">{draft.layoutType === 'perimeter-center-island' ? 'Perimeter + Center Island' : 'Grid Klasik'}</span></p>
+                <p>Jenis saat ini: <span className="text-ink-primary">{LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES[draft.layoutType]}</span></p>
                 <p className="mt-2 font-medium text-ink-primary">{RPL_PERIMETER_CENTER_ISLAND_36.name}</p>
                 <p>{RPL_PERIMETER_CENTER_ISLAND_36.description}</p>
                 <p className="mt-2">36 PC Siswa · 1 PC Guru · 37 perangkat total · Grid 11 × 6</p>
