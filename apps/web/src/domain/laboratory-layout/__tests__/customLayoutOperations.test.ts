@@ -116,7 +116,7 @@ describe('custom layout resize', () => {
 
   it('returns an immutable noop for equal dimensions', () => {
     const source = customLayout();
-    const result = resizeCustomLayout({ layout: source, rows: 3, columns: 3, updatedAt: UPDATED_AT, emptyElementIdPrefix: 'noop' });
+    const result = resizeCustomLayout({ layout: source, rows: 3, columns: 3, updatedAt: UPDATED_AT, emptyElementIdPrefix: '' });
     expect(result).toMatchObject({ ok: true, operation: 'noop' });
     if (result.ok) {
       expect(result.layout.updatedAt).toBe(source.updatedAt);

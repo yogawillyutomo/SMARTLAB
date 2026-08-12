@@ -16,6 +16,7 @@ import {
   removeLayoutElement,
   resizeCustomLayout,
   saveActiveLaboratoryLayout,
+  validateLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
 } from '../index';
 
@@ -329,6 +330,44 @@ describe('layout persistence integration', () => {
     const noOp = saveActiveLaboratoryLayout({ db: saved.db, laboratoryId: laboratory.id, draft: saved.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-noop' });
     expect(noOp).toMatchObject({ ok: true, changed: false });
     if (noOp.ok) expect(noOp.db.auditLogs).toHaveLength(saved.db.auditLogs.length);
+  });
+
+  it('rejects an otherwise valid oversized Custom draft without changing the database or audit history', () => {
+    const db = generateSeedData();
+    const laboratory = db.labs[0];
+    const active = getActiveLaboratoryLayout(db, laboratory.id);
+    if (!active.ok) throw new Error('expected active layout');
+    const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+    if (!converted.ok) throw new Error('expected conversion');
+    const oversized = {
+      ...converted.layout,
+      rows: 51,
+      columns: 1,
+      elements: [
+        ...converted.layout.elements.map((element, index) => ({ ...element, row: index + 1, column: 1 })),
+        ...Array.from({ length: 15 }, (_, index) => ({
+          id: `oversized-empty-${index + 37}`,
+          layoutId: converted.layout.id,
+          type: 'empty' as const,
+          row: index + 37,
+          column: 1,
+          rowSpan: 1,
+          columnSpan: 1,
+          rotation: 0 as const,
+          movable: false,
+          swappable: false,
+          fixed: false,
+        })),
+      ],
+    };
+    expect(validateLaboratoryLayout(oversized).valid).toBe(true);
+    const before = JSON.stringify(db);
+    const beforeAuditCount = db.auditLogs.length;
+    const result = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: oversized, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-oversized-custom' });
+    expect(result).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'custom-layout-dimension-out-of-bounds' })] });
+    expect(JSON.stringify(db)).toBe(before);
+    expect(db.labs.find((item) => item.id === laboratory.id)).toMatchObject({ layoutRows: 6, layoutCols: 6 });
+    expect(db.auditLogs).toHaveLength(beforeAuditCount);
   });
 
   it('clones layouts deeply and treats only meaningful coordinate changes as dirty', () => {

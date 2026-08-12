@@ -169,12 +169,12 @@ export function resizeCustomLayout(input: ResizeCustomLayoutInput): ResizeCustom
   const sourceValidation = validateLaboratoryLayout(input.layout);
   if (!sourceValidation.valid) return failure('invalid_layout', 'Denah tidak valid dan tidak dapat diubah ukurannya.', { issues: sourceValidation.issues });
   if (!validTimestamp(input.updatedAt)) return failure('invalid_timestamp', 'Waktu pembaruan ukuran tidak valid.');
-  if (!input.emptyElementIdPrefix?.trim()) return failure('invalid_empty_element_id_prefix', 'Prefix ID sel kosong wajib diisi.');
   const analysis = analyzeCustomLayoutResize(input);
   if (!analysis.valid) return failure(analysis.reason!, analysis.message!, { issues: analysis.issues, blockingElements: analysis.blockingElements });
   if (input.rows === input.layout.rows && input.columns === input.layout.columns) {
     return { ok: true, operation: 'noop', layout: cloneLayout(input.layout), analysis };
   }
+  if (!input.emptyElementIdPrefix?.trim()) return failure('invalid_empty_element_id_prefix', 'Prefix ID sel kosong wajib diisi.');
 
   const retained = input.layout.elements
     .filter((element) => element.type !== 'empty' || isFullyWithin(element, input.rows, input.columns))
