@@ -31,6 +31,10 @@ import { cn } from '@/utils';
 import { uid } from '@/utils';
 import {
   cloneLaboratoryLayout,
+  CUSTOM_LAYOUT_MAX_COLUMNS,
+  CUSTOM_LAYOUT_MAX_ROWS,
+  CUSTOM_LAYOUT_MIN_COLUMNS,
+  CUSTOM_LAYOUT_MIN_ROWS,
   createLaboratoryWithInitialLayout,
   canEditLayoutStructure,
   deleteLaboratorySafely,
@@ -44,7 +48,10 @@ import {
   saveActiveLaboratoryLayout,
   RPL_PERIMETER_CENTER_ISLAND_36,
   checkPhysicalLayoutTemplateCompatibility,
+  analyzeCustomLayoutResize,
+  convertLayoutToCustom,
   generatePhysicalLayoutTemplateDraft,
+  resizeCustomLayout,
   type PalettePlaceableElementType,
 } from '@/domain/laboratory-layout';
 import type { Device, Laboratory, LaboratoryLayout } from '@/types';
@@ -441,10 +448,13 @@ export function LaboratoryLayoutPage() {
   const [draft, setDraft] = useState<LaboratoryLayout | null>(null);
   const [saving, setSaving] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [convertCustomOpen, setConvertCustomOpen] = useState(false);
   const [teacherDeviceId, setTeacherDeviceId] = useState('');
   const [selectedPaletteType, setSelectedPaletteType] = useState<PalettePlaceableElementType | null>(null);
   const [paletteLabel, setPaletteLabel] = useState('');
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [customRows, setCustomRows] = useState('');
+  const [customColumns, setCustomColumns] = useState('');
   const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
   const blocker = useBlocker(dirty);
 
@@ -477,6 +487,12 @@ export function LaboratoryLayoutPage() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [selectedPaletteType]);
 
+  useEffect(() => {
+    if (!draft) return;
+    setCustomRows(String(draft.rows));
+    setCustomColumns(String(draft.columns));
+  }, [draft]);
+
   if (!lab) return <EmptyState title="Laboratorium tidak ditemukan" action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
   if (!activeResult?.ok || !baseline || !draft) {
     return <EmptyState title="Denah aktif tidak dapat dimuat" description={activeResult?.ok ? 'Menyiapkan denah...' : activeResult?.error ?? 'Data denah tidak valid.'} action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
@@ -490,6 +506,9 @@ export function LaboratoryLayoutPage() {
   const selectedElement = selectedElementId ? draft.elements.find((element) => element.id === selectedElementId) ?? null : null;
   const canRemoveSelected = Boolean(canUpdate && structureEditable && selectedElement && selectedElement.type !== 'empty' && selectedElement.type !== 'student_pc' && selectedElement.type !== 'teacher_pc' && !selectedElement.fixed);
   const templateCompatibility = checkPhysicalLayoutTemplateCompatibility({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, devices, teacherDeviceId: teacherDeviceId || undefined });
+  const customResizeAnalysis = draftLayout.layoutType === 'custom'
+    ? analyzeCustomLayoutResize({ layout: draftLayout, rows: Number(customRows), columns: Number(customColumns) })
+    : null;
   const grid = Array.from({ length: draft.rows * cols }, (_, index) => {
     const col = (index % cols) + 1;
     const row = Math.floor(index / cols) + 1;
@@ -562,6 +581,39 @@ export function LaboratoryLayoutPage() {
     setSelectedElementId(null);
     clearPaletteSelection();
     setTemplateOpen(false);
+  }
+
+  function convertToCustom() {
+    if (!canUpdate) return;
+    const result = convertLayoutToCustom({ layout: draftLayout, updatedAt: new Date().toISOString() });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    if (result.operation === 'converted') setDraft(result.layout);
+    setSelectedElementId(null);
+    clearPaletteSelection();
+    setConvertCustomOpen(false);
+  }
+
+  function applyCustomResize() {
+    if (!canUpdate || draftLayout.layoutType !== 'custom') return;
+    const result = resizeCustomLayout({
+      layout: draftLayout,
+      rows: Number(customRows),
+      columns: Number(customColumns),
+      updatedAt: new Date().toISOString(),
+      emptyElementIdPrefix: `empty:${draftLayout.id}`,
+    });
+    if (!result.ok) {
+      toast(result.reason === 'resize_would_clip_elements' ? 'Tidak dapat mengecilkan denah karena elemen akan terpotong.' : result.message, 'error');
+      return;
+    }
+    if (result.operation === 'resized') {
+      setDraft(result.layout);
+      setSelectedElementId(null);
+      clearPaletteSelection();
+    }
   }
 
   function saveChanges() {
@@ -699,6 +751,39 @@ export function LaboratoryLayoutPage() {
               </div>
             </CardContent>
           </Card>
+          <Card className="min-w-0">
+            <CardHeader><CardTitle>Custom Layout</CardTitle></CardHeader>
+            <CardContent className="min-w-0 space-y-3 text-xs text-ink-muted">
+              {draftLayout.layoutType !== 'custom' ? (
+                <>
+                  <p>Ubah denah ini menjadi Custom untuk mengatur ukuran grid. Posisi, elemen, referensi perangkat, dan status fixed tetap dipertahankan.</p>
+                  <Button size="sm" className="w-full" disabled={!canUpdate} onClick={() => setConvertCustomOpen(true)}>Ubah menjadi Custom</Button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2"><span>Ukuran saat ini</span><span className="font-medium text-ink-primary">{draftLayout.rows} × {draftLayout.columns}</span></div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input label="Baris" type="number" min={CUSTOM_LAYOUT_MIN_ROWS} max={CUSTOM_LAYOUT_MAX_ROWS} step={1} value={customRows} disabled={!canUpdate} onChange={(event) => setCustomRows(event.target.value)} />
+                    <Input label="Kolom" type="number" min={CUSTOM_LAYOUT_MIN_COLUMNS} max={CUSTOM_LAYOUT_MAX_COLUMNS} step={1} value={customColumns} disabled={!canUpdate} onChange={(event) => setCustomColumns(event.target.value)} />
+                  </div>
+                  {customResizeAnalysis?.valid ? (
+                    <p>Tambah sel: {customResizeAnalysis.addedCellCount} · Hapus sel: {customResizeAnalysis.removedCellCount}</p>
+                  ) : customResizeAnalysis?.reason === 'resize_would_clip_elements' ? (
+                    <div className="space-y-1 rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning-foreground">
+                      <p className="font-medium">Tidak dapat mengecilkan denah.</p>
+                      <p>Elemen berikut masih berada di area yang akan dipotong:</p>
+                      <ul className="list-disc space-y-1 pl-4">
+                        {customResizeAnalysis.blockingElements.slice(0, 4).map((element) => <li key={element.id}>{element.label ?? element.referenceId ?? element.type} — Baris {element.row}, Kolom {element.column}</li>)}
+                      </ul>
+                      {customResizeAnalysis.blockingElements.length > 4 && <p>dan {customResizeAnalysis.blockingElements.length - 4} elemen lainnya.</p>}
+                    </div>
+                  ) : customResizeAnalysis ? <p className="text-warning-foreground">{customResizeAnalysis.message}</p> : null}
+                  <Button size="sm" className="w-full" disabled={!canUpdate || !customResizeAnalysis?.valid} onClick={applyCustomResize}>Terapkan Ukuran ke Draft</Button>
+                </>
+              )}
+              {!canUpdate && <p className="text-warning-foreground">Mode hanya baca. Perubahan Custom tidak dapat diterapkan.</p>}
+            </CardContent>
+          </Card>
           <LayoutElementPalette
             canUpdate={canUpdate}
             structureEditable={structureEditable}
@@ -720,6 +805,16 @@ export function LaboratoryLayoutPage() {
           {!templateCompatibility.compatible && <p className="text-xs text-warning-foreground">{templateCompatibility.issues[0]?.message}</p>}
         </div>
       </FormDialog>
+      <ConfirmDialog
+        open={convertCustomOpen}
+        onClose={() => setConvertCustomOpen(false)}
+        onConfirm={convertToCustom}
+        title="Ubah denah menjadi Custom?"
+        message="Posisi dan elemen saat ini tetap dipertahankan, tetapi jenis denah berubah menjadi Custom. Perubahan hanya berada di draft sampai Simpan; Batalkan Perubahan memulihkan denah awal. Elemen fixed tetap fixed pada tahap ini."
+        confirmLabel="Ubah menjadi Custom"
+        cancelLabel="Batal"
+        danger={false}
+      />
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         onClose={() => blocker.reset?.()}

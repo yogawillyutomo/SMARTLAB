@@ -5,6 +5,7 @@ import { normalizeDatabase } from '@/lib/dbMigrations';
 import { STORAGE_KEYS, readStorageJSON } from '@/lib/storage';
 import {
   cloneLaboratoryLayout,
+  convertLayoutToCustom,
   createInitialLaboratoryDevices,
   createLaboratoryWithInitialLayout,
   deleteLaboratorySafely,
@@ -13,6 +14,7 @@ import {
   moveLayoutElement,
   placeLayoutElement,
   removeLayoutElement,
+  resizeCustomLayout,
   saveActiveLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
 } from '../index';
@@ -258,6 +260,75 @@ describe('layout persistence integration', () => {
     const saved = saveActiveLaboratoryLayout({ db, laboratoryId: db.labs[0].id, draft, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'unused' });
     expect(saved).toMatchObject({ ok: true, changed: false });
     if (saved.ok) expect(saved.db).toBe(db);
+  });
+
+  it('saves Custom conversion and expansion atomically while preserving exact device coverage', () => {
+    const db = generateSeedData();
+    const laboratory = db.labs[0];
+    const active = getActiveLaboratoryLayout(db, laboratory.id);
+    if (!active.ok) throw new Error('expected active layout');
+    const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+    if (!converted.ok) throw new Error('expected conversion');
+    const expanded = resizeCustomLayout({ layout: converted.layout, rows: active.layout.rows + 1, columns: active.layout.columns + 1, updatedAt: MIGRATED_AT, emptyElementIdPrefix: 'custom-expand' });
+    if (!expanded.ok) throw new Error('expected expansion');
+
+    const saved = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: expanded.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-expand' });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.labs.find((item) => item.id === laboratory.id)).toMatchObject({ layoutRows: 7, layoutCols: 7 });
+    expect(saved.layout).toMatchObject({ layoutType: 'custom', rows: 7, columns: 7 });
+    expect(saved.db.auditLogs[0]).toMatchObject({
+      oldValue: expect.stringContaining('layoutType=grid-classic; dimensions=6x6'),
+      newValue: expect.stringContaining('layoutType=custom; dimensions=7x7'),
+    });
+    expect(validatePersistedLaboratoryLayouts(saved.db).valid).toBe(true);
+    expect(saved.layout.elements.filter((element) => element.referenceId).map((element) => element.referenceId).sort()).toEqual(db.devices.filter((device) => device.laboratoryId === laboratory.id).map((device) => device.id).sort());
+    expect(db.labs.find((item) => item.id === laboratory.id)).toMatchObject({ layoutRows: 6, layoutCols: 6 });
+  });
+
+  it('allows a safe Custom shrink, but rejects direct grid-classic dimensions and invalid Custom device references without writes', () => {
+    const db = generateSeedData();
+    const laboratory = db.labs[0];
+    const active = getActiveLaboratoryLayout(db, laboratory.id);
+    if (!active.ok) throw new Error('expected active layout');
+    const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+    if (!converted.ok) throw new Error('expected conversion');
+    const expanded = resizeCustomLayout({ layout: converted.layout, rows: 7, columns: 6, updatedAt: MIGRATED_AT, emptyElementIdPrefix: 'custom-safe-expand' });
+    if (!expanded.ok) throw new Error('expected expansion');
+    const initiallySaved = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: expanded.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-before-shrink' });
+    if (!initiallySaved.ok) throw new Error('expected initial Custom save');
+    const shrunk = resizeCustomLayout({ layout: initiallySaved.layout, rows: 6, columns: 6, updatedAt: MIGRATED_AT, emptyElementIdPrefix: 'custom-safe-shrink' });
+    if (!shrunk.ok) throw new Error('expected safe shrink');
+    const saved = saveActiveLaboratoryLayout({ db: initiallySaved.db, laboratoryId: laboratory.id, draft: shrunk.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-shrink' });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (saved.ok) expect(saved.db.labs.find((item) => item.id === laboratory.id)).toMatchObject({ layoutRows: 6, layoutCols: 6 });
+
+    const directGridResize = { ...expanded.layout, layoutType: 'grid-classic' as const };
+    const beforeGrid = JSON.stringify(db);
+    expect(saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: directGridResize, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-grid-resize' })).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'unsupported-layout-dimension-change' })] });
+    expect(JSON.stringify(db)).toBe(beforeGrid);
+
+    const invalidCustom = cloneLaboratoryLayout(converted.layout);
+    invalidCustom.elements.find((element) => element.type === 'student_pc')!.referenceId = 'missing-device';
+    const beforeInvalid = JSON.stringify(db);
+    expect(saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: invalidCustom, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-invalid-custom' })).toMatchObject({ ok: false });
+    expect(JSON.stringify(db)).toBe(beforeInvalid);
+  });
+
+  it('saves a conversion-only Custom draft with one explanatory audit and keeps Custom no-ops audit-free', () => {
+    const db = generateSeedData();
+    const laboratory = db.labs[0];
+    const active = getActiveLaboratoryLayout(db, laboratory.id);
+    if (!active.ok) throw new Error('expected active layout');
+    const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+    if (!converted.ok) throw new Error('expected conversion');
+    const saved = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: converted.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-conversion' });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.auditLogs[0]).toMatchObject({ oldValue: expect.stringContaining('layoutType=grid-classic'), newValue: expect.stringContaining('layoutType=custom; dimensions=6x6') });
+    const noOp = saveActiveLaboratoryLayout({ db: saved.db, laboratoryId: laboratory.id, draft: saved.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-custom-noop' });
+    expect(noOp).toMatchObject({ ok: true, changed: false });
+    if (noOp.ok) expect(noOp.db.auditLogs).toHaveLength(saved.db.auditLogs.length);
   });
 
   it('clones layouts deeply and treats only meaningful coordinate changes as dirty', () => {

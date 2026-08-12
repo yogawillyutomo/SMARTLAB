@@ -246,7 +246,8 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
   }
   const laboratory = input.db.labs.find((candidate) => candidate.id === input.laboratoryId)!;
   const dimensionsChanged = input.draft.rows !== laboratory.layoutRows || input.draft.columns !== laboratory.layoutCols;
-  if (dimensionsChanged && !validatePhysicalLayoutTemplateStructure(input.draft).valid) {
+  const customDimensionChange = input.draft.layoutType === 'custom';
+  if (dimensionsChanged && !customDimensionChange && !validatePhysicalLayoutTemplateStructure(input.draft).valid) {
     return failure('Perubahan ukuran denah hanya diperbolehkan melalui template fisik yang didukung.', [{ code: 'unsupported-layout-dimension-change', message: 'Perubahan dimensi harus menggunakan struktur template fisik yang valid.', laboratoryId: input.laboratoryId, layoutId: input.draft.id }]);
   }
   if (layoutsEquivalent(active.layout, input.draft)) return { ok: true, changed: false, db: input.db, layout: active.layout };
@@ -268,7 +269,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     module: 'laboratories',
     action: 'layout.save',
     object: savedLayout.id,
-    oldValue: `updatedAt=${active.layout.updatedAt}`,
+    oldValue: `updatedAt=${active.layout.updatedAt}; layoutType=${active.layout.layoutType}; dimensions=${active.layout.rows}x${active.layout.columns}`,
     newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}`,
     device: input.actor.device ?? 'Web',
   };
