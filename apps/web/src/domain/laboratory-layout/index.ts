@@ -2,6 +2,26 @@ export * from './types';
 export { validateLaboratoryLayout } from './validation';
 export { moveLayoutElement, swapLayoutElements } from './operations';
 export {
+  CUSTOM_LAYOUT_MAX_COLUMNS,
+  CUSTOM_LAYOUT_MAX_ROWS,
+  CUSTOM_LAYOUT_MIN_COLUMNS,
+  CUSTOM_LAYOUT_MIN_ROWS,
+  analyzeCustomLayoutResize,
+  convertLayoutToCustom,
+  resizeCustomLayout,
+} from './customLayoutOperations';
+export type {
+  AnalyzeCustomLayoutResizeInput,
+  ConvertLayoutToCustomInput,
+  ConvertLayoutToCustomResult,
+  CustomLayoutBlockingElement,
+  CustomLayoutFailure,
+  CustomLayoutFailureReason,
+  CustomLayoutResizeAnalysis,
+  ResizeCustomLayoutInput,
+  ResizeCustomLayoutResult,
+} from './customLayoutOperations';
+export {
   PALETTE_DEVICE_MANAGED_ELEMENT_TYPES,
   PALETTE_ELEMENT_DISPLAY_NAMES,
   PALETTE_PLACEABLE_ELEMENT_TYPES,

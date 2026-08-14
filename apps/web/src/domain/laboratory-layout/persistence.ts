@@ -4,6 +4,12 @@ import { migrateLegacyDeviceCoordinates } from './legacyMigration';
 import { inspectLaboratoryDependencies } from './laboratoryDependencies';
 import { isPositiveInteger, validateLaboratoryLayout } from './validation';
 import { validatePhysicalLayoutTemplateStructure } from './templates';
+import {
+  CUSTOM_LAYOUT_MAX_COLUMNS,
+  CUSTOM_LAYOUT_MAX_ROWS,
+  CUSTOM_LAYOUT_MIN_COLUMNS,
+  CUSTOM_LAYOUT_MIN_ROWS,
+} from './customLayoutOperations';
 
 export type PersistedLayoutIntegrityIssueCode =
   | 'invalid-layout'
@@ -24,6 +30,7 @@ export type PersistedLayoutIntegrityIssueCode =
   | 'invalid-laboratory-id'
   | 'invalid-layout-id'
   | 'invalid-device-id'
+  | 'custom-layout-dimension-out-of-bounds'
   | 'unsupported-layout-dimension-change';
 
 export interface PersistedLayoutIntegrityIssue {
@@ -246,7 +253,23 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
   }
   const laboratory = input.db.labs.find((candidate) => candidate.id === input.laboratoryId)!;
   const dimensionsChanged = input.draft.rows !== laboratory.layoutRows || input.draft.columns !== laboratory.layoutCols;
-  if (dimensionsChanged && !validatePhysicalLayoutTemplateStructure(input.draft).valid) {
+  const customDimensionChange = input.draft.layoutType === 'custom';
+  if (dimensionsChanged && customDimensionChange && (
+    !Number.isInteger(input.draft.rows)
+    || !Number.isInteger(input.draft.columns)
+    || input.draft.rows < CUSTOM_LAYOUT_MIN_ROWS
+    || input.draft.rows > CUSTOM_LAYOUT_MAX_ROWS
+    || input.draft.columns < CUSTOM_LAYOUT_MIN_COLUMNS
+    || input.draft.columns > CUSTOM_LAYOUT_MAX_COLUMNS
+  )) {
+    return failure('Perubahan ukuran Custom berada di luar batas yang didukung.', [{
+      code: 'custom-layout-dimension-out-of-bounds',
+      message: `Ukuran Custom harus ${CUSTOM_LAYOUT_MIN_ROWS}–${CUSTOM_LAYOUT_MAX_ROWS} baris dan ${CUSTOM_LAYOUT_MIN_COLUMNS}–${CUSTOM_LAYOUT_MAX_COLUMNS} kolom.`,
+      laboratoryId: input.laboratoryId,
+      layoutId: input.draft.id,
+    }]);
+  }
+  if (dimensionsChanged && !customDimensionChange && !validatePhysicalLayoutTemplateStructure(input.draft).valid) {
     return failure('Perubahan ukuran denah hanya diperbolehkan melalui template fisik yang didukung.', [{ code: 'unsupported-layout-dimension-change', message: 'Perubahan dimensi harus menggunakan struktur template fisik yang valid.', laboratoryId: input.laboratoryId, layoutId: input.draft.id }]);
   }
   if (layoutsEquivalent(active.layout, input.draft)) return { ok: true, changed: false, db: input.db, layout: active.layout };
@@ -268,7 +291,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     module: 'laboratories',
     action: 'layout.save',
     object: savedLayout.id,
-    oldValue: `updatedAt=${active.layout.updatedAt}`,
+    oldValue: `updatedAt=${active.layout.updatedAt}; layoutType=${active.layout.layoutType}; dimensions=${active.layout.rows}x${active.layout.columns}`,
     newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}`,
     device: input.actor.device ?? 'Web',
   };

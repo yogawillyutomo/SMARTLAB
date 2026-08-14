@@ -113,4 +113,14 @@ Placement replaces exactly one existing explicit `empty` element; removal replac
 
 Palette changes never persist directly. They participate in the existing baseline → draft → dirty → Save/Cancel flow, including before-unload and navigation protection. A successful save remains one atomic database write and one `layout.save` audit; its summary now records `repositioned`, `added`, and `removed` element-ID deltas. No-op and rejected saves create no audit entries.
 
-Stage 4C remains responsible for arbitrary resize, safe expand/shrink, template-to-custom conversion, rotation/span editing, and a richer property inspector.
+## Stage 4C.1 custom layout foundation
+
+Stage 4C.1 introduces an explicit, local-draft conversion from every named/grid layout type to `custom`. The conversion preserves the layout identity, dimensions, all element IDs, coordinates, references, labels, spans, rotations, and fixed/movable/swappable flags; only `layoutType` and `updatedAt` change. A Custom layout remains a draft until the existing Simpan action succeeds, and Batalkan Perubahan restores the prior baseline type and geometry.
+
+Arbitrary dimensions are Custom-only. Grid Classic and named templates require the explicit **Ubah menjadi Custom** confirmation before the resize controls become usable; resize never silently converts a template. Bounds are centrally enforced in both the domain and UI: 1–50 rows and 1–50 columns. The pure resize analysis reports added/removed cells and non-empty blockers without mutation.
+
+Expansion retains every element in place and reconstructs each newly uncovered coordinate as an explicit, one-cell `empty` element. Shrink and mixed resize evaluate the final bounds first. If any occupied part of a non-empty element (including PCs, doors, aisles, walls, labels, or a future spanning element) would be clipped, the operation is rejected atomically with blocking-element detail; nothing is moved, deleted, or clamped. Technical empty cells outside the resulting grid are safely rebuilt as needed, while complete-grid validation remains mandatory.
+
+Saving a valid Custom dimension change updates `Laboratory.layoutRows`/`layoutCols` and the active `LaboratoryLayout.rows`/`columns` in the same candidate database before persisted device/reference integrity is checked. Every laboratory Device must still appear exactly once in its active layout. Successful saves create one `layout.save` audit whose old and new values record timestamp, layout type, dimensions, and meaningful non-empty element deltas; no-op saves and local draft operations remain audit-free.
+
+Deferred to Stage 4C.2/4C.3: editable labels/properties beyond existing Stage 4B behavior; fixed/movable property editing; rotation controls; rowSpan/columnSpan controls; multi-cell placement; and an advanced geometry inspector. This stage does not add those controls, auto-relocation, auto-deletion, Asset binding, or a schema/storage-version change.

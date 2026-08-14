@@ -212,4 +212,22 @@ describe('perimeter + center island physical template', () => {
     expect(noOp).toMatchObject({ ok: true, changed: false });
     if (noOp.ok) expect(noOp.db.auditLogs).toHaveLength(beforeAudit + 1);
   });
+
+  it('rejects a named-template direct resize until the user explicitly converts it to Custom', () => {
+    const { db, laboratory, layout } = generated();
+    const arbitraryNamedResize = {
+      ...layout,
+      rows: 3,
+      columns: 22,
+      elements: layout.elements.map((element, index) => ({ ...element, row: Math.floor(index / 22) + 1, column: (index % 22) + 1 })),
+    };
+    expect(validateLaboratoryLayout(arbitraryNamedResize).valid).toBe(true);
+    const before = JSON.stringify(db);
+    const beforeAuditCount = db.auditLogs.length;
+    const result = saveActiveLaboratoryLayout({ db, laboratoryId: laboratory.id, draft: arbitraryNamedResize, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: AT, auditId: 'audit-named-template-direct-resize' });
+    expect(result).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'unsupported-layout-dimension-change' })] });
+    expect(JSON.stringify(db)).toBe(before);
+    expect(db.labs.find((candidate) => candidate.id === laboratory.id)).toMatchObject({ layoutRows: 7, layoutCols: 6 });
+    expect(db.auditLogs).toHaveLength(beforeAuditCount);
+  });
 });
