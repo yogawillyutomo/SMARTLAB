@@ -20,15 +20,25 @@ interface LayoutElementInspectorProps {
   onApply: (patch: LayoutElementPropertyPatch) => void;
 }
 
+type PositionMode = 'locked' | 'movable' | 'immovable';
+
+function getPositionMode(element: LayoutElement | null): PositionMode {
+  if (element?.fixed) return 'locked';
+  if (element?.movable) return 'movable';
+  return 'immovable';
+}
+
 export function LayoutElementInspector({ layoutType, selectedElement, selectedDevice, canUpdate, onApply }: LayoutElementInspectorProps) {
   const [label, setLabel] = useState('');
   const [rotation, setRotation] = useState<LayoutRotation>(0);
-  const [locked, setLocked] = useState(false);
+  const [positionMode, setPositionMode] = useState<PositionMode>('immovable');
+  const [positionModeTouched, setPositionModeTouched] = useState(false);
 
   useEffect(() => {
     setLabel(selectedElement?.label ?? '');
     setRotation(selectedElement?.rotation ?? 0);
-    setLocked(selectedElement?.fixed ?? false);
+    setPositionMode(getPositionMode(selectedElement));
+    setPositionModeTouched(false);
   }, [selectedElement]);
 
   const capabilities = selectedElement ? getLayoutElementPropertyCapabilities({ layoutType }, selectedElement) : null;
@@ -86,21 +96,28 @@ export function LayoutElementInspector({ layoutType, selectedElement, selectedDe
                 {capabilities.lockEditable && (
                   <Select
                     label="Status posisi"
-                    value={locked ? 'locked' : 'movable'}
+                    value={positionMode}
                     disabled={!canUpdate}
-                    onChange={(event) => setLocked(event.target.value === 'locked')}
-                    options={[{ value: 'movable', label: 'Dapat dipindahkan' }, { value: 'locked', label: 'Terkunci' }]}
+                    onChange={(event) => {
+                      setPositionMode(event.target.value as PositionMode);
+                      setPositionModeTouched(true);
+                    }}
+                    options={[
+                      { value: 'movable', label: 'Dapat dipindahkan' },
+                      { value: 'locked', label: 'Terkunci' },
+                      ...(!selectedElement.fixed && !selectedElement.movable ? [{ value: 'immovable', label: 'Tidak dapat dipindahkan' }] : []),
+                    ]}
                   />
                 )}
                 <Button
                   size="sm"
                   className="w-full"
                   disabled={!canUpdate}
-                  icon={locked ? <Lock className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
+                  icon={positionMode === 'locked' ? <Lock className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
                   onClick={() => onApply({
                     ...(capabilities.labelEditable ? { label } : {}),
                     ...(capabilities.rotationEditable ? { rotation } : {}),
-                    ...(capabilities.lockEditable ? { locked } : {}),
+                    ...(capabilities.lockEditable && positionModeTouched && positionMode !== 'immovable' ? { locked: positionMode === 'locked' } : {}),
                   })}
                 >
                   Terapkan Properti ke Draft

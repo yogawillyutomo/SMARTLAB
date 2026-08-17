@@ -25,6 +25,7 @@ const LABEL_EDITABLE_TYPES: readonly LayoutElementType[] = ['teacher_desk', 'pri
 const ROTATION_EDITABLE_TYPES: readonly LayoutElementType[] = ['teacher_desk', 'door', 'window', 'wall', 'aisle', 'label'];
 const LOCK_EDITABLE_TYPES: readonly LayoutElementType[] = ['teacher_desk', 'printer', 'network_switch', 'access_point', 'door', 'window', 'wall', 'aisle', 'label'];
 const DEVICE_MANAGED_TYPES: readonly LayoutElementType[] = ['student_pc', 'teacher_pc'];
+const PROPERTY_PATCH_KEYS = new Set(['label', 'rotation', 'locked']);
 
 export interface LayoutElementPropertyCapabilities {
   editable: boolean;
@@ -121,6 +122,7 @@ export function updateLayoutElementProperties(input: UpdateLayoutElementProperti
     return failure(capabilities.reason!, messages[capabilities.reason!]);
   }
 
+  if (Object.keys(input.patch).some((key) => !PROPERTY_PATCH_KEYS.has(key))) return failure('unsupported_property', 'Patch memuat properti yang tidak didukung.');
   if (hasOwn(input.patch, 'label') && !capabilities.labelEditable) return failure('unsupported_property', 'Label tidak dapat diubah untuk jenis elemen ini.');
   if (hasOwn(input.patch, 'rotation') && !capabilities.rotationEditable) return failure('unsupported_property', 'Rotasi tidak dapat diubah untuk jenis elemen ini.');
   if (hasOwn(input.patch, 'locked') && !capabilities.lockEditable) return failure('unsupported_property', 'Status posisi tidak dapat diubah untuk jenis elemen ini.');

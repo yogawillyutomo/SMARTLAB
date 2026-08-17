@@ -5,6 +5,7 @@ import {
   moveLayoutElement,
   updateLayoutElementProperties,
   validateLaboratoryLayout,
+  type LayoutElementPropertyPatch,
 } from '../index';
 
 const AT = '2026-08-17T00:00:00.000Z';
@@ -118,6 +119,18 @@ describe('layout element property updates', () => {
     expect(unlocked).toMatchObject({ ok: true, element: { fixed: false, movable: true, swappable: false } });
   });
 
+  it('preserves an immovable neutral state during a label-only update', () => {
+    const source = element('door', 'door', 1, 1, { label: 'Pintu', fixed: false, movable: false });
+    const result = updateLayoutElementProperties({ layout: layoutWith(source), elementId: source.id, patch: { label: 'Nama Baru' }, updatedAt: AT });
+    expect(result).toMatchObject({ ok: true, operation: 'updated', element: { label: 'Nama Baru', fixed: false, movable: false } });
+  });
+
+  it('preserves an immovable neutral state during a rotation-only update', () => {
+    const source = element('door', 'door', 1, 1, { fixed: false, movable: false });
+    const result = updateLayoutElementProperties({ layout: layoutWith(source), elementId: source.id, patch: { rotation: 90 }, updatedAt: AT });
+    expect(result).toMatchObject({ ok: true, operation: 'updated', element: { rotation: 90, fixed: false, movable: false } });
+  });
+
   it.each([
     ['student_pc', 'device_element_managed'],
     ['teacher_pc', 'device_element_managed'],
@@ -135,6 +148,7 @@ describe('layout element property updates', () => {
     expect(updateLayoutElementProperties({ layout: invalid, elementId: door.id, patch: { locked: true }, updatedAt: AT })).toMatchObject({ ok: false, reason: 'invalid_layout' });
     const printer = element('printer', 'printer', 1, 1);
     expect(updateLayoutElementProperties({ layout: layoutWith(printer), elementId: printer.id, patch: { rotation: 90 }, updatedAt: AT })).toMatchObject({ ok: false, reason: 'unsupported_property' });
+    expect(updateLayoutElementProperties({ layout: layoutWith(door), elementId: door.id, patch: { row: 99 } as unknown as LayoutElementPropertyPatch, updatedAt: AT })).toMatchObject({ ok: false, reason: 'unsupported_property' });
   });
 
   it('returns an immutable noop without consuming updatedAt', () => {
