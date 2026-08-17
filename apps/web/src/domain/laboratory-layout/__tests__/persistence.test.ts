@@ -16,6 +16,7 @@ import {
   removeLayoutElement,
   resizeCustomLayout,
   saveActiveLaboratoryLayout,
+  updateLayoutElementProperties,
   validateLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
 } from '../index';
@@ -62,6 +63,52 @@ function legacyDatabase() {
     return { ...device, row: element.row, col: element.column };
   });
   return legacy;
+}
+
+function createPropertySaveFixture() {
+  const seed = generateSeedData();
+  const laboratory = { ...seed.labs[0], id: 'lab-properties', code: 'PROPERTIES', name: 'Lab Properties', pcCount: 1, layoutRows: 2, layoutCols: 3 };
+  const created = createLaboratoryWithInitialLayout({
+    db: seed,
+    laboratory,
+    devices: createInitialLaboratoryDevices(laboratory, MIGRATED_AT),
+    createdAt: MIGRATED_AT,
+    layoutId: 'layout:lab-properties:v1',
+  });
+  if (!created.ok) throw new Error('expected laboratory creation');
+  const active = getActiveLaboratoryLayout(created.db, laboratory.id);
+  if (!active.ok) throw new Error('expected active layout');
+  const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+  if (!converted.ok) throw new Error('expected Custom conversion');
+  const printerTarget = converted.layout.elements.find((element) => element.type === 'empty')!;
+  const printer = placeLayoutElement({
+    layout: converted.layout,
+    type: 'printer',
+    target: { row: printerTarget.row, column: printerTarget.column },
+    elementId: 'property-printer',
+    updatedAt: MIGRATED_AT,
+  });
+  if (!printer.ok) throw new Error('expected printer placement');
+  const doorTarget = printer.layout.elements.find((element) => element.type === 'empty')!;
+  const door = placeLayoutElement({
+    layout: printer.layout,
+    type: 'door',
+    target: { row: doorTarget.row, column: doorTarget.column },
+    elementId: 'property-door',
+    updatedAt: MIGRATED_AT,
+    label: 'Pintu',
+  });
+  if (!door.ok) throw new Error('expected door placement');
+  const saved = saveActiveLaboratoryLayout({
+    db: created.db,
+    laboratoryId: laboratory.id,
+    draft: door.layout,
+    actor: { name: 'Admin', role: 'Admin Lab' },
+    savedAt: MIGRATED_AT,
+    auditId: 'audit-property-fixture',
+  });
+  if (!saved.ok) throw new Error('expected property fixture save');
+  return { db: saved.db, laboratory, layout: saved.layout };
 }
 
 describe('layout persistence integration', () => {
@@ -248,6 +295,115 @@ describe('layout persistence integration', () => {
     const saved = saveActiveLaboratoryLayout({ db: savedPlaced.db, laboratoryId: laboratory.id, draft: moved.layout, actor: { name: 'Admin', role: 'Admin Lab' }, savedAt: MIGRATED_AT, auditId: 'audit-palette-move' });
     expect(saved).toMatchObject({ ok: true, changed: true });
     if (saved.ok) expect(saved.db.auditLogs[0].newValue).toContain('repositioned=1; added=0; removed=0');
+  });
+
+  it('saves one element property change atomically with one audit and unchanged dimensions and Device coverage', () => {
+    const fixture = createPropertySaveFixture();
+    const updated = updateLayoutElementProperties({
+      layout: fixture.layout,
+      elementId: 'property-door',
+      patch: { label: 'Pintu Darurat', rotation: 90, locked: true },
+      updatedAt: '2026-08-07T00:00:00.000Z',
+    });
+    if (!updated.ok) throw new Error('expected property update');
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: updated.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-07T00:00:00.000Z',
+      auditId: 'audit-property-one',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length + 1);
+    expect(saved.db.auditLogs[0].newValue).toContain('repositioned=0; added=0; removed=0; propertiesChanged=1');
+    expect(saved.db.labs.find((laboratory) => laboratory.id === fixture.laboratory.id)).toMatchObject({ layoutRows: 2, layoutCols: 3 });
+    expect(validatePersistedLaboratoryLayouts(saved.db).valid).toBe(true);
+    const references = saved.layout.elements.filter((element) => element.referenceId).map((element) => element.referenceId);
+    expect(references).toEqual(fixture.db.devices.filter((device) => device.laboratoryId === fixture.laboratory.id).map((device) => device.id));
+  });
+
+  it('counts each changed non-empty element once and excludes technical empty cells', () => {
+    const fixture = createPropertySaveFixture();
+    const printer = updateLayoutElementProperties({
+      layout: fixture.layout,
+      elementId: 'property-printer',
+      patch: { label: 'Printer Utama', locked: true },
+      updatedAt: '2026-08-07T00:00:00.000Z',
+    });
+    if (!printer.ok) throw new Error('expected printer update');
+    const door = updateLayoutElementProperties({
+      layout: printer.layout,
+      elementId: 'property-door',
+      patch: { rotation: 180 },
+      updatedAt: '2026-08-07T00:00:01.000Z',
+    });
+    if (!door.ok) throw new Error('expected door update');
+    const technicalEmpty = door.layout.elements.find((element) => element.type === 'empty')!;
+    technicalEmpty.rotation = 90;
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: door.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-07T00:00:02.000Z',
+      auditId: 'audit-property-two',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (saved.ok) expect(saved.db.auditLogs[0].newValue).toContain('propertiesChanged=2');
+  });
+
+  it('reports movement and property changes together in one layout-save audit', () => {
+    const fixture = createPropertySaveFixture();
+    const updated = updateLayoutElementProperties({
+      layout: fixture.layout,
+      elementId: 'property-printer',
+      patch: { label: 'Printer Bergerak' },
+      updatedAt: '2026-08-07T00:00:00.000Z',
+    });
+    if (!updated.ok) throw new Error('expected printer update');
+    const target = updated.layout.elements.find((element) => element.type === 'empty')!;
+    const moved = moveLayoutElement(updated.layout, 'property-printer', { row: target.row, column: target.column }, { updatedAt: '2026-08-07T00:00:01.000Z' });
+    if (!moved.ok) throw new Error('expected printer move');
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: moved.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-07T00:00:02.000Z',
+      auditId: 'audit-property-move',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length + 1);
+    expect(saved.db.auditLogs[0].newValue).toContain('repositioned=1; added=0; removed=0; propertiesChanged=1');
+  });
+
+  it('keeps equivalent property updates and their subsequent save audit-free', () => {
+    const fixture = createPropertySaveFixture();
+    const door = fixture.layout.elements.find((element) => element.id === 'property-door')!;
+    const updated = updateLayoutElementProperties({
+      layout: fixture.layout,
+      elementId: door.id,
+      patch: { label: door.label, rotation: door.rotation, locked: door.fixed },
+      updatedAt: 'not-consumed-for-noop',
+    });
+    expect(updated).toMatchObject({ ok: true, operation: 'noop' });
+    if (!updated.ok) return;
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: updated.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-07T00:00:00.000Z',
+      auditId: 'unused-property-noop',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: false });
+    if (saved.ok) {
+      expect(saved.db).toBe(fixture.db);
+      expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length);
+    }
   });
 
   it('treats an equivalent draft as a no-op regardless of element ordering or updatedAt', () => {
