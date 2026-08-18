@@ -6,6 +6,7 @@ import {
   LAYOUT_ELEMENT_ROTATIONS,
   LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES,
   getLayoutElementPropertyCapabilities,
+  getLayoutElementGeometryCapabilities,
   type LayoutElementPropertyPatch,
 } from '@/domain/laboratory-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -16,8 +17,11 @@ interface LayoutElementInspectorProps {
   layoutType: LaboratoryLayoutType;
   selectedElement: LayoutElement | null;
   selectedDevice?: Device;
+  layoutRows: number;
+  layoutColumns: number;
   canUpdate: boolean;
   onApply: (patch: LayoutElementPropertyPatch) => void;
+  onApplyGeometry: (rowSpan: number, columnSpan: number) => void;
 }
 
 type PositionMode = 'locked' | 'movable' | 'immovable';
@@ -28,20 +32,25 @@ function getPositionMode(element: LayoutElement | null): PositionMode {
   return 'immovable';
 }
 
-export function LayoutElementInspector({ layoutType, selectedElement, selectedDevice, canUpdate, onApply }: LayoutElementInspectorProps) {
+export function LayoutElementInspector({ layoutType, selectedElement, selectedDevice, layoutRows, layoutColumns, canUpdate, onApply, onApplyGeometry }: LayoutElementInspectorProps) {
   const [label, setLabel] = useState('');
   const [rotation, setRotation] = useState<LayoutRotation>(0);
+  const [rowSpan, setRowSpan] = useState('1');
+  const [columnSpan, setColumnSpan] = useState('1');
   const [positionMode, setPositionMode] = useState<PositionMode>('immovable');
   const [positionModeTouched, setPositionModeTouched] = useState(false);
 
   useEffect(() => {
     setLabel(selectedElement?.label ?? '');
     setRotation(selectedElement?.rotation ?? 0);
+    setRowSpan(String(selectedElement?.rowSpan ?? 1));
+    setColumnSpan(String(selectedElement?.columnSpan ?? 1));
     setPositionMode(getPositionMode(selectedElement));
     setPositionModeTouched(false);
   }, [selectedElement]);
 
   const capabilities = selectedElement ? getLayoutElementPropertyCapabilities({ layoutType }, selectedElement) : null;
+  const geometryCapabilities = selectedElement ? getLayoutElementGeometryCapabilities({ layoutType }, selectedElement) : null;
   const reason = !capabilities?.editable
     ? capabilities?.reason === 'property_edit_not_custom'
       ? 'Ubah denah menjadi Custom untuk mengedit properti elemen.'
@@ -51,6 +60,13 @@ export function LayoutElementInspector({ layoutType, selectedElement, selectedDe
           ? 'Sel kosong tidak memiliki properti yang dapat diedit.'
           : selectedElement ? 'Jenis elemen ini belum mendukung pengeditan properti.' : null
     : null;
+  const geometryReason = geometryCapabilities?.reason === 'device_geometry_managed'
+    ? 'Ukuran PC dikelola sebagai 1 × 1.'
+    : geometryCapabilities?.reason === 'geometry_not_custom'
+      ? 'Ubah denah menjadi Custom untuk mengedit ukuran elemen.'
+      : geometryCapabilities?.reason === 'fixed_single_cell'
+        ? 'Jenis elemen ini menggunakan ukuran tetap 1 × 1.'
+        : null;
 
   return (
     <Card className="min-w-0">
@@ -124,7 +140,47 @@ export function LayoutElementInspector({ layoutType, selectedElement, selectedDe
                 </Button>
               </div>
             )}
-            {!canUpdate && <p className="text-xs text-warning-foreground">Mode hanya baca. Properti tidak dapat diterapkan.</p>}
+            <div className="space-y-3 border-t border-base-700 pt-3">
+              <p className="text-sm font-medium text-ink-secondary">Ukuran Elemen</p>
+              {geometryCapabilities?.resizable ? (
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-1">
+                    <Input
+                      label="Rentang Baris"
+                      type="number"
+                      min={1}
+                      max={layoutRows - selectedElement.row + 1}
+                      step={1}
+                      value={rowSpan}
+                      disabled={!canUpdate}
+                      onChange={(event) => setRowSpan(event.target.value)}
+                    />
+                    <Input
+                      label="Rentang Kolom"
+                      type="number"
+                      min={1}
+                      max={layoutColumns - selectedElement.column + 1}
+                      step={1}
+                      value={columnSpan}
+                      disabled={!canUpdate}
+                      onChange={(event) => setColumnSpan(event.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    disabled={!canUpdate}
+                    onClick={() => onApplyGeometry(Number(rowSpan), Number(columnSpan))}
+                  >
+                    Terapkan Ukuran ke Draft
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs leading-relaxed text-ink-muted">{geometryReason}</p>
+              )}
+            </div>
+            {!canUpdate && <p className="text-xs text-warning-foreground">Mode hanya baca. Properti dan ukuran tidak dapat diterapkan.</p>}
           </>
         )}
       </CardContent>

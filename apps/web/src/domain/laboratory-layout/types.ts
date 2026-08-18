@@ -22,6 +22,7 @@ export type LayoutValidationIssueCode =
   | 'layout-id-mismatch'
   | 'invalid-coordinate'
   | 'invalid-span'
+  | 'unsupported-element-span'
   | 'element-out-of-bounds'
   | 'invalid-rotation'
   | 'invalid-reference-id'
@@ -49,6 +50,7 @@ export interface LayoutValidationResult {
 
 export interface LayoutOperationOptions {
   updatedAt: string;
+  emptyElementIdPrefix?: string;
 }
 
 export type LayoutOperationKind = 'moved' | 'swapped' | 'noop';
@@ -73,6 +75,7 @@ export type LayoutOperationFailureReason =
   | 'incompatible_target'
   | 'swap_not_allowed'
   | 'spanning_move_not_supported'
+  | 'invalid_empty_element_id_prefix'
   | 'invalid_timestamp'
   | 'invalid_result';
 

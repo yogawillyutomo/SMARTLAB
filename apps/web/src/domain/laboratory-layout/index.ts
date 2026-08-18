@@ -2,6 +2,27 @@ export * from './types';
 export { validateLaboratoryLayout } from './validation';
 export { moveLayoutElement, swapLayoutElements } from './operations';
 export {
+  MULTI_CELL_LAYOUT_ELEMENT_TYPES,
+  coordinateKey,
+  createEmptyLayoutElement,
+  findLayoutElementAt,
+  getElementFootprint,
+  getLayoutElementGeometryCapabilities,
+  isFootprintInBounds,
+  supportsMultiCellGeometry,
+} from './geometry';
+export type {
+  FootprintCollision,
+  LayoutElementFootprint,
+  LayoutElementGeometryCapabilities,
+} from './geometry';
+export { updateLayoutElementGeometry } from './geometryOperations';
+export type {
+  GeometryOperationFailureReason,
+  UpdateLayoutElementGeometryInput,
+  UpdateLayoutElementGeometryResult,
+} from './geometryOperations';
+export {
   LAYOUT_ELEMENT_LABEL_MAX_LENGTH,
   LAYOUT_ELEMENT_ROTATIONS,
   LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES,

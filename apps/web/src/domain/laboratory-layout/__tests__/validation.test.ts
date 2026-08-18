@@ -86,6 +86,24 @@ describe('validateLaboratoryLayout', () => {
     expect(validateLaboratoryLayout(input).valid).toBe(true);
   });
 
+  it.each(['teacher_desk', 'door', 'window', 'wall', 'aisle', 'label'] as const)('accepts supported multi-cell %s geometry', (type) => {
+    const input = layout([
+      element('source', type, 1, 1, { rowSpan: 1, columnSpan: 2 }),
+      element('empty-2-1', 'empty', 2, 1),
+      element('empty-2-2', 'empty', 2, 2),
+    ], { layoutType: 'custom' });
+    expect(validateLaboratoryLayout(input).valid).toBe(true);
+  });
+
+  it.each(['student_pc', 'teacher_pc', 'printer', 'network_switch', 'access_point', 'empty', 'projector'] as const)('rejects persisted multi-cell %s geometry', (type) => {
+    const input = layout([
+      element('source', type, 1, 1, { rowSpan: 1, columnSpan: 2, ...(type === 'empty' ? { movable: false } : {}) }),
+      element('empty-2-1', 'empty', 2, 1),
+      element('empty-2-2', 'empty', 2, 2),
+    ], { layoutType: 'custom' });
+    expect(codes(validateLaboratoryLayout(input))).toContain('unsupported-element-span');
+  });
+
   it('rejects an empty element overlapping a spanning element', () => {
     const input = layout([
       element('wall', 'wall', 1, 1, { rowSpan: 1, columnSpan: 2, movable: false, fixed: true }),
