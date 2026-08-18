@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import {
   FlaskConical,
@@ -25,6 +25,13 @@ import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
 import { LayoutElementPalette, LAYOUT_PALETTE_DRAG_MIME } from '@/components/laboratory/LayoutElementPalette';
 import { LayoutElementInspector } from '@/components/laboratory/LayoutElementInspector';
+import {
+  LAYOUT_ELEMENT_DRAG_MIME,
+  createLayoutElementDragPayload,
+  resolveLayoutDropAction,
+  resolveLogicalGridCoordinate,
+  serializeLayoutElementDragPayload,
+} from '@/components/laboratory/layoutDrag';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -59,7 +66,7 @@ import {
   type LayoutElementPropertyPatch,
   type PalettePlaceableElementType,
 } from '@/domain/laboratory-layout';
-import type { Device, Laboratory, LaboratoryLayout } from '@/types';
+import type { Device, Laboratory, LaboratoryLayout, LayoutElement } from '@/types';
 
 export function LaboratoriesPage() {
   const { db, mutate, replaceDB } = useAppData();
@@ -460,6 +467,7 @@ export function LaboratoryLayoutPage() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [customRows, setCustomRows] = useState('');
   const [customColumns, setCustomColumns] = useState('');
+  const logicalGridRef = useRef<HTMLDivElement>(null);
   const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
   const blocker = useBlocker(dirty);
 
@@ -589,17 +597,33 @@ export function LaboratoryLayoutPage() {
     if (result.operation === 'updated') setDraft(result.layout);
   }
 
-  function resolveDropCoordinate(event: DragEvent<HTMLDivElement>): { row: number; column: number } | null {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const styles = window.getComputedStyle(event.currentTarget);
+  function resolvePointerCoordinate(clientX: number, clientY: number): { row: number; column: number } | null {
+    const gridElement = logicalGridRef.current;
+    if (!gridElement) return null;
+    const bounds = gridElement.getBoundingClientRect();
+    const styles = window.getComputedStyle(gridElement);
     const columnGap = Number.parseFloat(styles.columnGap) || 0;
     const rowGap = Number.parseFloat(styles.rowGap) || 0;
-    const cellWidth = (bounds.width - (draftLayout.columns - 1) * columnGap) / draftLayout.columns;
-    const cellHeight = (bounds.height - (draftLayout.rows - 1) * rowGap) / draftLayout.rows;
-    if (cellWidth <= 0 || cellHeight <= 0) return null;
-    const column = Math.min(draftLayout.columns, Math.max(1, Math.floor((event.clientX - bounds.left + columnGap / 2) / (cellWidth + columnGap)) + 1));
-    const row = Math.min(draftLayout.rows, Math.max(1, Math.floor((event.clientY - bounds.top + rowGap / 2) / (cellHeight + rowGap)) + 1));
-    return { row, column };
+    return resolveLogicalGridCoordinate({
+      clientX,
+      clientY,
+      bounds,
+      rows: draftLayout.rows,
+      columns: draftLayout.columns,
+      rowGap,
+      columnGap,
+    });
+  }
+
+  function startElementDrag(event: DragEvent<HTMLElement>, element: LayoutElement) {
+    const pointerCoordinate = resolvePointerCoordinate(event.clientX, event.clientY);
+    const payload = pointerCoordinate ? createLayoutElementDragPayload(element, pointerCoordinate) : null;
+    if (!payload) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData(LAYOUT_ELEMENT_DRAG_MIME, serializeLayoutElementDragPayload(payload));
+    event.dataTransfer.effectAllowed = 'move';
   }
 
   function clearPaletteSelection() {
@@ -723,21 +747,23 @@ export function LaboratoryLayoutPage() {
             </div>
             <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
               <div
+                ref={logicalGridRef}
                 className="grid gap-2"
                 style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '660px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}
                 onDragOver={(event) => { if (canUpdate) event.preventDefault(); }}
                 onDrop={(event) => {
                   event.preventDefault();
                   if (!canUpdate) return;
-                  const coordinate = resolveDropCoordinate(event);
-                  if (!coordinate) return;
-                  const paletteType = event.dataTransfer.getData(LAYOUT_PALETTE_DRAG_MIME) as PalettePlaceableElementType;
-                  if (paletteType) {
-                    placeElement(paletteType, coordinate.column, coordinate.row);
-                    return;
-                  }
-                  const sourceElementId = event.dataTransfer.getData('text/plain');
-                  if (sourceElementId) moveElement(sourceElementId, coordinate.column, coordinate.row);
+                  const pointerCoordinate = resolvePointerCoordinate(event.clientX, event.clientY);
+                  if (!pointerCoordinate) return;
+                  const action = resolveLayoutDropAction({
+                    pointerCoordinate,
+                    paletteType: event.dataTransfer.getData(LAYOUT_PALETTE_DRAG_MIME),
+                    serializedElementPayload: event.dataTransfer.getData(LAYOUT_ELEMENT_DRAG_MIME),
+                    elements: draftLayout.elements,
+                  });
+                  if (action?.kind === 'place') placeElement(action.type, action.target.column, action.target.row);
+                  if (action?.kind === 'move') moveElement(action.elementId, action.target.column, action.target.row);
                 }}
               >
                 {gridCoordinates.map(({ row, column }) => (
@@ -768,7 +794,7 @@ export function LaboratoryLayoutPage() {
                         setSelectedElementId(element.id);
                       }}
                       onDragStart={(event) => {
-                        if (canUpdate && isMovableNonPc) event.dataTransfer.setData('text/plain', element.id);
+                        if (canUpdate && isMovableNonPc) startElementDrag(event, element);
                       }}
                     >
                       <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
@@ -780,7 +806,7 @@ export function LaboratoryLayoutPage() {
                             <div
                               draggable={canUpdate && element.movable && !element.fixed}
                               onDragStart={(event) => {
-                                if (canUpdate && element.movable && !element.fixed) event.dataTransfer.setData('text/plain', element.id);
+                                if (canUpdate && element.movable && !element.fixed) startElementDrag(event, element);
                               }}
                               className={cn(
                                 'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
