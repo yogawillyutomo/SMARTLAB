@@ -2,6 +2,20 @@ export * from './types';
 export { validateLaboratoryLayout } from './validation';
 export { moveLayoutElement, swapLayoutElements } from './operations';
 export {
+  LAYOUT_ELEMENT_LABEL_MAX_LENGTH,
+  LAYOUT_ELEMENT_ROTATIONS,
+  LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES,
+  getLayoutElementPropertyCapabilities,
+  updateLayoutElementProperties,
+} from './elementPropertyOperations';
+export type {
+  ElementPropertyFailureReason,
+  LayoutElementPropertyCapabilities,
+  LayoutElementPropertyPatch,
+  UpdateLayoutElementPropertiesInput,
+  UpdateLayoutElementPropertiesResult,
+} from './elementPropertyOperations';
+export {
   CUSTOM_LAYOUT_MAX_COLUMNS,
   CUSTOM_LAYOUT_MAX_ROWS,
   CUSTOM_LAYOUT_MIN_COLUMNS,

@@ -24,6 +24,7 @@ import { EmptyState } from '@/components/ui/States';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
 import { LayoutElementPalette, LAYOUT_PALETTE_DRAG_MIME } from '@/components/laboratory/LayoutElementPalette';
+import { LayoutElementInspector } from '@/components/laboratory/LayoutElementInspector';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -42,6 +43,7 @@ import {
   layoutFingerprint,
   layoutsEquivalent,
   LABORATORY_LAYOUT_TYPE_DISPLAY_NAMES,
+  LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES,
   moveLayoutElement,
   placeLayoutElement,
   removeLayoutElement,
@@ -52,6 +54,8 @@ import {
   convertLayoutToCustom,
   generatePhysicalLayoutTemplateDraft,
   resizeCustomLayout,
+  updateLayoutElementProperties,
+  type LayoutElementPropertyPatch,
   type PalettePlaceableElementType,
 } from '@/domain/laboratory-layout';
 import type { Device, Laboratory, LaboratoryLayout } from '@/types';
@@ -504,6 +508,7 @@ export function LaboratoryLayoutPage() {
   const devices = db.devices.filter((device) => device.laboratoryId === currentLab.id);
   const structureEditable = canEditLayoutStructure(draftLayout);
   const selectedElement = selectedElementId ? draft.elements.find((element) => element.id === selectedElementId) ?? null : null;
+  const selectedDevice = selectedElement?.referenceId ? devices.find((device) => device.id === selectedElement.referenceId) : undefined;
   const canRemoveSelected = Boolean(canUpdate && structureEditable && selectedElement && selectedElement.type !== 'empty' && selectedElement.type !== 'student_pc' && selectedElement.type !== 'teacher_pc' && !selectedElement.fixed);
   const templateCompatibility = checkPhysicalLayoutTemplateCompatibility({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, devices, teacherDeviceId: teacherDeviceId || undefined });
   const customResizeAnalysis = draftLayout.layoutType === 'custom'
@@ -549,6 +554,21 @@ export function LaboratoryLayoutPage() {
     setSelectedElementId(null);
   }
 
+  function applyElementProperties(patch: LayoutElementPropertyPatch) {
+    if (!canUpdate || draftLayout.layoutType !== 'custom' || !selectedElement) return;
+    const result = updateLayoutElementProperties({
+      layout: draftLayout,
+      elementId: selectedElement.id,
+      patch,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    if (result.operation === 'updated') setDraft(result.layout);
+  }
+
   function clearPaletteSelection() {
     setSelectedPaletteType(null);
     setPaletteLabel('');
@@ -563,7 +583,7 @@ export function LaboratoryLayoutPage() {
 
   function cancelChanges() {
     setDraft(cloneLaboratoryLayout(baselineLayout));
-    setSelectedElementId(null);
+    setSelectedElementId((current) => current && baselineLayout.elements.some((element) => element.id === current) ? current : null);
     clearPaletteSelection();
   }
 
@@ -676,7 +696,7 @@ export function LaboratoryLayoutPage() {
                   const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
                   const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
                   const isTeacher = element?.type === 'teacher_pc';
-                  const isMovableNonPc = Boolean(element && !isPc && element.type !== 'empty' && element.movable);
+                  const isMovableNonPc = Boolean(element && !isPc && element.type !== 'empty' && element.movable && !element.fixed);
                   const statusClass = !device ? '' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground';
                   return (
                     <div
@@ -693,7 +713,7 @@ export function LaboratoryLayoutPage() {
                         setSelectedElementId(element.id);
                       }}
                       onDragStart={(event) => {
-                        if (isMovableNonPc) event.dataTransfer.setData('text/plain', element!.id);
+                        if (canUpdate && isMovableNonPc) event.dataTransfer.setData('text/plain', element!.id);
                       }}
                       onDragOver={(e) => { if (canUpdate) e.preventDefault(); }}
                       onDrop={(e) => {
@@ -708,22 +728,31 @@ export function LaboratoryLayoutPage() {
                         if (sourceElementId) moveElement(sourceElementId, col, row);
                       }}
                     >
-                      {isPc && device ? (
+                      <div className="flex h-full w-full items-center justify-center overflow-hidden">
                         <div
-                          draggable={canUpdate && Boolean(element?.movable)}
-                          onDragStart={(e) => e.dataTransfer.setData('text/plain', element!.id)}
-                          className={cn(
-                            'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
-                            canUpdate && element?.movable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-                            statusClass,
-                            isTeacher && 'ring-2 ring-accent-content/70 ring-offset-1 ring-offset-base-900'
-                          )}
+                          className="flex h-full w-full items-center justify-center transition-transform"
+                          style={{ transform: `rotate(${element?.rotation ?? 0}deg)` }}
                         >
-                          <Monitor className="h-5 w-5" />
-                          <span className="mt-1 text-[10px] font-semibold">{isTeacher ? 'PC Guru' : device.positionCode}</span>
-                          {isTeacher && <span className="text-[9px] opacity-80">{device.positionCode}</span>}
+                          {isPc && device ? (
+                            <div
+                              draggable={canUpdate && Boolean(element?.movable) && !element?.fixed}
+                              onDragStart={(event) => {
+                                if (canUpdate && element?.movable && !element.fixed) event.dataTransfer.setData('text/plain', element.id);
+                              }}
+                              className={cn(
+                                'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
+                                canUpdate && element?.movable && !element.fixed ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                                statusClass,
+                                isTeacher && 'ring-2 ring-accent-content/70 ring-offset-1 ring-offset-base-900'
+                              )}
+                            >
+                              <Monitor className="h-5 w-5" />
+                              <span className="mt-1 text-[10px] font-semibold">{isTeacher ? 'PC Guru' : device.positionCode}</span>
+                              {isTeacher && <span className="text-[9px] opacity-80">{device.positionCode}</span>}
+                            </div>
+                          ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="px-2 text-center text-[10px] font-medium">{element.label ?? 'Pintu'}</span></div> : element?.type === 'aisle' ? null : element && element.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element.label ?? LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES[element.type]}</span> : null}
                         </div>
-                      ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="px-2 text-center text-[10px] font-medium">{element.label ?? 'Pintu'}</span></div> : element?.type === 'aisle' ? null : element?.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element?.label ?? element?.type}</span> : null}
+                      </div>
                     </div>
                   );
                 })}
@@ -784,6 +813,13 @@ export function LaboratoryLayoutPage() {
               {!canUpdate && <p className="text-warning-foreground">Mode hanya baca. Perubahan Custom tidak dapat diterapkan.</p>}
             </CardContent>
           </Card>
+          <LayoutElementInspector
+            layoutType={draftLayout.layoutType}
+            selectedElement={selectedElement}
+            selectedDevice={selectedDevice}
+            canUpdate={canUpdate}
+            onApply={applyElementProperties}
+          />
           <LayoutElementPalette
             canUpdate={canUpdate}
             structureEditable={structureEditable}

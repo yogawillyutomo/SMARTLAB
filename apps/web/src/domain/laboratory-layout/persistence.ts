@@ -114,7 +114,7 @@ export function layoutsEquivalent(left: LaboratoryLayout, right: LaboratoryLayou
   return layoutFingerprint(left) === layoutFingerprint(right);
 }
 
-function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number } {
+function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number; propertiesChanged: number } {
   const activeNonEmptyById = new Map(activeLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
   const savedNonEmptyById = new Map(savedLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
   const repositioned = savedLayout.elements.filter((element) => {
@@ -126,6 +126,17 @@ function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: Lab
     repositioned,
     added: savedLayout.elements.filter((element) => element.type !== 'empty' && !activeNonEmptyById.has(element.id)).length,
     removed: activeLayout.elements.filter((element) => element.type !== 'empty' && !savedNonEmptyById.has(element.id)).length,
+    propertiesChanged: savedLayout.elements.filter((element) => {
+      if (element.type === 'empty') return false;
+      const previous = activeNonEmptyById.get(element.id);
+      return previous !== undefined && (
+        previous.label !== element.label
+        || previous.rotation !== element.rotation
+        || previous.fixed !== element.fixed
+        || previous.movable !== element.movable
+        || previous.swappable !== element.swappable
+      );
+    }).length,
   };
 }
 
@@ -292,7 +303,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     action: 'layout.save',
     object: savedLayout.id,
     oldValue: `updatedAt=${active.layout.updatedAt}; layoutType=${active.layout.layoutType}; dimensions=${active.layout.rows}x${active.layout.columns}`,
-    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}`,
+    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}; propertiesChanged=${changes.propertiesChanged}`,
     device: input.actor.device ?? 'Web',
   };
   next.auditLogs.unshift(audit);
