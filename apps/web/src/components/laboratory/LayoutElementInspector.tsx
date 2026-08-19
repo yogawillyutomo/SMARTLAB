@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
+import { createGeometrySpanSubmission, validateGeometrySpanInput } from './layoutGeometryInput';
 
 interface LayoutElementInspectorProps {
   layoutType: LaboratoryLayoutType;
@@ -51,6 +52,11 @@ export function LayoutElementInspector({ layoutType, selectedElement, selectedDe
 
   const capabilities = selectedElement ? getLayoutElementPropertyCapabilities({ layoutType }, selectedElement) : null;
   const geometryCapabilities = selectedElement ? getLayoutElementGeometryCapabilities({ layoutType }, selectedElement) : null;
+  const maxRowSpan = selectedElement ? layoutRows - selectedElement.row + 1 : 1;
+  const maxColumnSpan = selectedElement ? layoutColumns - selectedElement.column + 1 : 1;
+  const rowSpanValidation = validateGeometrySpanInput(rowSpan, maxRowSpan, 'row');
+  const columnSpanValidation = validateGeometrySpanInput(columnSpan, maxColumnSpan, 'column');
+  const geometrySubmission = createGeometrySpanSubmission(rowSpanValidation, columnSpanValidation);
   const reason = !capabilities?.editable
     ? capabilities?.reason === 'property_edit_not_custom'
       ? 'Ubah denah menjadi Custom untuk mengedit properti elemen.'
@@ -149,29 +155,36 @@ export function LayoutElementInspector({ layoutType, selectedElement, selectedDe
                       label="Rentang Baris"
                       type="number"
                       min={1}
-                      max={layoutRows - selectedElement.row + 1}
+                      max={maxRowSpan}
                       step={1}
                       value={rowSpan}
                       disabled={!canUpdate}
                       onChange={(event) => setRowSpan(event.target.value)}
+                      error={rowSpanValidation.valid ? undefined : rowSpanValidation.message}
+                      hint={`Maksimum dari posisi ini: ${maxRowSpan}`}
                     />
                     <Input
                       label="Rentang Kolom"
                       type="number"
                       min={1}
-                      max={layoutColumns - selectedElement.column + 1}
+                      max={maxColumnSpan}
                       step={1}
                       value={columnSpan}
                       disabled={!canUpdate}
                       onChange={(event) => setColumnSpan(event.target.value)}
+                      error={columnSpanValidation.valid ? undefined : columnSpanValidation.message}
+                      hint={`Maksimum dari posisi ini: ${maxColumnSpan}`}
                     />
                   </div>
                   <Button
                     size="sm"
                     variant="secondary"
                     className="w-full"
-                    disabled={!canUpdate}
-                    onClick={() => onApplyGeometry(Number(rowSpan), Number(columnSpan))}
+                    disabled={!canUpdate || !geometrySubmission}
+                    onClick={() => {
+                      if (!geometrySubmission) return;
+                      onApplyGeometry(geometrySubmission.rowSpan, geometrySubmission.columnSpan);
+                    }}
                   >
                     Terapkan Ukuran ke Draft
                   </Button>
