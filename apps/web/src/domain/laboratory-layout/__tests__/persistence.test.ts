@@ -16,6 +16,7 @@ import {
   removeLayoutElement,
   resizeCustomLayout,
   saveActiveLaboratoryLayout,
+  updateLayoutElementGeometry,
   updateLayoutElementProperties,
   validateLaboratoryLayout,
   validatePersistedLaboratoryLayouts,
@@ -108,6 +109,43 @@ function createPropertySaveFixture() {
     auditId: 'audit-property-fixture',
   });
   if (!saved.ok) throw new Error('expected property fixture save');
+  return { db: saved.db, laboratory, layout: saved.layout };
+}
+
+function createGeometrySaveFixture() {
+  const seed = generateSeedData();
+  const laboratory = { ...seed.labs[0], id: 'lab-geometry', code: 'GEOMETRY', name: 'Lab Geometry', pcCount: 1, layoutRows: 3, layoutCols: 4 };
+  const created = createLaboratoryWithInitialLayout({
+    db: seed,
+    laboratory,
+    devices: createInitialLaboratoryDevices(laboratory, MIGRATED_AT),
+    createdAt: MIGRATED_AT,
+    layoutId: 'layout:lab-geometry:v1',
+  });
+  if (!created.ok) throw new Error('expected laboratory creation');
+  const active = getActiveLaboratoryLayout(created.db, laboratory.id);
+  if (!active.ok) throw new Error('expected active layout');
+  const converted = convertLayoutToCustom({ layout: active.layout, updatedAt: MIGRATED_AT });
+  if (!converted.ok) throw new Error('expected Custom conversion');
+  const target = converted.layout.elements.find((element) => element.type === 'empty')!;
+  const door = placeLayoutElement({
+    layout: converted.layout,
+    type: 'door',
+    target: { row: target.row, column: target.column },
+    elementId: 'geometry-door',
+    updatedAt: MIGRATED_AT,
+    label: 'Pintu Geometri',
+  });
+  if (!door.ok) throw new Error('expected door placement');
+  const saved = saveActiveLaboratoryLayout({
+    db: created.db,
+    laboratoryId: laboratory.id,
+    draft: door.layout,
+    actor: { name: 'Admin', role: 'Admin Lab' },
+    savedAt: MIGRATED_AT,
+    auditId: 'audit-geometry-fixture',
+  });
+  if (!saved.ok) throw new Error('expected geometry fixture save');
   return { db: saved.db, laboratory, layout: saved.layout };
 }
 
@@ -378,6 +416,142 @@ describe('layout persistence integration', () => {
     if (!saved.ok) return;
     expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length + 1);
     expect(saved.db.auditLogs[0].newValue).toContain('repositioned=1; added=0; removed=0; propertiesChanged=1');
+  });
+
+  it('saves a geometry-only change with one audit and unchanged laboratory dimensions and Devices', () => {
+    const fixture = createGeometrySaveFixture();
+    const devicesBefore = structuredClone(fixture.db.devices);
+    const updated = updateLayoutElementGeometry({
+      layout: fixture.layout,
+      elementId: 'geometry-door',
+      rowSpan: 2,
+      columnSpan: 2,
+      updatedAt: '2026-08-08T00:00:00.000Z',
+      emptyElementIdPrefix: 'geometry-only',
+    });
+    if (!updated.ok) throw new Error('expected geometry update');
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: updated.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-08T00:00:01.000Z',
+      auditId: 'audit-geometry-only',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length + 1);
+    expect(saved.db.auditLogs[0].newValue).toContain('repositioned=0; added=0; removed=0; propertiesChanged=0; geometryChanged=1');
+    expect(saved.db.labs.find((laboratory) => laboratory.id === fixture.laboratory.id)).toMatchObject({ layoutRows: 3, layoutCols: 4 });
+    expect(saved.db.devices).toEqual(devicesBefore);
+    expect(validatePersistedLaboratoryLayouts(saved.db).valid).toBe(true);
+  });
+
+  it('counts one element once when its span changes multiple times before Save', () => {
+    const fixture = createGeometrySaveFixture();
+    const first = updateLayoutElementGeometry({
+      layout: fixture.layout,
+      elementId: 'geometry-door',
+      rowSpan: 2,
+      columnSpan: 1,
+      updatedAt: '2026-08-08T00:00:00.000Z',
+      emptyElementIdPrefix: 'geometry-first',
+    });
+    if (!first.ok) throw new Error('expected first geometry update');
+    const second = updateLayoutElementGeometry({
+      layout: first.layout,
+      elementId: 'geometry-door',
+      rowSpan: 2,
+      columnSpan: 2,
+      updatedAt: '2026-08-08T00:00:01.000Z',
+      emptyElementIdPrefix: 'geometry-second',
+    });
+    if (!second.ok) throw new Error('expected second geometry update');
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: second.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-08T00:00:02.000Z',
+      auditId: 'audit-geometry-twice',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (saved.ok) expect(saved.db.auditLogs[0].newValue).toContain('geometryChanged=1');
+  });
+
+  it('treats geometry reverted to its baseline as equivalent and audit-free despite regenerated empty IDs', () => {
+    const fixture = createGeometrySaveFixture();
+    const expanded = updateLayoutElementGeometry({
+      layout: fixture.layout,
+      elementId: 'geometry-door',
+      rowSpan: 2,
+      columnSpan: 2,
+      updatedAt: '2026-08-08T00:00:00.000Z',
+      emptyElementIdPrefix: 'geometry-expand',
+    });
+    if (!expanded.ok) throw new Error('expected geometry expansion');
+    const reverted = updateLayoutElementGeometry({
+      layout: expanded.layout,
+      elementId: 'geometry-door',
+      rowSpan: 1,
+      columnSpan: 1,
+      updatedAt: '2026-08-08T00:00:01.000Z',
+      emptyElementIdPrefix: 'geometry-revert',
+    });
+    if (!reverted.ok) throw new Error('expected geometry revert');
+    expect(layoutsEquivalent(fixture.layout, reverted.layout)).toBe(true);
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: reverted.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-08T00:00:02.000Z',
+      auditId: 'unused-geometry-revert',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: false });
+    if (saved.ok) {
+      expect(saved.db).toBe(fixture.db);
+      expect(saved.db.auditLogs).toHaveLength(fixture.db.auditLogs.length);
+    }
+  });
+
+  it('reports property, movement, and geometry changes independently without counting technical empty cells', () => {
+    const fixture = createGeometrySaveFixture();
+    const property = updateLayoutElementProperties({
+      layout: fixture.layout,
+      elementId: 'geometry-door',
+      patch: { label: 'Pintu Geometri Baru' },
+      updatedAt: '2026-08-08T00:00:00.000Z',
+    });
+    if (!property.ok) throw new Error('expected property update');
+    const geometry = updateLayoutElementGeometry({
+      layout: property.layout,
+      elementId: 'geometry-door',
+      rowSpan: 2,
+      columnSpan: 1,
+      updatedAt: '2026-08-08T00:00:01.000Z',
+      emptyElementIdPrefix: 'geometry-combined',
+    });
+    if (!geometry.ok) throw new Error('expected geometry update');
+    const moved = moveLayoutElement(
+      geometry.layout,
+      'geometry-door',
+      { row: 1, column: 3 },
+      { updatedAt: '2026-08-08T00:00:02.000Z', emptyElementIdPrefix: 'geometry-move' },
+    );
+    if (!moved.ok) throw new Error('expected geometry move');
+    const saved = saveActiveLaboratoryLayout({
+      db: fixture.db,
+      laboratoryId: fixture.laboratory.id,
+      draft: moved.layout,
+      actor: { name: 'Admin', role: 'Admin Lab' },
+      savedAt: '2026-08-08T00:00:03.000Z',
+      auditId: 'audit-geometry-combined',
+    });
+    expect(saved).toMatchObject({ ok: true, changed: true });
+    if (!saved.ok) return;
+    expect(saved.db.auditLogs[0].newValue).toContain('repositioned=1; added=0; removed=0; propertiesChanged=1; geometryChanged=1');
+    expect(saved.db.auditLogs[0].newValue).not.toContain('geometryChanged=2');
   });
 
   it('keeps equivalent property updates and their subsequent save audit-free', () => {

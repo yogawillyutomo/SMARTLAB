@@ -100,9 +100,9 @@ describe('layout element property updates', () => {
   });
 
   it.each([[0, 90], [90, 180], [180, 270], [270, 0]] as const)('rotates %i to %i without changing geometry', (from, to) => {
-    const source = element('door', 'door', 2, 2, { rotation: from });
+    const source = element('door', 'door', 1, 1, { rotation: from, rowSpan: 2, columnSpan: 3 });
     const result = updateLayoutElementProperties({ layout: layoutWith(source), elementId: source.id, patch: { rotation: to }, updatedAt: AT });
-    expect(result).toMatchObject({ ok: true, operation: 'updated', element: { rotation: to, row: 2, column: 2, rowSpan: 1, columnSpan: 1 } });
+    expect(result).toMatchObject({ ok: true, operation: 'updated', element: { rotation: to, row: 1, column: 1, rowSpan: 2, columnSpan: 3 } });
   });
 
   it('rejects unsupported rotations at runtime', () => {

@@ -80,7 +80,7 @@ export function cloneLaboratoryLayout(layout: LaboratoryLayout): LaboratoryLayou
 export function layoutFingerprint(layout: LaboratoryLayout): string {
   const elements = layout.elements
     .map((element) => ({
-      id: element.id,
+      id: element.type === 'empty' ? null : element.id,
       layoutId: element.layoutId,
       type: element.type,
       referenceId: element.referenceId ?? null,
@@ -94,7 +94,7 @@ export function layoutFingerprint(layout: LaboratoryLayout): string {
       swappable: element.swappable,
       fixed: element.fixed,
     }))
-    .sort((left, right) => left.row - right.row || left.column - right.column || left.id.localeCompare(right.id));
+    .sort((left, right) => left.row - right.row || left.column - right.column || (left.id ?? '').localeCompare(right.id ?? ''));
   return JSON.stringify({
     id: layout.id,
     laboratoryId: layout.laboratoryId,
@@ -114,7 +114,7 @@ export function layoutsEquivalent(left: LaboratoryLayout, right: LaboratoryLayou
   return layoutFingerprint(left) === layoutFingerprint(right);
 }
 
-function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number; propertiesChanged: number } {
+function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: LaboratoryLayout): { repositioned: number; added: number; removed: number; propertiesChanged: number; geometryChanged: number } {
   const activeNonEmptyById = new Map(activeLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
   const savedNonEmptyById = new Map(savedLayout.elements.filter((element) => element.type !== 'empty').map((element) => [element.id, element]));
   const repositioned = savedLayout.elements.filter((element) => {
@@ -136,6 +136,11 @@ function summarizeLayoutChanges(activeLayout: LaboratoryLayout, savedLayout: Lab
         || previous.movable !== element.movable
         || previous.swappable !== element.swappable
       );
+    }).length,
+    geometryChanged: savedLayout.elements.filter((element) => {
+      if (element.type === 'empty') return false;
+      const previous = activeNonEmptyById.get(element.id);
+      return previous !== undefined && (previous.rowSpan !== element.rowSpan || previous.columnSpan !== element.columnSpan);
     }).length,
   };
 }
@@ -303,7 +308,7 @@ export function saveActiveLaboratoryLayout(input: SaveActiveLaboratoryLayoutInpu
     action: 'layout.save',
     object: savedLayout.id,
     oldValue: `updatedAt=${active.layout.updatedAt}; layoutType=${active.layout.layoutType}; dimensions=${active.layout.rows}x${active.layout.columns}`,
-    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}; propertiesChanged=${changes.propertiesChanged}`,
+    newValue: `updatedAt=${savedLayout.updatedAt}; layoutType=${savedLayout.layoutType}; dimensions=${savedLayout.rows}x${savedLayout.columns}; repositioned=${changes.repositioned}; added=${changes.added}; removed=${changes.removed}; propertiesChanged=${changes.propertiesChanged}; geometryChanged=${changes.geometryChanged}`,
     device: input.actor.device ?? 'Web',
   };
   next.auditLogs.unshift(audit);

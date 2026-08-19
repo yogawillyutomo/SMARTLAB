@@ -1,5 +1,6 @@
 import type { ID, LaboratoryLayout, LayoutElement, LayoutRotation } from '@/types';
 import type { LayoutCoordinate, LayoutValidationIssue, LayoutValidationResult } from './types';
+import { supportsMultiCellGeometry } from './geometry';
 
 const ROTATIONS: readonly LayoutRotation[] = [0, 90, 180, 270];
 
@@ -82,6 +83,9 @@ export function validateLaboratoryLayout(layout: LaboratoryLayout): LayoutValida
     if (!isPositiveInteger(element.rowSpan) || !isPositiveInteger(element.columnSpan)) {
       issues.push({ code: 'invalid-span', message: 'Rentang elemen harus berupa bilangan bulat positif.', elementId: element.id });
       continue;
+    }
+    if (!isSingleCell(element) && !supportsMultiCellGeometry(element.type)) {
+      issues.push({ code: 'unsupported-element-span', message: 'Jenis elemen ini harus berukuran 1 × 1.', elementId: element.id });
     }
     if (!ROTATIONS.includes(element.rotation)) issues.push({ code: 'invalid-rotation', message: 'Rotasi elemen tidak didukung.', elementId: element.id });
 

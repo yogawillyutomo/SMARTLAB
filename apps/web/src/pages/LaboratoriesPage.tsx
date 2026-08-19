@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import {
   FlaskConical,
@@ -25,6 +25,13 @@ import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
 import { LayoutElementPalette, LAYOUT_PALETTE_DRAG_MIME } from '@/components/laboratory/LayoutElementPalette';
 import { LayoutElementInspector } from '@/components/laboratory/LayoutElementInspector';
+import {
+  LAYOUT_ELEMENT_DRAG_MIME,
+  createLayoutElementDragPayload,
+  resolveLayoutDropAction,
+  resolveLogicalGridCoordinate,
+  serializeLayoutElementDragPayload,
+} from '@/components/laboratory/layoutDrag';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -55,10 +62,11 @@ import {
   generatePhysicalLayoutTemplateDraft,
   resizeCustomLayout,
   updateLayoutElementProperties,
+  updateLayoutElementGeometry,
   type LayoutElementPropertyPatch,
   type PalettePlaceableElementType,
 } from '@/domain/laboratory-layout';
-import type { Device, Laboratory, LaboratoryLayout } from '@/types';
+import type { Device, Laboratory, LaboratoryLayout, LayoutElement } from '@/types';
 
 export function LaboratoriesPage() {
   const { db, mutate, replaceDB } = useAppData();
@@ -459,6 +467,7 @@ export function LaboratoryLayoutPage() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [customRows, setCustomRows] = useState('');
   const [customColumns, setCustomColumns] = useState('');
+  const logicalGridRef = useRef<HTMLDivElement>(null);
   const dirty = Boolean(baseline && draft && !layoutsEquivalent(baseline, draft));
   const blocker = useBlocker(dirty);
 
@@ -509,20 +518,22 @@ export function LaboratoryLayoutPage() {
   const structureEditable = canEditLayoutStructure(draftLayout);
   const selectedElement = selectedElementId ? draft.elements.find((element) => element.id === selectedElementId) ?? null : null;
   const selectedDevice = selectedElement?.referenceId ? devices.find((device) => device.id === selectedElement.referenceId) : undefined;
-  const canRemoveSelected = Boolean(canUpdate && structureEditable && selectedElement && selectedElement.type !== 'empty' && selectedElement.type !== 'student_pc' && selectedElement.type !== 'teacher_pc' && !selectedElement.fixed);
+  const canRemoveSelected = Boolean(canUpdate && structureEditable && selectedElement && selectedElement.type !== 'empty' && selectedElement.type !== 'student_pc' && selectedElement.type !== 'teacher_pc' && selectedElement.rowSpan === 1 && selectedElement.columnSpan === 1 && !selectedElement.fixed);
   const templateCompatibility = checkPhysicalLayoutTemplateCompatibility({ templateId: RPL_PERIMETER_CENTER_ISLAND_36.id, laboratory: currentLab, devices, teacherDeviceId: teacherDeviceId || undefined });
   const customResizeAnalysis = draftLayout.layoutType === 'custom'
     ? analyzeCustomLayoutResize({ layout: draftLayout, rows: Number(customRows), columns: Number(customColumns) })
     : null;
-  const grid = Array.from({ length: draft.rows * cols }, (_, index) => {
-    const col = (index % cols) + 1;
-    const row = Math.floor(index / cols) + 1;
-    return draft.elements.find((element) => element.row === row && element.column === col) ?? null;
-  });
+  const gridCoordinates = Array.from({ length: draft.rows * cols }, (_, index) => ({
+    column: (index % cols) + 1,
+    row: Math.floor(index / cols) + 1,
+  }));
 
   function moveElement(sourceElementId: string, column: number, row: number) {
     if (!canUpdate) return;
-    const result = moveLayoutElement(draftLayout, sourceElementId, { row, column }, { updatedAt: new Date().toISOString() });
+    const result = moveLayoutElement(draftLayout, sourceElementId, { row, column }, {
+      updatedAt: new Date().toISOString(),
+      emptyElementIdPrefix: uid('empty-move'),
+    });
     if (!result.ok) {
       toast(result.message, 'error');
       return;
@@ -567,6 +578,52 @@ export function LaboratoryLayoutPage() {
       return;
     }
     if (result.operation === 'updated') setDraft(result.layout);
+  }
+
+  function applyElementGeometry(rowSpan: number, columnSpan: number) {
+    if (!canUpdate || draftLayout.layoutType !== 'custom' || !selectedElement) return;
+    const result = updateLayoutElementGeometry({
+      layout: draftLayout,
+      elementId: selectedElement.id,
+      rowSpan,
+      columnSpan,
+      updatedAt: new Date().toISOString(),
+      emptyElementIdPrefix: uid('empty-geometry'),
+    });
+    if (!result.ok) {
+      toast(result.message, 'error');
+      return;
+    }
+    if (result.operation === 'updated') setDraft(result.layout);
+  }
+
+  function resolvePointerCoordinate(clientX: number, clientY: number): { row: number; column: number } | null {
+    const gridElement = logicalGridRef.current;
+    if (!gridElement) return null;
+    const bounds = gridElement.getBoundingClientRect();
+    const styles = window.getComputedStyle(gridElement);
+    const columnGap = Number.parseFloat(styles.columnGap) || 0;
+    const rowGap = Number.parseFloat(styles.rowGap) || 0;
+    return resolveLogicalGridCoordinate({
+      clientX,
+      clientY,
+      bounds,
+      rows: draftLayout.rows,
+      columns: draftLayout.columns,
+      rowGap,
+      columnGap,
+    });
+  }
+
+  function startElementDrag(event: DragEvent<HTMLElement>, element: LayoutElement) {
+    const pointerCoordinate = resolvePointerCoordinate(event.clientX, event.clientY);
+    const payload = pointerCoordinate ? createLayoutElementDragPayload(element, pointerCoordinate) : null;
+    if (!payload) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData(LAYOUT_ELEMENT_DRAG_MIME, serializeLayoutElementDragPayload(payload));
+    event.dataTransfer.effectAllowed = 'move';
   }
 
   function clearPaletteSelection() {
@@ -689,59 +746,71 @@ export function LaboratoryLayoutPage() {
               </div>
             </div>
             <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-base-700 bg-base-900/40 p-4">
-              <div className="grid gap-2" style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '660px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}>
-                {grid.map((element, i) => {
-                  const col = (i % cols) + 1;
-                  const row = Math.floor(i / cols) + 1;
-                  const device = element?.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
-                  const isPc = element?.type === 'student_pc' || element?.type === 'teacher_pc';
-                  const isTeacher = element?.type === 'teacher_pc';
-                  const isMovableNonPc = Boolean(element && !isPc && element.type !== 'empty' && element.movable && !element.fixed);
+              <div
+                ref={logicalGridRef}
+                className="grid gap-2"
+                style={{ minWidth: draft.layoutType === 'perimeter-center-island' ? '660px' : undefined, gridTemplateColumns: `repeat(${cols}, minmax(92px, 1fr))` }}
+                onDragOver={(event) => { if (canUpdate) event.preventDefault(); }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (!canUpdate) return;
+                  const pointerCoordinate = resolvePointerCoordinate(event.clientX, event.clientY);
+                  if (!pointerCoordinate) return;
+                  const action = resolveLayoutDropAction({
+                    pointerCoordinate,
+                    paletteType: event.dataTransfer.getData(LAYOUT_PALETTE_DRAG_MIME),
+                    serializedElementPayload: event.dataTransfer.getData(LAYOUT_ELEMENT_DRAG_MIME),
+                    elements: draftLayout.elements,
+                  });
+                  if (action?.kind === 'place') placeElement(action.type, action.target.column, action.target.row);
+                  if (action?.kind === 'move') moveElement(action.elementId, action.target.column, action.target.row);
+                }}
+              >
+                {gridCoordinates.map(({ row, column }) => (
+                  <div
+                    key={`coordinate:${row}:${column}`}
+                    aria-hidden="true"
+                    className="pointer-events-none aspect-square min-h-0 min-w-0"
+                    style={{ gridRow: row, gridColumn: column }}
+                  />
+                ))}
+                {draft.elements.map((element) => {
+                  const device = element.referenceId ? devices.find((candidate) => candidate.id === element.referenceId) : undefined;
+                  const isPc = element.type === 'student_pc' || element.type === 'teacher_pc';
+                  const isTeacher = element.type === 'teacher_pc';
+                  const isMovableNonPc = !isPc && element.type !== 'empty' && element.movable && !element.fixed;
                   const statusClass = !device ? '' : device.status === 'Online' ? 'border-success/40 bg-success/10 text-success-foreground' : device.status === 'Critical' ? 'border-danger/40 bg-danger/10 text-danger' : device.status === 'Offline' ? 'border-base-600 bg-base-700/40 text-ink-muted' : 'border-warning/40 bg-warning/10 text-warning-foreground';
                   return (
                     <div
-                      key={element?.id ?? `${row}:${col}`}
-                      style={element ? { gridRow: `${element.row} / span ${element.rowSpan}`, gridColumn: `${element.column} / span ${element.columnSpan}` } : undefined}
+                      key={element.id}
+                      style={{ gridRow: `${element.row} / span ${element.rowSpan}`, gridColumn: `${element.column} / span ${element.columnSpan}` }}
                       draggable={canUpdate && isMovableNonPc}
-                      className={cn('flex aspect-square items-center justify-center rounded-lg', canUpdate && isMovableNonPc && 'cursor-grab active:cursor-grabbing', selectedElementId === element?.id && 'ring-2 ring-accent-content ring-offset-1 ring-offset-base-900', element?.type === 'aisle' ? 'border border-base-700/40 bg-base-800/20' : element?.type === 'door' ? 'border-2 border-warning/40 bg-warning/10' : 'border-2 border-dashed border-base-700 bg-base-800/40')}
+                      className={cn('relative z-10 flex min-h-0 min-w-0 items-center justify-center rounded-lg', canUpdate && isMovableNonPc && 'cursor-grab active:cursor-grabbing', selectedElementId === element.id && 'ring-2 ring-accent-content ring-offset-1 ring-offset-base-900', element.type === 'aisle' ? 'border border-base-700/40 bg-base-800/20' : element.type === 'door' ? 'border-2 border-warning/40 bg-warning/10' : 'border-2 border-dashed border-base-700 bg-base-800/40')}
                       onClick={() => {
-                        if (!element) return;
                         if (selectedPaletteType) {
-                          placeElement(selectedPaletteType, col, row);
+                          placeElement(selectedPaletteType, element.column, element.row);
                           return;
                         }
                         setSelectedElementId(element.id);
                       }}
                       onDragStart={(event) => {
-                        if (canUpdate && isMovableNonPc) event.dataTransfer.setData('text/plain', element!.id);
-                      }}
-                      onDragOver={(e) => { if (canUpdate) e.preventDefault(); }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (!element || !canUpdate) return;
-                        const paletteType = e.dataTransfer.getData(LAYOUT_PALETTE_DRAG_MIME) as PalettePlaceableElementType;
-                        if (paletteType) {
-                          placeElement(paletteType, col, row);
-                          return;
-                        }
-                        const sourceElementId = e.dataTransfer.getData('text/plain');
-                        if (sourceElementId) moveElement(sourceElementId, col, row);
+                        if (canUpdate && isMovableNonPc) startElementDrag(event, element);
                       }}
                     >
-                      <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                      <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
                         <div
-                          className="flex h-full w-full items-center justify-center transition-transform"
-                          style={{ transform: `rotate(${element?.rotation ?? 0}deg)` }}
+                          className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden transition-transform"
+                          style={{ transform: `rotate(${element.rotation}deg)` }}
                         >
                           {isPc && device ? (
                             <div
-                              draggable={canUpdate && Boolean(element?.movable) && !element?.fixed}
+                              draggable={canUpdate && element.movable && !element.fixed}
                               onDragStart={(event) => {
-                                if (canUpdate && element?.movable && !element.fixed) event.dataTransfer.setData('text/plain', element.id);
+                                if (canUpdate && element.movable && !element.fixed) startElementDrag(event, element);
                               }}
                               className={cn(
                                 'flex h-full w-full flex-col items-center justify-center rounded-lg border-2 transition-colors',
-                                canUpdate && element?.movable && !element.fixed ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                                canUpdate && element.movable && !element.fixed ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
                                 statusClass,
                                 isTeacher && 'ring-2 ring-accent-content/70 ring-offset-1 ring-offset-base-900'
                               )}
@@ -750,7 +819,7 @@ export function LaboratoryLayoutPage() {
                               <span className="mt-1 text-[10px] font-semibold">{isTeacher ? 'PC Guru' : device.positionCode}</span>
                               {isTeacher && <span className="text-[9px] opacity-80">{device.positionCode}</span>}
                             </div>
-                          ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element?.type === 'door' ? <div className="flex flex-col items-center gap-1 text-warning-foreground"><DoorOpen className="h-5 w-5" /><span className="px-2 text-center text-[10px] font-medium">{element.label ?? 'Pintu'}</span></div> : element?.type === 'aisle' ? null : element && element.type !== 'empty' ? <span className="px-2 text-center text-[10px] text-ink-muted">{element.label ?? LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES[element.type]}</span> : null}
+                          ) : isPc ? <span className="px-2 text-center text-[10px] text-danger">Referensi perangkat tidak ditemukan</span> : element.type === 'door' ? <div className="flex min-w-0 flex-col items-center gap-1 overflow-hidden text-warning-foreground"><DoorOpen className="h-5 w-5 shrink-0" /><span className="max-w-full break-words px-2 text-center text-[10px] font-medium">{element.label ?? 'Pintu'}</span></div> : element.type === 'aisle' ? null : element.type !== 'empty' ? <span className="max-w-full break-words px-2 text-center text-[10px] text-ink-muted">{element.label ?? LAYOUT_ELEMENT_TYPE_DISPLAY_NAMES[element.type]}</span> : null}
                         </div>
                       </div>
                     </div>
@@ -817,8 +886,11 @@ export function LaboratoryLayoutPage() {
             layoutType={draftLayout.layoutType}
             selectedElement={selectedElement}
             selectedDevice={selectedDevice}
+            layoutRows={draftLayout.rows}
+            layoutColumns={draftLayout.columns}
             canUpdate={canUpdate}
             onApply={applyElementProperties}
+            onApplyGeometry={applyElementGeometry}
           />
           <LayoutElementPalette
             canUpdate={canUpdate}

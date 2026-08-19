@@ -107,19 +107,19 @@ describe('layout operations', () => {
     expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_layout' });
   });
 
-  it('rejects a spanning source move', () => {
+  it('rejects unsupported spanning PC geometry before movement', () => {
     const input = layout([element('pc-1', 'student_pc', 1, 1, { columnSpan: 2 }), element('empty-2-1', 'empty', 2, 1), element('empty-2-2', 'empty', 2, 2)]);
-    expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
+    expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_layout' });
   });
 
-  it('rejects a spanning source dropped onto its own coordinate', () => {
+  it('rejects unsupported spanning PC geometry before same-coordinate handling', () => {
     const input = layout([element('pc-1', 'student_pc', 1, 1, { columnSpan: 2 }), element('empty-2-1', 'empty', 2, 1), element('empty-2-2', 'empty', 2, 2)]);
-    expect(moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
+    expect(moveLayoutElement(input, 'pc-1', { row: 1, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_layout' });
   });
 
-  it('rejects a spanning target move', () => {
+  it('rejects unsupported spanning empty geometry before movement', () => {
     const input = layout([element('pc-1', 'student_pc', 1, 1), element('empty-1-2', 'empty', 1, 2), element('empty-row-2', 'empty', 2, 1, { columnSpan: 2 })]);
-    expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'spanning_move_not_supported' });
+    expect(moveLayoutElement(input, 'pc-1', { row: 2, column: 1 }, options)).toMatchObject({ ok: false, reason: 'invalid_layout' });
   });
 
   it('rejects an invalid mutation timestamp', () => expect(moveLayoutElement(validLayout(), 'pc-1', { row: 2, column: 1 }, { updatedAt: 'not-a-timestamp' })).toMatchObject({ ok: false, reason: 'invalid_timestamp' }));

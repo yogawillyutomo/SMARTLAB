@@ -1,4 +1,4 @@
-import type { ID, LaboratoryLayout, LayoutElement } from '@/types';
+import type { ID, LaboratoryLayout } from '@/types';
 import type {
   LayoutCoordinate,
   LayoutOperationFailureReason,
@@ -6,6 +6,11 @@ import type {
   LayoutOperationResult,
   LayoutOperationSuccess,
 } from './types';
+import {
+  findLayoutElementAt,
+  isFootprintInBounds,
+  reconcileElementFootprint,
+} from './geometry';
 import { isCoordinateInBounds, isSingleCell, validateLaboratoryLayout } from './validation';
 
 function cloneLayout(layout: LaboratoryLayout): LaboratoryLayout {
@@ -29,13 +34,6 @@ function isValidTimestamp(value: string): boolean {
   return value.trim().length > 0 && !Number.isNaN(Date.parse(value));
 }
 
-function findElementAt(layout: LaboratoryLayout, coordinate: LayoutCoordinate): LayoutElement | undefined {
-  return layout.elements.find((element) => coordinate.row >= element.row
-    && coordinate.row < element.row + element.rowSpan
-    && coordinate.column >= element.column
-    && coordinate.column < element.column + element.columnSpan);
-}
-
 function validLayoutOrFailure(layout: LaboratoryLayout): LayoutOperationResult | null {
   const validation = validateLaboratoryLayout(layout);
   return validation.valid ? null : failure('invalid_layout', 'Denah tidak valid dan tidak dapat diubah.', validation.issues);
@@ -45,7 +43,7 @@ function timestampedResult(
   layout: LaboratoryLayout,
   operation: Exclude<LayoutOperationSuccess['operation'], 'noop'>,
   sourceElementId: ID,
-  targetElementId: ID,
+  targetElementId: ID | undefined,
   options: LayoutOperationOptions,
 ): LayoutOperationResult {
   if (!isValidTimestamp(options.updatedAt)) return failure('invalid_timestamp', 'Waktu pembaruan operasi tidak valid.');
@@ -98,13 +96,27 @@ export function moveLayoutElement(
   if (source.type === 'empty') return failure('source_is_empty', 'Elemen empty tidak dapat dipindahkan.');
   if (source.fixed) return failure('source_fixed', 'Elemen fixed tidak dapat dipindahkan.');
   if (!source.movable) return failure('source_not_movable', 'Elemen ini tidak dapat dipindahkan.');
-  if (!isSingleCell(source)) return failure('spanning_move_not_supported', 'Perpindahan elemen multi-sel belum didukung.');
   if (!isCoordinateInBounds(layout, target)) return failure('invalid_target_coordinate', 'Koordinat target tidak valid.');
   if (source.row === target.row && source.column === target.column) return success(cloneLayout(layout), 'noop', source.id, source.id);
 
-  const targetElement = findElementAt(layout, target);
+  if (!isSingleCell(source)) {
+    if (layout.layoutType !== 'custom') return failure('spanning_move_not_supported', 'Elemen multi-sel hanya dapat dipindahkan pada denah Custom.');
+    const nextFootprint = { row: target.row, column: target.column, rowSpan: source.rowSpan, columnSpan: source.columnSpan };
+    if (!isFootprintInBounds(layout, nextFootprint)) return failure('invalid_target_coordinate', 'Footprint target melewati batas grid.');
+    if (!options.emptyElementIdPrefix?.trim()) return failure('invalid_empty_element_id_prefix', 'Prefix ID sel kosong wajib diisi untuk perpindahan multi-sel.');
+    if (!isValidTimestamp(options.updatedAt)) return failure('invalid_timestamp', 'Waktu pembaruan operasi tidak valid.');
+    const reconciliation = reconcileElementFootprint(layout, source, nextFootprint, options.emptyElementIdPrefix);
+    if (!reconciliation.ok) {
+      if (reconciliation.reason === 'collision') return failure('occupied_target', 'Footprint target bertabrakan dengan elemen lain.');
+      if (reconciliation.reason === 'duplicate_empty_id') return failure('invalid_empty_element_id_prefix', 'Prefix menghasilkan ID sel kosong duplikat.');
+      return failure('target_not_found', 'Target tidak memiliki elemen grid lengkap.');
+    }
+    const next: LaboratoryLayout = { ...layout, elements: reconciliation.elements };
+    return timestampedResult(next, 'moved', source.id, undefined, options);
+  }
+
+  const targetElement = findLayoutElementAt(layout, target);
   if (!targetElement) return failure('target_not_found', 'Target tidak memiliki elemen grid.');
-  if (!isSingleCell(targetElement)) return failure('spanning_move_not_supported', 'Target elemen multi-sel belum didukung.');
   if (targetElement.type === 'empty') {
     const next = cloneLayout(layout);
     const nextSource = next.elements.find((element) => element.id === source.id)!;
