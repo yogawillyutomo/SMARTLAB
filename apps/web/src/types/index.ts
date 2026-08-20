@@ -32,8 +32,30 @@ export type DeviceStatus =
   | 'Maintenance'
   | 'Reserved';
 
+export type ManagedDeviceType =
+  | 'desktop_pc'
+  | 'laptop'
+  | 'server'
+  | 'network_switch'
+  | 'router'
+  | 'access_point'
+  | 'printer'
+  | 'projector'
+  | 'ups'
+  | 'other';
+
+export type DeviceLifecycleStatus =
+  | 'in_service'
+  | 'spare'
+  | 'retired'
+  | 'decommissioned';
+
 export interface Device {
   id: ID;
+  deviceType: ManagedDeviceType;
+  lifecycleStatus: DeviceLifecycleStatus;
+  qrPublicId: string;
+  assetId?: ID;
   positionCode: string;
   hostname: string;
   laboratoryId: ID;

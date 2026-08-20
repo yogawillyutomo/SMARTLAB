@@ -124,6 +124,10 @@ export const laboratoryRepository: Repository<Laboratory> = {
 };
 
 // Devices
+type DeviceRepositoryUpdate = Partial<Omit<Device,
+  'id' | 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId' | 'assetCode' | 'serialNumber' | 'laboratoryId'
+>>;
+
 export const deviceRepository = {
   async getAll(): Promise<Device[]> {
     await delay();
@@ -137,13 +141,32 @@ export const deviceRepository = {
     await delay();
     return getDB().devices.find((d) => d.id === id) ?? null;
   },
-  async update(id: string, input: Partial<Device>): Promise<Device | null> {
+  async update(id: string, input: DeviceRepositoryUpdate): Promise<Device | null> {
     await delay();
     let updated: Device | null = null;
     updateDB((db) => {
       const idx = db.devices.findIndex((d) => d.id === id);
       if (idx >= 0) {
-        db.devices[idx] = { ...db.devices[idx], ...input, lastHeartbeat: input.status ? new Date().toISOString() : db.devices[idx].lastHeartbeat };
+        const {
+          id: _id,
+          deviceType: _deviceType,
+          lifecycleStatus: _lifecycleStatus,
+          qrPublicId: _qrPublicId,
+          assetId: _assetId,
+          assetCode: _assetCode,
+          serialNumber: _serialNumber,
+          laboratoryId: _laboratoryId,
+          ...safeInput
+        } = input as Partial<Device>;
+        void _id;
+        void _deviceType;
+        void _lifecycleStatus;
+        void _qrPublicId;
+        void _assetId;
+        void _assetCode;
+        void _serialNumber;
+        void _laboratoryId;
+        db.devices[idx] = { ...db.devices[idx], ...safeInput, lastHeartbeat: input.status ? new Date().toISOString() : db.devices[idx].lastHeartbeat };
         updated = db.devices[idx];
       }
     });

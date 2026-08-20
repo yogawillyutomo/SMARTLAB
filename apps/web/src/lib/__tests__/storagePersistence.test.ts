@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function seedCurrentDatabase(version = '2.0.0') {
+function seedCurrentDatabase(version = '3.0.0') {
   storage.seed(DB_KEY, JSON.stringify(generateSeedData()));
   if (version) storage.seed(STORAGE_KEYS.VERSION, version);
   storage.resetCounts();

@@ -150,11 +150,11 @@ function createGeometrySaveFixture() {
 }
 
 describe('layout persistence integration', () => {
-  it('creates deterministic version-2 seed layouts without Device coordinates', () => {
+  it('creates deterministic version-3 seed layouts without Device coordinates', () => {
     const first = generateSeedData();
     const second = generateSeedData();
     expect(first).toEqual(second);
-    expect(first.schemaVersion).toBe(2);
+    expect(first.schemaVersion).toBe(3);
     expect(first.layouts).toHaveLength(first.labs.length);
     expect(first.devices.every((device) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
     expect(validatePersistedLaboratoryLayouts(first).valid).toBe(true);
@@ -174,7 +174,7 @@ describe('layout persistence integration', () => {
     });
   });
 
-  it('is idempotent for a valid version-2 database and preserves timestamps', () => {
+  it('is idempotent for a valid version-3 database and preserves timestamps', () => {
     const first = normalizeDatabase(legacyDatabase(), { migratedAt: MIGRATED_AT });
     if (!first.ok) throw new Error('expected migration success');
     const second = normalizeDatabase(first.db, { migratedAt: '2030-01-01T00:00:00.000Z' });
@@ -214,7 +214,7 @@ describe('layout persistence integration', () => {
     expect(normalizeDatabase(invalidDimensions, { migratedAt: MIGRATED_AT })).toMatchObject({ ok: false });
   });
 
-  it('rejects a version-2 database containing stale Device coordinates', () => {
+  it('rejects a version-3 database containing stale Device coordinates', () => {
     const invalid = generateSeedData() as unknown as { devices: Array<Record<string, unknown>> };
     invalid.devices[0].row = 1;
     expect(normalizeDatabase(invalid, { migratedAt: MIGRATED_AT })).toMatchObject({ ok: false, issues: [expect.objectContaining({ validationIssueCode: 'legacy-device-coordinate' })] });
@@ -787,9 +787,9 @@ describe('layout persistence integration', () => {
     storage.setItem('smartlab_pplg_db', JSON.stringify(legacy));
     storage.writeCounts.clear();
     const loaded = loadDB();
-    expect(loaded.db.schemaVersion).toBe(2);
+    expect(loaded.db.schemaVersion).toBe(3);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(1);
-    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe('2.0.0');
+    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe('3.0.0');
     expect(JSON.parse(storage.getItem('smartlab_pplg_db')!).devices.every((device: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
 
     const invalid = legacyDatabase();
@@ -804,15 +804,15 @@ describe('layout persistence integration', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const fallback = loadDB();
     error.mockRestore();
-    expect(fallback.db.schemaVersion).toBe(2);
+    expect(fallback.db.schemaVersion).toBe(3);
     expect(storage.getItem('smartlab_pplg_db')).toBe(raw);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(0);
   });
 
-  it('does not rewrite a valid version-2 database or alter layout timestamps when loaded repeatedly', () => {
+  it('does not rewrite a valid version-3 database or alter layout timestamps when loaded repeatedly', () => {
     const db = generateSeedData();
     storage.setItem('smartlab_pplg_db', JSON.stringify(db));
-    storage.setItem(STORAGE_KEYS.VERSION, '2.0.0');
+    storage.setItem(STORAGE_KEYS.VERSION, '3.0.0');
     storage.writeCounts.clear();
     const first = loadDB();
     const second = loadDB();

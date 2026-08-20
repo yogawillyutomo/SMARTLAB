@@ -43,6 +43,14 @@ function randInt(min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
+function createSeedQrPublicIdFactory(): () => string {
+  const qrRandom = seeded(20260819);
+  return () => {
+    const token = Array.from({ length: 32 }, () => Math.floor(qrRandom() * 16).toString(16)).join('');
+    return `qr_${token}`;
+  };
+}
+
 export const LABS: Laboratory[] = [
   {
     id: 'lab-rpl-1',
@@ -100,6 +108,7 @@ interface SeedDeviceWithLegacyCoordinate extends Device {
 
 function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
   const devices: SeedDeviceWithLegacyCoordinate[] = [];
+  const nextQrPublicId = createSeedQrPublicIdFactory();
   LABS.forEach((lab, labIdx) => {
     for (let i = 0; i < lab.pcCount; i++) {
       const n = i + 1;
@@ -131,6 +140,10 @@ function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
 
       devices.push({
         id: `dev-${code}-${pad(n)}`,
+        deviceType: 'desktop_pc',
+        lifecycleStatus: 'in_service',
+        qrPublicId: nextQrPublicId(),
+        assetId: `ast-dev-${code}-${pad(n)}`,
         positionCode,
         hostname: `PC-${code}-${pad(n)}`,
         laboratoryId: lab.id,

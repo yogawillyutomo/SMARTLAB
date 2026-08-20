@@ -1,5 +1,6 @@
 import type { AuditLog, Device, ID, Laboratory, LaboratoryLayout, LayoutElement, RoleName } from '@/types';
 import type { SeedData } from '@/data/seed';
+import { generateDeviceQrPublicId, isValidQrPublicId, type QrPublicIdFactory } from '@/domain/managed-device';
 import { migrateLegacyDeviceCoordinates } from './legacyMigration';
 import { inspectLaboratoryDependencies } from './laboratoryDependencies';
 import { isPositiveInteger, validateLaboratoryLayout } from './validation';
@@ -331,12 +332,27 @@ export interface CreateLaboratoryWithInitialLayoutInput {
   auditId?: ID;
 }
 
-export function createInitialLaboratoryDevices(laboratory: Laboratory, createdAt: string): Device[] {
+export function createInitialLaboratoryDevices(
+  laboratory: Laboratory,
+  createdAt: string,
+  generateQrPublicId: QrPublicIdFactory = generateDeviceQrPublicId,
+): Device[] {
+  const qrPublicIds = new Set<string>();
   return Array.from({ length: laboratory.pcCount }, (_, index) => {
     const number = index + 1;
     const padded = String(number).padStart(2, '0');
+    let qrPublicId = '';
+    for (let attempt = 0; attempt < 32 && !qrPublicId; attempt += 1) {
+      const candidate = generateQrPublicId();
+      if (isValidQrPublicId(candidate) && !qrPublicIds.has(candidate)) qrPublicId = candidate;
+    }
+    if (!qrPublicId) throw new Error('QR publik perangkat awal tidak dapat dibuat secara unik.');
+    qrPublicIds.add(qrPublicId);
     return {
       id: `dev-${laboratory.code}-${padded}`,
+      deviceType: 'desktop_pc',
+      lifecycleStatus: 'in_service',
+      qrPublicId,
       positionCode: `PC-${padded}`,
       hostname: `PC-${laboratory.code}-${padded}`,
       laboratoryId: laboratory.id,
