@@ -1,5 +1,6 @@
 import { delay, getDB, saveDB, updateDB } from '@/lib/db';
 import { createInitialLaboratoryDevices, createLaboratoryWithInitialLayout, deleteLaboratorySafely } from '@/domain/laboratory-layout';
+import { validateAssetMutation } from '@/domain/managed-device';
 import type {
   Asset,
   AuditLog,
@@ -228,6 +229,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async update(id, input) {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) throw new Error('Aset tidak ditemukan.');
+    const policy = validateAssetMutation(source, { operation: 'update', assetId: id, changes: input });
+    if (!policy.ok) throw new Error(policy.message);
     let updated: Asset | null = null;
     updateDB((db) => {
       const idx = db.assets.findIndex((a) => a.id === id);
@@ -241,6 +246,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async remove(id) {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) return;
+    const policy = validateAssetMutation(source, { operation: 'delete', assetId: id });
+    if (!policy.ok) throw new Error(policy.message);
     updateDB((db) => {
       db.assets = db.assets.filter((a) => a.id !== id);
     });
@@ -248,6 +257,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async transfer(id: string, transfer: { toLabId: string; toPosition: string; reason: string; by: string }): Promise<Asset | null> {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) return null;
+    const policy = validateAssetMutation(source, { operation: 'transfer', assetId: id, toLaboratoryId: transfer.toLabId });
+    if (!policy.ok) throw new Error(policy.message);
     let updated: Asset | null = null;
     updateDB((db) => {
       const idx = db.assets.findIndex((a) => a.id === id);

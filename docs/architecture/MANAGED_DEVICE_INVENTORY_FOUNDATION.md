@@ -32,6 +32,8 @@ Schema-version-2 migration looks for Assets with an exact `assetCode` and same `
 
 Migration never fabricates an Asset or invents procurement data. Link status is derived as linked, unlinked, or invalid and is not another persisted field.
 
+Ordinary Asset mutations are link-aware. A linked Asset may retain administrative edits that preserve the relationship, but its `assetCode` and `laboratoryId` cannot change independently. Linked Asset deletion and Asset-only transfer are rejected before persistence or audit. Unlinked Assets retain their existing edit, delete, and transfer behavior. A future controlled Device transfer must coordinate Device, Asset, placement, and history atomically; Stage 4D.1A does not simulate that workflow.
+
 ## Lifecycle policy and audit
 
 Lifecycle states are `in_service`, `spare`, `retired`, and terminal `decommissioned`. Transfer is a future location-history event, not a lifecycle state.

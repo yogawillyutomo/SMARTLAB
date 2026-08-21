@@ -69,6 +69,30 @@ export type DeviceInventoryLinkStatus =
   | { status: 'unlinked' }
   | { status: 'invalid'; reason: string };
 
+export type AssetDeviceLinkStatus =
+  | { status: 'linked'; asset: Asset; device: Device }
+  | { status: 'unlinked'; asset: Asset }
+  | { status: 'invalid'; message: string; asset?: Asset; deviceIds?: ID[] };
+
+export type AssetMutationRequest =
+  | { operation: 'update'; assetId: ID; changes: Partial<Asset> }
+  | { operation: 'delete'; assetId: ID }
+  | { operation: 'transfer'; assetId: ID; toLaboratoryId: ID };
+
+export type AssetMutationPolicyResult =
+  | { ok: true; link: Extract<AssetDeviceLinkStatus, { status: 'linked' | 'unlinked' }> }
+  | {
+    ok: false;
+    reason:
+      | 'asset_link_invalid'
+      | 'linked_asset_code_change_not_allowed'
+      | 'linked_asset_laboratory_change_not_allowed'
+      | 'linked_asset_delete_not_allowed'
+      | 'linked_asset_transfer_not_allowed';
+    message: string;
+    link: AssetDeviceLinkStatus;
+  };
+
 type LegacyManagedDevice = Omit<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId'>
   & Partial<Pick<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId'>>;
 
@@ -163,6 +187,86 @@ export function getDeviceInventoryLinkStatus(
   if (asset.assetCode !== device.assetCode) return { status: 'invalid', reason: 'Kode aset perangkat dan inventaris berbeda.' };
   if (asset.laboratoryId !== device.laboratoryId) return { status: 'invalid', reason: 'Laboratorium perangkat dan inventaris berbeda.' };
   return { status: 'linked', asset };
+}
+
+export function getAssetDeviceLink(
+  db: Pick<{ devices: Device[]; assets: Asset[] }, 'devices' | 'assets'>,
+  assetId: ID,
+): AssetDeviceLinkStatus {
+  const assets = db.assets.filter((asset) => asset.id === assetId);
+  if (assets.length !== 1) {
+    return {
+      status: 'invalid',
+      message: assets.length === 0 ? 'Aset tidak ditemukan.' : 'ID aset tidak unik.',
+    };
+  }
+  const asset = assets[0];
+  const devices = db.devices.filter((device) => device.assetId === asset.id);
+  if (devices.length === 0) return { status: 'unlinked', asset };
+  if (devices.length > 1) {
+    return {
+      status: 'invalid',
+      asset,
+      deviceIds: devices.map((device) => device.id),
+      message: 'Aset tertaut ke lebih dari satu perangkat.',
+    };
+  }
+  const device = devices[0];
+  const inventoryStatus = getDeviceInventoryLinkStatus(db, device);
+  if (inventoryStatus.status !== 'linked' || inventoryStatus.asset.id !== asset.id) {
+    return {
+      status: 'invalid',
+      asset,
+      deviceIds: [device.id],
+      message: inventoryStatus.status === 'invalid' ? inventoryStatus.reason : 'Relasi aset dan perangkat tidak konsisten.',
+    };
+  }
+  return { status: 'linked', asset, device };
+}
+
+export function validateAssetMutation(
+  db: Pick<{ devices: Device[]; assets: Asset[] }, 'devices' | 'assets'>,
+  request: AssetMutationRequest,
+): AssetMutationPolicyResult {
+  const link = getAssetDeviceLink(db, request.assetId);
+  if (link.status === 'invalid') {
+    return { ok: false, reason: 'asset_link_invalid', message: `Relasi aset dan perangkat tidak valid: ${link.message}`, link };
+  }
+  if (link.status === 'unlinked') return { ok: true, link };
+
+  if (request.operation === 'update') {
+    if (request.changes.assetCode !== undefined && request.changes.assetCode !== link.asset.assetCode) {
+      return {
+        ok: false,
+        reason: 'linked_asset_code_change_not_allowed',
+        message: 'Kode aset tertaut tidak dapat diubah. Gunakan alur perangkat terkelola yang terkontrol.',
+        link,
+      };
+    }
+    if (request.changes.laboratoryId !== undefined && request.changes.laboratoryId !== link.asset.laboratoryId) {
+      return {
+        ok: false,
+        reason: 'linked_asset_laboratory_change_not_allowed',
+        message: 'Laboratorium aset tertaut tidak dapat diubah. Gunakan alur transfer perangkat terkontrol.',
+        link,
+      };
+    }
+    return { ok: true, link };
+  }
+  if (request.operation === 'delete') {
+    return {
+      ok: false,
+      reason: 'linked_asset_delete_not_allowed',
+      message: 'Aset tertaut ke perangkat terkelola dan tidak dapat dihapus.',
+      link,
+    };
+  }
+  return {
+    ok: false,
+    reason: 'linked_asset_transfer_not_allowed',
+    message: 'Aset tertaut ke perangkat terkelola. Gunakan alur transfer perangkat terkontrol.',
+    link,
+  };
 }
 
 export function validateManagedDeviceInventory(
