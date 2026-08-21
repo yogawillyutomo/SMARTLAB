@@ -41,7 +41,7 @@ import { LoadingState, EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { relativeTime, cn, downloadCSV } from '@/utils';
 import { useChartTheme } from '@/hooks/useChartTheme';
-import { regularScheduleDistribution, scheduleAppliesOnDate } from '@/lib/scheduleView';
+import { activeRegularSchedules, regularScheduleAppliesOnDate, regularScheduleDistribution } from '@/lib/scheduleView';
 export function DashboardPage() {
   const { db, ready, refresh } = useAppData();
   const user = useAuthStore((s) => s.user);
@@ -49,6 +49,7 @@ export function DashboardPage() {
   const canExport = usePermission('dashboard', 'export');
   const canCreateIncident = usePermission('incidents', 'create');
   const chartTheme = useChartTheme();
+  const operationalSchedules = useMemo(() => activeRegularSchedules(db.schedules), [db.schedules]);
 
   const stats = useMemo(() => {
     const activeLabs = db.labs.filter((l) => l.status === 'active').length;
@@ -56,15 +57,15 @@ export function DashboardPage() {
     const onlinePCs = labDevices.filter((d) => d.status === 'Online').length;
     const problemPCs = labDevices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
     const today = new Date();
-    const todaySchedules = db.schedules.filter((schedule) => scheduleAppliesOnDate(schedule, today));
+    const todaySchedules = operationalSchedules.filter((schedule) => regularScheduleAppliesOnDate(schedule, today));
     const openIncidents = db.incidents.filter((i) => !['Ditutup', 'Selesai', 'Ditolak'].includes(i.status)).length;
     const overdueMaintenance = db.maintenance.plans.filter((p) => p.status === 'active' && new Date(p.nextSchedule) < new Date()).length;
     const activeLoans = db.loans.filter((l) => ['Dipinjam', 'Diserahkan', 'Terlambat'].includes(l.status)).length;
     const lowStock = db.stock.items.filter((s) => s.quantity <= s.minStock).length;
     return { activeLabs, onlinePCs, problemPCs, todaySchedules: todaySchedules.length, openIncidents, overdueMaintenance, activeLoans, lowStock, totalPCs: labDevices.length };
-  }, [db, activeLabId]);
+  }, [db, activeLabId, operationalSchedules]);
 
-  const scheduleDistribution = useMemo(() => regularScheduleDistribution(db.schedules), [db.schedules]);
+  const scheduleDistribution = useMemo(() => regularScheduleDistribution(operationalSchedules), [operationalSchedules]);
   const hasScheduleDistribution = scheduleDistribution.some((entry) => entry.scheduleCount > 0);
 
   const assetConditionData = useMemo(() => {
@@ -83,8 +84,8 @@ export function DashboardPage() {
     const devices = db.devices.filter((d) => d.laboratoryId === lab.id);
     const online = devices.filter((d) => d.status === 'Online').length;
     const problem = devices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
-    const todaySchedule = db.schedules
-      .filter((schedule) => schedule.laboratoryId === lab.id && scheduleAppliesOnDate(schedule, today))
+    const todaySchedule = operationalSchedules
+      .filter((schedule) => schedule.laboratoryId === lab.id && regularScheduleAppliesOnDate(schedule, today))
       .sort((left, right) => left.startTime.localeCompare(right.startTime))[0];
     const inUse = db.sessions.some((s) => s.laboratoryId === lab.id && s.status === 'Berlangsung');
     return { lab, online, problem, total: devices.length, inUse, todaySchedule };
@@ -107,7 +108,7 @@ export function DashboardPage() {
       { metric: 'Laboratorium Aktif', value: stats.activeLabs },
       { metric: 'PC Online', value: stats.onlinePCs },
       { metric: 'PC Bermasalah', value: stats.problemPCs },
-      { metric: 'Praktikum Hari Ini', value: stats.todaySchedules },
+      { metric: 'Jadwal Reguler Hari Ini', value: stats.todaySchedules },
       { metric: 'Tiket Kerusakan Terbuka', value: stats.openIncidents },
       { metric: 'Pemeliharaan Jatuh Tempo', value: stats.overdueMaintenance },
       { metric: 'Barang Dipinjam', value: stats.activeLoans },
@@ -145,9 +146,9 @@ export function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Laboratorium Aktif" value={stats.activeLabs} icon={<FlaskConical className="h-5 w-5" />} tone="accent" to="/laboratories" />
-        <StatCard label="PC Aktif (Lab ini)" value={`${stats.onlinePCs}/${stats.totalPCs}`} icon={<Monitor className="h-5 w-5" />} tone="success" to="/monitoring" />
+        <StatCard label="PC Online (Lab ini)" value={`${stats.onlinePCs}/${stats.totalPCs}`} icon={<Monitor className="h-5 w-5" />} tone="success" to="/monitoring" />
         <StatCard label="PC Bermasalah" value={stats.problemPCs} icon={<MonitorX className="h-5 w-5" />} tone="danger" to="/monitoring" />
-        <StatCard label="Praktikum Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" to="/schedules" />
+        <StatCard label="Jadwal Reguler Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" to="/schedules" />
         <StatCard label="Tiket Kerusakan" value={stats.openIncidents} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" to="/incidents" />
         <StatCard label="Pemeliharaan Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" to="/maintenance" />
         <StatCard label="Barang Dipinjam" value={stats.activeLoans} icon={<HandHelping className="h-5 w-5" />} tone="accent" to="/loans" />

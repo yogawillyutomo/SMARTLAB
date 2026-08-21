@@ -32,11 +32,11 @@ export function regularScheduleDistribution(schedules: readonly Schedule[]) {
   });
 }
 
-export function scheduleAppliesOnDate(schedule: Schedule, date: Date): boolean {
-  const localDate = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-  return schedule.date === localDate || schedule.day === scheduleWeekdayForDate(date);
+export function activeRegularSchedules(schedules: readonly Schedule[]): Schedule[] {
+  return schedules.filter((schedule) => schedule.status !== 'Dibatalkan');
+}
+
+/** Regular schedules recur by weekday; Schedule.date is retained historical data, not an override. */
+export function regularScheduleAppliesOnDate(schedule: Schedule, date: Date): boolean {
+  return schedule.day === scheduleWeekdayForDate(date);
 }

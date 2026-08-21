@@ -211,13 +211,12 @@ export function SchedulesPage() {
           </div>
 
           {view === 'day' && (
-            <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Pilih hari jadwal">
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Pilih hari jadwal">
               {DAYS.map((day) => (
                 <button
                   key={day}
                   type="button"
-                  role="tab"
-                  aria-selected={selectedDay === day}
+                  aria-pressed={selectedDay === day}
                   onClick={() => setSelectedDay(day)}
                   className={cn(
                     'rounded-lg border px-3 py-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',

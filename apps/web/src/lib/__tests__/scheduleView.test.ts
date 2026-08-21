@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeRegularSchedules,
   defaultRegularScheduleWeekday,
   regularScheduleDistribution,
-  scheduleAppliesOnDate,
+  regularScheduleAppliesOnDate,
   schedulesForWeekday,
 } from '@/lib/scheduleView';
 import type { Schedule } from '@/types';
@@ -57,10 +58,15 @@ describe('regular schedule weekday projection', () => {
     ]);
   });
 
-  it('matches an explicit date or the recurring weekday without inventing week offsets', () => {
+  it('uses the recurring weekday and never lets Schedule.date override it', () => {
     const friday = new Date(2026, 7, 21);
-    expect(scheduleAppliesOnDate(schedule('weekday', 'Jumat', '07:00', 2, '2026-01-01'), friday)).toBe(true);
-    expect(scheduleAppliesOnDate(schedule('date', 'Senin', '07:00', 2, '2026-08-21'), friday)).toBe(true);
-    expect(scheduleAppliesOnDate(schedule('other', 'Senin', '07:00', 2, '2026-01-01'), friday)).toBe(false);
+    expect(regularScheduleAppliesOnDate(schedule('weekday', 'Jumat', '07:00', 2, '2026-01-01'), friday)).toBe(true);
+    expect(regularScheduleAppliesOnDate(schedule('mismatch', 'Senin', '07:00', 2, '2026-08-21'), friday)).toBe(false);
+    expect(regularScheduleAppliesOnDate(schedule('other', 'Senin', '07:00', 2, '2026-01-01'), friday)).toBe(false);
+  });
+
+  it('excludes cancelled schedules from operational regular-schedule projections', () => {
+    const cancelled = { ...schedule('cancelled', 'Jumat', '07:00'), status: 'Dibatalkan' as const };
+    expect(activeRegularSchedules([schedule('active', 'Jumat', '08:00'), cancelled]).map((item) => item.id)).toEqual(['active']);
   });
 });
