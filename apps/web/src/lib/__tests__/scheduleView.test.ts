@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activeRegularSchedules,
   defaultRegularScheduleWeekday,
+  regularScheduleConflictMessages,
   regularScheduleDistribution,
   regularScheduleAppliesOnDate,
   schedulesForWeekday,
@@ -68,5 +69,27 @@ describe('regular schedule weekday projection', () => {
   it('excludes cancelled schedules from operational regular-schedule projections', () => {
     const cancelled = { ...schedule('cancelled', 'Jumat', '07:00'), status: 'Dibatalkan' as const };
     expect(activeRegularSchedules([schedule('active', 'Jumat', '08:00'), cancelled]).map((item) => item.id)).toEqual(['active']);
+  });
+
+  it('allows an active schedule to be edited into Dibatalkan despite an overlapping active schedule', () => {
+    const counterpart = schedule('counterpart', 'Senin', '07:00');
+    const editing = { ...schedule('editing', 'Senin', '08:00'), status: 'Dibatalkan' as const };
+    expect(regularScheduleConflictMessages([counterpart], editing, editing.id)).toEqual([]);
+  });
+
+  it('allows a cancelled schedule to be created over an active schedule but keeps active conflicts', () => {
+    const existing = schedule('existing', 'Senin', '07:00');
+    const cancelled = { ...schedule('cancelled', 'Senin', '08:00'), status: 'Dibatalkan' as const };
+    const active = schedule('active', 'Senin', '08:00');
+
+    expect(regularScheduleConflictMessages([existing], cancelled)).toEqual([]);
+    expect(regularScheduleConflictMessages([existing], active)).toContain('Bentrok lab dengan XI RPL 1 (07:00-10:00)');
+  });
+
+  it('ignores a cancelled existing schedule when validating an overlapping active schedule', () => {
+    const cancelled = { ...schedule('cancelled', 'Senin', '07:00'), status: 'Dibatalkan' as const };
+    const incomingActive = schedule('active', 'Senin', '08:00');
+
+    expect(regularScheduleConflictMessages([cancelled], incomingActive)).toEqual([]);
   });
 });

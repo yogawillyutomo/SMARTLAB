@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Plus, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { useUIStore } from '@/stores/uiStore';
 import { usePermission } from '@/components/common/PermissionGuard';
@@ -16,6 +16,7 @@ import { toast } from '@/stores/toastStore';
 import { downloadCSV, cn } from '@/utils';
 import {
   defaultRegularScheduleWeekday,
+  regularScheduleConflictMessages,
   REGULAR_SCHEDULE_WEEKDAYS,
   schedulesForWeekday,
   type RegularScheduleWeekday,
@@ -40,6 +41,8 @@ export function SchedulesPage() {
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [confirmDel, setConfirmDel] = useState<Schedule | null>(null);
   const [form, setForm] = useState<Partial<Schedule>>({});
+  const weeklyBoardRef = useRef<HTMLDivElement>(null);
+  const [weeklyScrollState, setWeeklyScrollState] = useState({ atStart: true, atEnd: false });
 
   const filtered = useMemo(() => {
     return db.schedules.filter((s) => {
@@ -55,6 +58,32 @@ export function SchedulesPage() {
   const teachers = [...new Set(db.schedules.map((s) => s.teacherName))];
   const subjects = [...new Set(db.schedules.map((s) => s.subject))];
   const selectedDaySchedules = useMemo(() => schedulesForWeekday(filtered, selectedDay), [filtered, selectedDay]);
+  const updateWeeklyScrollState = useCallback(() => {
+    const board = weeklyBoardRef.current;
+    if (!board) return;
+
+    const maxScrollLeft = board.scrollWidth - board.clientWidth;
+    setWeeklyScrollState({
+      atStart: board.scrollLeft <= 1,
+      atEnd: board.scrollLeft >= maxScrollLeft - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateWeeklyScrollState();
+  }, [filtered.length, updateWeeklyScrollState, view]);
+
+  function scrollWeeklyBoard(direction: 'left' | 'right') {
+    const board = weeklyBoardRef.current;
+    if (!board) return;
+
+    const weekdayColumn = board.querySelector<HTMLElement>('[data-weekday-column]');
+    const scrollAmount = (weekdayColumn?.offsetWidth ?? 256) + 20;
+    board.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  }
 
   function openCreate() {
     if (!canCreate) return;
@@ -69,27 +98,13 @@ export function SchedulesPage() {
     setOpen(true);
   }
 
-  function detectConflict(input: Partial<Schedule>, excludeId?: string): string[] {
-    const conflicts: string[] = [];
-    db.schedules.forEach((s) => {
-      if (s.id === excludeId) return;
-      if (s.day !== input.day) return;
-      if (s.startTime < input.endTime! && s.endTime > input.startTime!) {
-        if (s.laboratoryId === input.laboratoryId) conflicts.push(`Bentrok lab dengan ${s.className} (${s.startTime}-${s.endTime})`);
-        if (s.teacherName === input.teacherName) conflicts.push(`Guru ${s.teacherName} sudah mengajar ${s.className}`);
-        if (s.className === input.className) conflicts.push(`Kelas ${s.className} sudah di jadwal lain`);
-      }
-    });
-    return conflicts;
-  }
-
   function save() {
     if (editing ? !canUpdate : !canCreate) return;
     if (!form.laboratoryId || !form.className || !form.teacherName || !form.subject) {
       toast('Lengkapi semua field wajib', 'error');
       return;
     }
-    const conflicts = detectConflict(form, editing?.id);
+    const conflicts = regularScheduleConflictMessages(db.schedules, form, editing?.id);
     if (conflicts.length > 0) {
       toast(`Konflik terdeteksi: ${conflicts[0]}`, 'error');
       return;
@@ -136,18 +151,22 @@ export function SchedulesPage() {
   }
 
   function scheduleCard(schedule: Schedule) {
+    const laboratoryCode = db.labs.find((lab) => lab.id === schedule.laboratoryId)?.code ?? 'Lab tidak ditemukan';
     const content = (
       <>
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <span className="whitespace-nowrap text-xs font-semibold text-ink-primary">{schedule.startTime} - {schedule.endTime}</span>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <span className="whitespace-nowrap text-sm font-semibold text-ink-primary">{schedule.startTime} - {schedule.endTime}</span>
           <StatusBadge status={schedule.status} />
         </div>
-        <p className="mt-1 break-words text-xs text-ink-secondary">{schedule.subject}</p>
-        <p className="mt-0.5 break-words text-[10px] text-ink-muted">{schedule.className} · {db.labs.find((lab) => lab.id === schedule.laboratoryId)?.code ?? 'Lab tidak ditemukan'}</p>
+        <p className="mt-3 line-clamp-2 break-words text-sm font-medium leading-5 text-ink-primary">{schedule.subject}</p>
+        <div className="mt-3 space-y-1.5 border-t border-base-700/50 pt-2.5 text-xs leading-5 text-ink-secondary">
+          <p className="break-words"><span className="text-ink-muted">Kelas:</span> {schedule.className}</p>
+          <p className="break-words"><span className="text-ink-muted">Lab:</span> {laboratoryCode}</p>
+        </div>
       </>
     );
     const className = cn(
-      'w-full rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-left',
+      'w-full rounded-xl border border-base-700/60 bg-base-900/30 p-4 text-left shadow-sm',
       canUpdate && 'transition-colors hover:border-accent-content/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
     );
     if (!canUpdate) return <div key={schedule.id} className={className}>{content}</div>;
@@ -190,7 +209,7 @@ export function SchedulesPage() {
       <Card>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-ink-secondary">Jadwal Reguler digunakan untuk alokasi pembelajaran berulang. Penggunaan insidental atau kegiatan pada tanggal tertentu diajukan melalui Reservasi Lab.</p>
-          {canViewBookings && <Button variant="secondary" size="sm" onClick={() => navigate('/bookings')}>Buka Reservasi Lab</Button>}
+          {canViewBookings && <Button variant="secondary" size="sm" className="min-h-10 shrink-0 whitespace-nowrap px-4" onClick={() => navigate('/bookings')}>Buka Reservasi Lab</Button>}
         </CardContent>
       </Card>
 
@@ -273,21 +292,51 @@ export function SchedulesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-x-auto pb-2" tabIndex={0} role="region" aria-label="Papan jadwal mingguan Senin sampai Jumat">
-          <div className="grid min-w-[1090px] grid-cols-5 gap-4">
-            {DAYS.map((day) => {
-              const daySchedules = schedulesForWeekday(filtered, day);
-              return (
-                <Card key={day} className="min-w-0">
-                  <CardContent className="space-y-2">
-                    <p className="font-semibold text-ink-primary">{day}</p>
-                    {daySchedules.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
-                    ) : daySchedules.map(scheduleCard)}
-                  </CardContent>
-                </Card>
-              );
-            })}
+        <div className="space-y-3">
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-9 shrink-0 px-3"
+              icon={<ChevronLeft className="h-4 w-4" />}
+              aria-label="Geser jadwal ke kiri"
+              title="Geser jadwal ke kiri"
+              disabled={weeklyScrollState.atStart}
+              onClick={() => scrollWeeklyBoard('left')}
+            >
+              Geser kiri
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-9 shrink-0 px-3"
+              icon={<ChevronRight className="h-4 w-4" />}
+              aria-label="Geser jadwal ke kanan"
+              title="Geser jadwal ke kanan"
+              disabled={weeklyScrollState.atEnd}
+              onClick={() => scrollWeeklyBoard('right')}
+            >
+              Geser kanan
+            </Button>
+          </div>
+          <div ref={weeklyBoardRef} onScroll={updateWeeklyScrollState} className="overflow-x-auto pb-3" tabIndex={0} role="region" aria-label="Papan jadwal mingguan Senin sampai Jumat">
+            <div className="grid min-w-[1280px] grid-cols-5 gap-5">
+              {DAYS.map((day) => {
+                const daySchedules = schedulesForWeekday(filtered, day);
+                return (
+                  <Card key={day} data-weekday-column className="min-w-0">
+                    <CardContent className="space-y-3 p-4">
+                      <p className="border-b border-base-700/60 pb-3 text-sm font-semibold text-ink-primary">{day}</p>
+                      {daySchedules.length === 0 ? (
+                        <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
+                      ) : daySchedules.map(scheduleCard)}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
