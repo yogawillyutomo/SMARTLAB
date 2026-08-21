@@ -41,8 +41,9 @@ import { LoadingState, EmptyState } from '@/components/ui/States';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { relativeTime, cn, downloadCSV } from '@/utils';
 import { useChartTheme } from '@/hooks/useChartTheme';
+import { regularScheduleDistribution, scheduleAppliesOnDate } from '@/lib/scheduleView';
 export function DashboardPage() {
-  const { db, ready } = useAppData();
+  const { db, ready, refresh } = useAppData();
   const user = useAuthStore((s) => s.user);
   const { activeLabId } = useUIStore();
   const canExport = usePermission('dashboard', 'export');
@@ -54,8 +55,8 @@ export function DashboardPage() {
     const labDevices = db.devices.filter((d) => d.laboratoryId === activeLabId);
     const onlinePCs = labDevices.filter((d) => d.status === 'Online').length;
     const problemPCs = labDevices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
-    const today = new Date().toISOString().split('T')[0];
-    const todaySchedules = db.schedules.filter((s) => s.date === today || s.day === new Date().toLocaleDateString('id-ID', { weekday: 'long' }));
+    const today = new Date();
+    const todaySchedules = db.schedules.filter((schedule) => scheduleAppliesOnDate(schedule, today));
     const openIncidents = db.incidents.filter((i) => !['Ditutup', 'Selesai', 'Ditolak'].includes(i.status)).length;
     const overdueMaintenance = db.maintenance.plans.filter((p) => p.status === 'active' && new Date(p.nextSchedule) < new Date()).length;
     const activeLoans = db.loans.filter((l) => ['Dipinjam', 'Diserahkan', 'Terlambat'].includes(l.status)).length;
@@ -63,14 +64,8 @@ export function DashboardPage() {
     return { activeLabs, onlinePCs, problemPCs, todaySchedules: todaySchedules.length, openIncidents, overdueMaintenance, activeLoans, lowStock, totalPCs: labDevices.length };
   }, [db, activeLabId]);
 
-  const usageData = useMemo(() => {
-    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    return days.map((d, i) => ({
-      day: d,
-      penggunaan: 60 + ((i * 37) % 35),
-      jadwal: 40 + ((i * 23) % 30),
-    }));
-  }, []);
+  const scheduleDistribution = useMemo(() => regularScheduleDistribution(db.schedules), [db.schedules]);
+  const hasScheduleDistribution = scheduleDistribution.some((entry) => entry.scheduleCount > 0);
 
   const assetConditionData = useMemo(() => {
     const conds = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'];
@@ -83,11 +78,14 @@ export function DashboardPage() {
       .filter((x) => x.value > 0);
   }, [chartTheme, db.assets]);
 
+  const today = new Date();
   const labStatuses = db.labs.map((lab) => {
     const devices = db.devices.filter((d) => d.laboratoryId === lab.id);
     const online = devices.filter((d) => d.status === 'Online').length;
     const problem = devices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
-    const todaySchedule = db.schedules.find((s) => s.laboratoryId === lab.id);
+    const todaySchedule = db.schedules
+      .filter((schedule) => schedule.laboratoryId === lab.id && scheduleAppliesOnDate(schedule, today))
+      .sort((left, right) => left.startTime.localeCompare(right.startTime))[0];
     const inUse = db.sessions.some((s) => s.laboratoryId === lab.id && s.status === 'Berlangsung');
     return { lab, online, problem, total: devices.length, inUse, todaySchedule };
   });
@@ -131,8 +129,8 @@ export function DashboardPage() {
         icon={<FlaskConical className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => window.location.reload()}>
-              Refresh
+            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={refresh}>
+              Muat Ulang Data
             </Button>
             {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
               Export
@@ -146,14 +144,14 @@ export function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Laboratorium Aktif" value={stats.activeLabs} icon={<FlaskConical className="h-5 w-5" />} tone="accent" delta={0} deltaLabel="vs bulan lalu" to="/laboratories" />
-        <StatCard label="PC Aktif (Lab ini)" value={`${stats.onlinePCs}/${stats.totalPCs}`} icon={<Monitor className="h-5 w-5" />} tone="success" delta={2} deltaLabel="vs minggu lalu" to="/monitoring" />
-        <StatCard label="PC Bermasalah" value={stats.problemPCs} icon={<MonitorX className="h-5 w-5" />} tone="danger" delta={-1} deltaLabel="vs minggu lalu" to="/monitoring" />
-        <StatCard label="Praktikum Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" delta={0} deltaLabel="vs kemarin" to="/schedules" />
-        <StatCard label="Tiket Kerusakan" value={stats.openIncidents} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" delta={3} deltaLabel="vs minggu lalu" to="/incidents" />
-        <StatCard label="Pemeliharaan Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" delta={-1} deltaLabel="vs minggu lalu" to="/maintenance" />
-        <StatCard label="Barang Dipinjam" value={stats.activeLoans} icon={<HandHelping className="h-5 w-5" />} tone="accent" delta={1} deltaLabel="vs minggu lalu" to="/loans" />
-        <StatCard label="Stok Hampir Habis" value={stats.lowStock} icon={<Package className="h-5 w-5" />} tone="danger" delta={2} deltaLabel="vs minggu lalu" to="/stock" />
+        <StatCard label="Laboratorium Aktif" value={stats.activeLabs} icon={<FlaskConical className="h-5 w-5" />} tone="accent" to="/laboratories" />
+        <StatCard label="PC Aktif (Lab ini)" value={`${stats.onlinePCs}/${stats.totalPCs}`} icon={<Monitor className="h-5 w-5" />} tone="success" to="/monitoring" />
+        <StatCard label="PC Bermasalah" value={stats.problemPCs} icon={<MonitorX className="h-5 w-5" />} tone="danger" to="/monitoring" />
+        <StatCard label="Praktikum Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" to="/schedules" />
+        <StatCard label="Tiket Kerusakan" value={stats.openIncidents} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" to="/incidents" />
+        <StatCard label="Pemeliharaan Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" to="/maintenance" />
+        <StatCard label="Barang Dipinjam" value={stats.activeLoans} icon={<HandHelping className="h-5 w-5" />} tone="accent" to="/loans" />
+        <StatCard label="Stok Hampir Habis" value={stats.lowStock} icon={<Package className="h-5 w-5" />} tone="danger" to="/stock" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -165,7 +163,9 @@ export function DashboardPage() {
               <Link to="/laboratories" className="text-xs text-accent-content hover:underline">Lihat semua</Link>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
-              {labStatuses.map(({ lab, online, problem, total, inUse, todaySchedule }) => (
+              {labStatuses.length === 0 ? (
+                <EmptyState title="Belum ada laboratorium" description="Status laboratorium akan tampil setelah data laboratorium tersedia." className="py-8 sm:col-span-3" />
+              ) : labStatuses.map(({ lab, online, problem, total, inUse, todaySchedule }) => (
                 <Link
                   key={lab.id}
                   to={`/laboratories/${lab.id}`}
@@ -177,9 +177,9 @@ export function DashboardPage() {
                       <p className="text-xs text-ink-muted">{lab.location}</p>
                     </div>
                     {inUse ? (
-                      <Badge tone="success" withIcon> Dipakai</Badge>
+                      <Badge tone="success" withIcon>Sedang Dipakai</Badge>
                     ) : (
-                      <Badge tone="muted">Idle</Badge>
+                      <Badge tone="muted">Tersedia</Badge>
                     )}
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs">
@@ -199,33 +199,38 @@ export function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Usage chart */}
+          {/* Persisted regular schedule distribution */}
           <Card>
             <CardHeader>
-              <CardTitle>Grafik Penggunaan Laboratorium</CardTitle>
-              <Badge tone="accent">7 hari terakhir</Badge>
+              <CardTitle>Distribusi Jadwal Reguler</CardTitle>
+              <Badge tone="accent">Senin–Jumat</Badge>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={usageData}>
-                  <defs>
-                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={chartTheme.primary} stopOpacity={0.4} />
-                      <stop offset="100%" stopColor={chartTheme.primary} stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={chartTheme.secondary} stopOpacity={0.3} />
-                      <stop offset="100%" stopColor={chartTheme.secondary} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                  <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={11} />
-                  <YAxis stroke={chartTheme.axis} fontSize={11} />
-                  <Tooltip contentStyle={chartTheme.tooltip} />
-                  <Area type="monotone" dataKey="penggunaan" stroke={chartTheme.primary} strokeWidth={2} fill="url(#g1)" name="Penggunaan (%)" />
-                  <Area type="monotone" dataKey="jadwal" stroke={chartTheme.secondary} strokeWidth={2} fill="url(#g2)" name="Jadwal (%)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              {hasScheduleDistribution ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={scheduleDistribution}>
+                    <defs>
+                      <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={chartTheme.primary} stopOpacity={0.4} />
+                        <stop offset="100%" stopColor={chartTheme.primary} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={chartTheme.secondary} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={chartTheme.secondary} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                    <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={11} />
+                    <YAxis stroke={chartTheme.axis} fontSize={11} allowDecimals={false} />
+                    <Tooltip contentStyle={chartTheme.tooltip} />
+                    <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
+                    <Area type="monotone" dataKey="scheduleCount" stroke={chartTheme.primary} strokeWidth={2} fill="url(#g1)" name="Jumlah Jadwal" />
+                    <Area type="monotone" dataKey="lessonHours" stroke={chartTheme.secondary} strokeWidth={2} fill="url(#g2)" name="Total JP" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState title="Belum ada jadwal reguler" description="Distribusi hari dan JP akan tampil setelah jadwal reguler tersimpan." className="py-8" />
+              )}
             </CardContent>
           </Card>
 
@@ -289,17 +294,21 @@ export function DashboardPage() {
               <CardTitle>Distribusi Kondisi Aset</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={assetConditionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
-                    {assetConditionData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={chartTheme.tooltip} />
-                  <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
+              {assetConditionData.length === 0 ? (
+                <EmptyState title="Belum ada data aset" className="py-8" />
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={assetConditionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
+                      {assetConditionData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={chartTheme.tooltip} />
+                    <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -322,6 +331,7 @@ export function DashboardPage() {
                   <StatusBadge status={inc.status} />
                 </Link>
               ))}
+              {db.incidents.length === 0 && <EmptyState title="Belum ada tiket kerusakan" className="py-6" />}
             </CardContent>
           </Card>
 
@@ -344,10 +354,11 @@ export function DashboardPage() {
                         <p className="truncate text-[10px] text-ink-muted">{lab?.name} · {m.nextSchedule}</p>
                       </div>
                     </div>
-                    {overdue && <Badge tone="danger">Overdue</Badge>}
+                    {overdue && <Badge tone="danger">Lewat Jatuh Tempo</Badge>}
                   </Link>
                 );
               })}
+              {upcomingMaintenance.length === 0 && <EmptyState title="Belum ada maintenance aktif" className="py-6" />}
             </CardContent>
           </Card>
 
@@ -435,6 +446,7 @@ export function DashboardPage() {
                 </div>
               </Link>
             ))}
+            {criticalNotifications.length === 0 && <EmptyState title="Tidak ada notifikasi penting" className="py-6" />}
           </CardContent>
         </Card>
       </div>
