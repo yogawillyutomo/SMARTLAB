@@ -181,11 +181,11 @@ export function AssetsPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-warning-foreground">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-accent-content sm:text-2xl">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
+        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-success-foreground sm:text-2xl">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
+        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-warning-foreground sm:text-2xl">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
+        <Card><CardContent className="min-w-0"><p className="whitespace-nowrap text-lg font-bold tracking-tight tabular-nums text-ink-primary sm:text-xl xl:text-2xl">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
       </div>
 
       <Card className="print-hidden">

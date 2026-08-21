@@ -170,8 +170,18 @@ export function LaboratoriesPage() {
         actions={canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Lab</Button>}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {db.labs.map((lab) => {
+      {db.labs.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<FlaskConical className="h-7 w-7" />}
+            title="Belum ada laboratorium"
+            description="Tambahkan laboratorium untuk mulai mengelola perangkat dan denah."
+            action={canCreate ? <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Lab</Button> : undefined}
+          />
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {db.labs.map((lab) => {
           const devices = db.devices.filter((d) => d.laboratoryId === lab.id);
           const online = devices.filter((d) => d.status === 'Online').length;
           const problem = devices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
@@ -213,7 +223,7 @@ export function LaboratoriesPage() {
                   <div className="flex items-center justify-between"><span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />Kepala Lab</span><span className="text-ink-secondary">{lab.headName}</span></div>
                   <div className="flex items-center justify-between"><span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" />Teknisi</span><span className="text-ink-secondary">{lab.technicianName}</span></div>
                   <div className="flex items-center justify-between"><span className="flex items-center gap-1.5"><Monitor className="h-3.5 w-3.5" />Kapasitas</span><span className="text-ink-secondary">{lab.capacity} orang</span></div>
-                  <div className="flex items-center justify-between"><span>Status</span>{inUse ? <Badge tone="success">Sedang Dipakai</Badge> : <Badge tone="muted">Idle</Badge>}</div>
+                  <div className="flex items-center justify-between"><span>Status</span>{inUse ? <Badge tone="success">Sedang Dipakai</Badge> : <Badge tone="muted">Tersedia</Badge>}</div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-base-700/60">
@@ -222,16 +232,25 @@ export function LaboratoriesPage() {
                   <Button variant="secondary" size="sm" icon={<Monitor className="h-3.5 w-3.5" />} onClick={() => (window.location.href = `/monitoring`)}>Monitor</Button>
                   {canUpdate && (
                     <>
-                      <Button variant="ghost" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => openEdit(lab)} />
-                      <Button variant="ghost" size="sm" icon={<Power className="h-3.5 w-3.5" />} onClick={() => toggleStatus(lab)} />
+                      <Button type="button" variant="ghost" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} aria-label={`Edit Laboratorium ${lab.name}`} title="Edit Laboratorium" onClick={() => openEdit(lab)} />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={<Power className="h-3.5 w-3.5" />}
+                        aria-label={`${lab.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} Laboratorium ${lab.name}`}
+                        title={`${lab.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} Laboratorium`}
+                        onClick={() => toggleStatus(lab)}
+                      />
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
 
       <FormDialog
         open={open}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/utils';
+import { statusDisplayLabel } from '@/lib/statusPresentation';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -133,7 +134,7 @@ export function StatusBadge({ status }: { status: string }) {
   const cfg = map[status] ?? { tone: 'neutral' as Tone, icon: <CircleDot className="h-3 w-3" /> };
   return (
     <Badge tone={cfg.tone} icon={cfg.icon}>
-      {status}
+      {statusDisplayLabel(status)}
     </Badge>
   );
 }
