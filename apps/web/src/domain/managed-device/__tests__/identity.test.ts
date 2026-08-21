@@ -15,12 +15,15 @@ function token(character: string): string {
 }
 
 function withoutManagedIdentity(device: Device) {
-  const { deviceType, lifecycleStatus, qrPublicId, assetId, ...legacy } = device;
+  if (device.technicalProfile.kind !== 'desktop_pc') throw new Error('expected desktop seed');
+  const { deviceType, lifecycleStatus, qrPublicId, assetId, technicalProfile, ...legacy } = device;
+  const { kind: _kind, ...technical } = technicalProfile;
   void deviceType;
   void lifecycleStatus;
   void qrPublicId;
   void assetId;
-  return legacy;
+  void _kind;
+  return { ...legacy, ...technical };
 }
 
 function oneDeviceFixture() {

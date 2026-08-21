@@ -29,6 +29,29 @@ export {
   canTransitionDeviceLifecycle,
   changeDeviceLifecycle,
 } from './lifecycle';
+export {
+  LEGACY_DEVICE_TECHNICAL_FIELDS,
+  getDesktopPcTechnicalProfile,
+  getDeviceOperatingSystem,
+  getDeviceTechnicalProfileDisplayRows,
+  isComputerTechnicalProfile,
+  isDeviceTechnicalProfileCompatible,
+  migrateLegacyDeviceTechnicalProfiles,
+  validateCanonicalDeviceTechnicalProfile,
+  validateDeviceTechnicalProfile,
+} from './technicalProfiles';
+export type {
+  DeviceTechnicalProfileDisplayRow,
+  DeviceTechnicalProfileIssue,
+  DeviceTechnicalProfileIssueCode,
+  LegacyTechnicalProfileMigrationIssue,
+  LegacyTechnicalProfileMigrationResult,
+} from './technicalProfiles';
+export {
+  applyDeviceOperationalStatus,
+  formatOptionalTelemetry,
+  simulateDeviceHeartbeat,
+} from './telemetry';
 export type {
   DeviceLifecycleActor,
   DeviceLifecycleTransitionResult,

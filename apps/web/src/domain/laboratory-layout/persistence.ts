@@ -360,10 +360,14 @@ export function createInitialLaboratoryDevices(
       ipAddress: `10.10.99.${number}`,
       macAddress: `02:00:99:${padded}:${String(number + 1).padStart(2, '0')}:${String(number + 2).padStart(2, '0')}`,
       serialNumber: `SN${laboratory.code}${String(number).padStart(3, '0')}2026`,
-      brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026, processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
-      gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro', status: 'Offline', cpuUsage: 0, ramUsage: 0,
+      brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026,
+      technicalProfile: {
+        kind: 'desktop_pc', processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
+        gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro',
+        peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
+      },
+      status: 'Offline', cpuUsage: 0, ramUsage: 0,
       diskUsage: 40, temperature: 45, uptimeHours: 0, network: 'Disconnected', lastHeartbeat: createdAt,
-      peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
     };
   });
 }

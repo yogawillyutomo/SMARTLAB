@@ -1,6 +1,11 @@
 import { generateMasterData, type SeedData } from '@/data/seed';
 import { migrateLegacyDeviceCoordinates, validatePersistedLaboratoryLayouts } from '@/domain/laboratory-layout';
-import { migrateLegacyManagedDevices, validateManagedDeviceInventory, type QrPublicIdFactory } from '@/domain/managed-device';
+import {
+  migrateLegacyDeviceTechnicalProfiles,
+  migrateLegacyManagedDevices,
+  validateManagedDeviceInventory,
+  type QrPublicIdFactory,
+} from '@/domain/managed-device';
 import type { Laboratory, MasterDataCategoryKey, MasterDataCollection, MasterDataItem } from '@/types';
 import { MASTER_DATA_CATEGORY_KEYS } from './masterData';
 import { CURRENT_DB_SCHEMA_VERSION } from './dbSchema';
@@ -17,6 +22,7 @@ export type DatabaseMigrationIssueCode =
   | 'legacy-layout-migration-failed'
   | 'persisted-layout-integrity-failed'
   | 'managed-device-migration-failed'
+  | 'managed-device-profile-migration-failed'
   | 'managed-device-integrity-failed';
 
 export interface DatabaseMigrationIssue {
@@ -148,11 +154,11 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
     return { ok: false, issues: [{ code: 'invalid-database', message: 'Database harus memiliki koleksi labs dan devices.' }] };
   }
   const rawVersion = value.schemaVersion;
-  const collectionValidation = collectionIssues(value, rawVersion === 2 || rawVersion === CURRENT_DB_SCHEMA_VERSION);
+  const collectionValidation = collectionIssues(value, rawVersion === 2 || rawVersion === 3 || rawVersion === CURRENT_DB_SCHEMA_VERSION);
   if (collectionValidation.length) return { ok: false, issues: collectionValidation };
   const defaults = options.defaults ?? generateMasterData();
   const masterData = normalizeMasterData(value.masterData, defaults);
-  if (rawVersion !== undefined && rawVersion !== 2 && rawVersion !== CURRENT_DB_SCHEMA_VERSION) {
+  if (rawVersion !== undefined && rawVersion !== 2 && rawVersion !== 3 && rawVersion !== CURRENT_DB_SCHEMA_VERSION) {
     return { ok: false, issues: [{ code: 'unsupported-schema-version', message: 'Versi schema database tidak didukung.' }] };
   }
 
@@ -162,6 +168,26 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
     const issues = validateDatabase(db);
     if (issues.length > 0) return { ok: false, issues };
     return { ok: true, db, changed: JSON.stringify(value) !== JSON.stringify(db), migratedFromVersion: null };
+  }
+
+  if (rawVersion === 3) {
+    if (!Array.isArray(value.layouts)) return { ok: false, issues: [{ code: 'invalid-database', message: 'Database versi 3 harus memiliki koleksi layouts.' }] };
+    const profiledDevices = migrateLegacyDeviceTechnicalProfiles(value.devices as unknown[]);
+    if (!profiledDevices.ok) {
+      return {
+        ok: false,
+        issues: profiledDevices.issues.map((issue) => ({
+          code: 'managed-device-profile-migration-failed',
+          message: issue.message,
+          deviceId: issue.deviceId,
+          validationIssueCode: issue.code,
+        })),
+      };
+    }
+    const db = baseDatabase(value, masterData, value.layouts as unknown[], profiledDevices.devices);
+    const issues = validateDatabase(db);
+    if (issues.length > 0) return { ok: false, issues };
+    return { ok: true, db, changed: true, migratedFromVersion: 3 };
   }
 
   if (rawVersion === 2) {
@@ -174,7 +200,14 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
     if (!migratedDevices.ok) {
       return { ok: false, issues: migratedDevices.issues.map((issue) => ({ code: 'managed-device-migration-failed', message: issue.message, deviceId: issue.deviceId, validationIssueCode: issue.code })) };
     }
-    const db = baseDatabase(value, masterData, value.layouts as unknown[], migratedDevices.devices);
+    const profiledDevices = migrateLegacyDeviceTechnicalProfiles(migratedDevices.devices);
+    if (!profiledDevices.ok) {
+      return {
+        ok: false,
+        issues: profiledDevices.issues.map((issue) => ({ code: 'managed-device-profile-migration-failed', message: issue.message, deviceId: issue.deviceId, validationIssueCode: issue.code })),
+      };
+    }
+    const db = baseDatabase(value, masterData, value.layouts as unknown[], profiledDevices.devices);
     const issues = validateDatabase(db);
     if (issues.length > 0) return { ok: false, issues };
     return { ok: true, db, changed: true, migratedFromVersion: 2 };
@@ -235,7 +268,14 @@ export function normalizeDatabase(value: unknown, options: DatabaseNormalization
   if (!migratedDevices.ok) {
     return { ok: false, issues: migratedDevices.issues.map((issue) => ({ code: 'managed-device-migration-failed', message: issue.message, deviceId: issue.deviceId, validationIssueCode: issue.code })) };
   }
-  const db = baseDatabase(value, masterData, layouts, migratedDevices.devices);
+  const profiledDevices = migrateLegacyDeviceTechnicalProfiles(migratedDevices.devices);
+  if (!profiledDevices.ok) {
+    return {
+      ok: false,
+      issues: profiledDevices.issues.map((issue) => ({ code: 'managed-device-profile-migration-failed', message: issue.message, deviceId: issue.deviceId, validationIssueCode: issue.code })),
+    };
+  }
+  const db = baseDatabase(value, masterData, layouts, profiledDevices.devices);
   const integrityIssues = validateDatabase(db);
   if (integrityIssues.length > 0) return { ok: false, issues: integrityIssues };
   return { ok: true, db, changed: true, migratedFromVersion: 1 };

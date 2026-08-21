@@ -4,7 +4,7 @@ import { getAssetDeviceLink, validateAssetMutation, validateManagedDeviceInvento
 import { loadDB } from '@/lib/db';
 import { CURRENT_STORAGE_VERSION } from '@/lib/dbSchema';
 import { STORAGE_KEYS } from '@/lib/storage';
-import { assetRepository } from '@/services/repositories';
+import { assetRepository, deviceRepository } from '@/services/repositories';
 
 const DB_KEY = 'smartlab_pplg_db';
 
@@ -107,6 +107,18 @@ describe('linked Asset mutation integrity', () => {
     expect(storage.writeCount()).toBe(0);
   });
 
+  it.each([
+    ['brand', 'Changed Brand', 'Brand aset tertaut tidak dapat diubah'],
+    ['model', 'Changed Model', 'Model aset tertaut tidak dapat diubah'],
+    ['serialNumber', 'Changed Serial', 'Serial number aset tertaut tidak dapat diubah'],
+  ] as const)('rejects a linked Asset %s change with no mutation or write', async (field, value, message) => {
+    const fixture = linkedFixture();
+    seedDatabase(fixture.db);
+    await expect(assetRepository.update(fixture.assetId, { [field]: value })).rejects.toThrow(message);
+    expect(persistedDatabase()).toEqual(fixture.db);
+    expect(storage.writeCount()).toBe(0);
+  });
+
   it('rejects linked Asset deletion and preserves the Asset, Device link, and audit log', async () => {
     const fixture = linkedFixture();
     seedDatabase(fixture.db);
@@ -159,5 +171,40 @@ describe('linked Asset mutation integrity', () => {
     const persisted = persistedDatabase();
     expect(persisted.auditLogs[0]).toMatchObject({ action: 'transfer', object: fixture.assetId });
     expectCanonical(persisted);
+  });
+});
+
+describe('generic Device repository identity protection', () => {
+  it('ignores technical profile, type, lifecycle, QR, link, code, serial, brand, model, and laboratory mutations', async () => {
+    const db = generateSeedData();
+    const source = structuredClone(db.devices[0]);
+    seedDatabase(db);
+    await deviceRepository.update(source.id, {
+      hostname: 'UPDATED-HOSTNAME',
+      deviceType: 'router',
+      technicalProfile: { kind: 'router' },
+      lifecycleStatus: 'retired',
+      qrPublicId: 'qr_changed0000000000000000000000000',
+      assetId: undefined,
+      assetCode: 'CHANGED',
+      serialNumber: 'CHANGED',
+      brand: 'CHANGED',
+      model: 'CHANGED',
+      laboratoryId: 'CHANGED',
+    } as never);
+    const persisted = persistedDatabase().devices.find((device) => device.id === source.id)!;
+    expect(persisted.hostname).toBe('UPDATED-HOSTNAME');
+    expect(persisted).toMatchObject({
+      deviceType: source.deviceType,
+      technicalProfile: source.technicalProfile,
+      lifecycleStatus: source.lifecycleStatus,
+      qrPublicId: source.qrPublicId,
+      assetId: source.assetId,
+      assetCode: source.assetCode,
+      serialNumber: source.serialNumber,
+      brand: source.brand,
+      model: source.model,
+      laboratoryId: source.laboratoryId,
+    });
   });
 });

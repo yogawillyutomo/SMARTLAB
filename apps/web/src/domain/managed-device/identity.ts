@@ -5,6 +5,7 @@ import type {
   ID,
   ManagedDeviceType,
 } from '@/types';
+import { validateCanonicalDeviceTechnicalProfile, type DeviceTechnicalProfileIssueCode } from './technicalProfiles';
 
 export const MANAGED_DEVICE_TYPES = [
   'desktop_pc',
@@ -40,7 +41,8 @@ export type ManagedDeviceIntegrityIssueCode =
   | 'ambiguous-device-asset'
   | 'duplicate-device-asset-link'
   | 'device-asset-code-mismatch'
-  | 'device-asset-laboratory-mismatch';
+  | 'device-asset-laboratory-mismatch'
+  | DeviceTechnicalProfileIssueCode;
 
 export interface ManagedDeviceIntegrityIssue {
   code: ManagedDeviceIntegrityIssueCode;
@@ -56,7 +58,7 @@ export type ManagedDeviceMigrationIssue = {
 };
 
 export type ManagedDeviceMigrationResult =
-  | { ok: true; devices: Device[] }
+  | { ok: true; devices: LegacyManagedDeviceWithIdentity[] }
   | { ok: false; issues: ManagedDeviceMigrationIssue[] };
 
 export type DeviceQrResolutionResult =
@@ -87,14 +89,36 @@ export type AssetMutationPolicyResult =
       | 'asset_link_invalid'
       | 'linked_asset_code_change_not_allowed'
       | 'linked_asset_laboratory_change_not_allowed'
+      | 'linked_asset_brand_change_not_allowed'
+      | 'linked_asset_model_change_not_allowed'
+      | 'linked_asset_serial_number_change_not_allowed'
       | 'linked_asset_delete_not_allowed'
       | 'linked_asset_transfer_not_allowed';
     message: string;
     link: AssetDeviceLinkStatus;
   };
 
-type LegacyManagedDevice = Omit<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId'>
+type LegacyManagedDevice = Omit<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId' | 'technicalProfile'>
+  & {
+    processor?: string;
+    ramGB?: number;
+    storageGB?: number;
+    gpu?: string;
+    monitor?: string;
+    os?: string;
+    peripherals?: {
+      monitor: boolean;
+      keyboard: boolean;
+      mouse: boolean;
+      headset: boolean;
+      network: boolean;
+      ups: boolean;
+    };
+  }
   & Partial<Pick<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId'>>;
+
+type LegacyManagedDeviceWithIdentity = LegacyManagedDevice
+  & Required<Pick<Device, 'deviceType' | 'lifecycleStatus' | 'qrPublicId'>>;
 
 export function isManagedDeviceType(value: unknown): value is ManagedDeviceType {
   return typeof value === 'string' && (MANAGED_DEVICE_TYPES as readonly string[]).includes(value);
@@ -142,7 +166,7 @@ export function migrateLegacyManagedDevices(input: {
 }): ManagedDeviceMigrationResult {
   const factory = input.generateQrPublicId ?? generateDeviceQrPublicId;
   const usedQrPublicIds = new Set<string>();
-  const migrated: Device[] = [];
+  const migrated: LegacyManagedDeviceWithIdentity[] = [];
   for (const source of input.devices) {
     const qrPublicId = generatedQrPublicId(source, usedQrPublicIds, factory);
     if (!qrPublicId) {
@@ -251,6 +275,30 @@ export function validateAssetMutation(
         link,
       };
     }
+    if (request.changes.brand !== undefined && request.changes.brand !== link.asset.brand) {
+      return {
+        ok: false,
+        reason: 'linked_asset_brand_change_not_allowed',
+        message: 'Brand aset tertaut tidak dapat diubah. Gunakan alur perangkat terkelola yang terkontrol.',
+        link,
+      };
+    }
+    if (request.changes.model !== undefined && request.changes.model !== link.asset.model) {
+      return {
+        ok: false,
+        reason: 'linked_asset_model_change_not_allowed',
+        message: 'Model aset tertaut tidak dapat diubah. Gunakan alur perangkat terkelola yang terkontrol.',
+        link,
+      };
+    }
+    if (request.changes.serialNumber !== undefined && request.changes.serialNumber !== link.asset.serialNumber) {
+      return {
+        ok: false,
+        reason: 'linked_asset_serial_number_change_not_allowed',
+        message: 'Serial number aset tertaut tidak dapat diubah. Gunakan alur perangkat terkelola yang terkontrol.',
+        link,
+      };
+    }
     return { ok: true, link };
   }
   if (request.operation === 'delete') {
@@ -282,6 +330,10 @@ export function validateManagedDeviceInventory(
     if (!isDeviceLifecycleStatus(device.lifecycleStatus)) {
       issues.push({ code: 'invalid-device-lifecycle', message: 'Status lifecycle perangkat tidak valid.', deviceId: device.id });
     }
+    const profileValidation = validateCanonicalDeviceTechnicalProfile(device);
+    profileValidation.issues.forEach((issue) => {
+      issues.push({ code: issue.code, message: issue.message, deviceId: device.id });
+    });
     if (!isValidQrPublicId(device.qrPublicId)) {
       issues.push({ code: 'invalid-qr-public-id', message: 'QR publik perangkat tidak valid.', deviceId: device.id });
     } else if (qrOwners.has(device.qrPublicId)) {

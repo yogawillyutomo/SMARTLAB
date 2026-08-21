@@ -206,16 +206,16 @@ export function AssetsPage() {
         <div className="space-y-4">
           {editingIdentityLocked && (
             <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
-              Kode dan laboratorium aset dikunci karena terhubung ke perangkat terkelola. Perubahan identitas atau lokasi harus menggunakan alur perangkat terkontrol.
+              Kode, laboratorium, brand, model, dan serial number dikunci karena terhubung ke perangkat terkelola. Perubahan identitas atau lokasi harus menggunakan alur perangkat terkontrol.
             </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Kode Aset" value={form.assetCode ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
             <Input label="Nama" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <Input label="Kategori" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-            <Input label="Brand" value={form.brand ?? ''} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-            <Input label="Model" value={form.model ?? ''} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            <Input label="Serial Number" value={form.serialNumber ?? ''} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
+            <Input label="Brand" value={form.brand ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+            <Input label="Model" value={form.model ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+            <Input label="Serial Number" value={form.serialNumber ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
             <Select label="Lab" value={form.laboratoryId} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
             <Input label="Posisi" value={form.position ?? ''} onChange={(e) => setForm({ ...form, position: e.target.value })} />
             <Select label="Kondisi" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as Asset['condition'] })} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} />

@@ -326,8 +326,8 @@ export function LaboratoryDetailPage() {
               { key: 'hostname', header: 'Hostname', sortable: true },
               { key: 'ipAddress', header: 'IP' },
               { key: 'status', header: 'Status', render: (d: Device) => <StatusBadge status={d.status} /> },
-              { key: 'cpu', header: 'CPU', render: (d: Device) => `${Math.round(d.cpuUsage)}%` },
-              { key: 'ram', header: 'RAM', render: (d: Device) => `${Math.round(d.ramUsage)}%` },
+              { key: 'cpu', header: 'CPU', render: (d: Device) => typeof d.cpuUsage === 'number' && Number.isFinite(d.cpuUsage) ? `${Math.round(d.cpuUsage)}%` : 'Tidak tersedia' },
+              { key: 'ram', header: 'RAM', render: (d: Device) => typeof d.ramUsage === 'number' && Number.isFinite(d.ramUsage) ? `${Math.round(d.ramUsage)}%` : 'Tidak tersedia' },
             ]}
             data={devices}
             rowKey={(d) => d.id}

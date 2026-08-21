@@ -1,6 +1,6 @@
 import { delay, getDB, saveDB, updateDB } from '@/lib/db';
 import { createInitialLaboratoryDevices, createLaboratoryWithInitialLayout, deleteLaboratorySafely } from '@/domain/laboratory-layout';
-import { validateAssetMutation } from '@/domain/managed-device';
+import { simulateDeviceHeartbeat, validateAssetMutation } from '@/domain/managed-device';
 import type {
   Asset,
   AuditLog,
@@ -126,7 +126,7 @@ export const laboratoryRepository: Repository<Laboratory> = {
 
 // Devices
 type DeviceRepositoryUpdate = Partial<Omit<Device,
-  'id' | 'deviceType' | 'lifecycleStatus' | 'qrPublicId' | 'assetId' | 'assetCode' | 'serialNumber' | 'laboratoryId'
+  'id' | 'deviceType' | 'technicalProfile' | 'lifecycleStatus' | 'qrPublicId' | 'assetId' | 'assetCode' | 'serialNumber' | 'brand' | 'model' | 'laboratoryId'
 >>;
 
 export const deviceRepository = {
@@ -151,23 +151,31 @@ export const deviceRepository = {
         const {
           id: _id,
           deviceType: _deviceType,
+          technicalProfile: _technicalProfile,
           lifecycleStatus: _lifecycleStatus,
           qrPublicId: _qrPublicId,
           assetId: _assetId,
           assetCode: _assetCode,
           serialNumber: _serialNumber,
+          brand: _brand,
+          model: _model,
           laboratoryId: _laboratoryId,
           ...safeInput
         } = input as Partial<Device>;
         void _id;
         void _deviceType;
+        void _technicalProfile;
         void _lifecycleStatus;
         void _qrPublicId;
         void _assetId;
         void _assetCode;
         void _serialNumber;
+        void _brand;
+        void _model;
         void _laboratoryId;
-        db.devices[idx] = { ...db.devices[idx], ...safeInput, lastHeartbeat: input.status ? new Date().toISOString() : db.devices[idx].lastHeartbeat };
+        const current = db.devices[idx];
+        db.devices[idx] = { ...current, ...safeInput };
+        if (input.status && current.lastHeartbeat !== undefined) db.devices[idx].lastHeartbeat = new Date().toISOString();
         updated = db.devices[idx];
       }
     });
@@ -178,11 +186,12 @@ export const deviceRepository = {
     updateDB((db) => {
       db.devices.forEach((d) => {
         if (labId && d.laboratoryId !== labId) return;
-        if (d.status === 'Online') {
-          d.cpuUsage = Math.min(95, Math.max(5, d.cpuUsage + (Math.random() * 20 - 10)));
-          d.ramUsage = Math.min(95, Math.max(15, d.ramUsage + (Math.random() * 15 - 7)));
-          d.lastHeartbeat = new Date().toISOString();
-        }
+        const next = simulateDeviceHeartbeat(d, {
+          at: new Date().toISOString(),
+          cpuDelta: Math.random() * 20 - 10,
+          ramDelta: Math.random() * 15 - 7,
+        });
+        Object.assign(d, next);
       });
     });
     return labId ? getDB().devices.filter((d) => d.laboratoryId === labId) : getDB().devices;

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSeedData } from '@/data/seed';
 import { loadDB } from '@/lib/db';
 import { normalizeDatabase } from '@/lib/dbMigrations';
+import { CURRENT_DB_SCHEMA_VERSION, CURRENT_STORAGE_VERSION } from '@/lib/dbSchema';
 import { STORAGE_KEYS, readStorageJSON } from '@/lib/storage';
 import {
   cloneLaboratoryLayout,
@@ -61,7 +62,11 @@ function legacyDatabase() {
   delete legacy.layouts;
   legacy.devices = current.devices.map((device) => {
     const element = layoutByDevice.get(device.id)!;
-    return { ...device, row: element.row, col: element.column };
+    if (device.technicalProfile.kind !== 'desktop_pc') throw new Error('expected desktop seed');
+    const { technicalProfile, ...common } = device;
+    const { kind: _kind, ...technical } = technicalProfile;
+    void _kind;
+    return { ...common, ...technical, row: element.row, col: element.column };
   });
   return legacy;
 }
@@ -150,11 +155,11 @@ function createGeometrySaveFixture() {
 }
 
 describe('layout persistence integration', () => {
-  it('creates deterministic version-3 seed layouts without Device coordinates', () => {
+  it('creates deterministic current-version seed layouts without Device coordinates', () => {
     const first = generateSeedData();
     const second = generateSeedData();
     expect(first).toEqual(second);
-    expect(first.schemaVersion).toBe(3);
+    expect(first.schemaVersion).toBe(CURRENT_DB_SCHEMA_VERSION);
     expect(first.layouts).toHaveLength(first.labs.length);
     expect(first.devices.every((device) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
     expect(validatePersistedLaboratoryLayouts(first).valid).toBe(true);
@@ -787,9 +792,9 @@ describe('layout persistence integration', () => {
     storage.setItem('smartlab_pplg_db', JSON.stringify(legacy));
     storage.writeCounts.clear();
     const loaded = loadDB();
-    expect(loaded.db.schemaVersion).toBe(3);
+    expect(loaded.db.schemaVersion).toBe(CURRENT_DB_SCHEMA_VERSION);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(1);
-    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe('3.0.0');
+    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe(CURRENT_STORAGE_VERSION);
     expect(JSON.parse(storage.getItem('smartlab_pplg_db')!).devices.every((device: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
 
     const invalid = legacyDatabase();
@@ -804,15 +809,15 @@ describe('layout persistence integration', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const fallback = loadDB();
     error.mockRestore();
-    expect(fallback.db.schemaVersion).toBe(3);
+    expect(fallback.db.schemaVersion).toBe(CURRENT_DB_SCHEMA_VERSION);
     expect(storage.getItem('smartlab_pplg_db')).toBe(raw);
     expect(storage.writesFor('smartlab_pplg_db')).toBe(0);
   });
 
-  it('does not rewrite a valid version-3 database or alter layout timestamps when loaded repeatedly', () => {
+  it('does not rewrite a valid current-version database or alter layout timestamps when loaded repeatedly', () => {
     const db = generateSeedData();
     storage.setItem('smartlab_pplg_db', JSON.stringify(db));
-    storage.setItem(STORAGE_KEYS.VERSION, '3.0.0');
+    storage.setItem(STORAGE_KEYS.VERSION, CURRENT_STORAGE_VERSION);
     storage.writeCounts.clear();
     const first = loadDB();
     const second = loadDB();

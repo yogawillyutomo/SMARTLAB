@@ -41,7 +41,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function withoutManagedIdentity(device: Device) {
+function legacyTechnicalDevice(device: Device) {
+  const cloned = structuredClone(device);
+  if (cloned.technicalProfile.kind !== 'desktop_pc') throw new Error('expected desktop seed');
+  const { technicalProfile, ...common } = cloned;
+  const { kind: _kind, ...technical } = technicalProfile;
+  void _kind;
+  return { ...common, ...technical };
+}
+
+function withoutManagedIdentity(device: ReturnType<typeof legacyTechnicalDevice>) {
   const { deviceType, lifecycleStatus, qrPublicId, assetId, ...legacy } = device;
   void deviceType;
   void lifecycleStatus;
@@ -50,13 +59,29 @@ function withoutManagedIdentity(device: Device) {
   return legacy;
 }
 
-function versionTwoDatabase() {
+function versionThreeDatabase() {
   const current = generateSeedData();
-  return {
-    ...structuredClone(current),
-    schemaVersion: 2,
-    devices: current.devices.map(withoutManagedIdentity),
-  };
+  return { ...structuredClone(current), schemaVersion: 3, devices: current.devices.map(legacyTechnicalDevice) };
+}
+
+function versionTwoDatabase() {
+  const versionThree = versionThreeDatabase();
+  return { ...versionThree, schemaVersion: 2, devices: versionThree.devices.map(withoutManagedIdentity) };
+}
+
+function versionOneDatabase() {
+  const versionTwo = versionTwoDatabase();
+  const placements = new Map(versionTwo.layouts.flatMap((layout) => layout.elements
+    .filter((element) => element.referenceId)
+    .map((element) => [element.referenceId!, element])));
+  const legacy = { ...versionTwo } as Record<string, unknown>;
+  delete legacy.schemaVersion;
+  delete legacy.layouts;
+  legacy.devices = versionTwo.devices.map((device) => {
+    const element = placements.get(device.id)!;
+    return { ...device, row: element.row, col: element.column };
+  });
+  return legacy;
 }
 
 function qrFactory() {
@@ -64,89 +89,145 @@ function qrFactory() {
   return () => `qr_${String(sequence += 1).padStart(32, '0')}`;
 }
 
-describe('managed Device schema migration', () => {
-  it('migrates every legacy PC identity and preserves operational, technical, placement, and unrelated data', () => {
-    const legacy = versionTwoDatabase();
-    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT, generateQrPublicId: qrFactory() });
-
-    expect(result).toMatchObject({ ok: true, changed: true, migratedFromVersion: 2 });
+describe('managed Device technical-profile schema migration', () => {
+  it('migrates a v3 desktop losslessly into a canonical v4 technicalProfile', () => {
+    const legacy = versionThreeDatabase();
+    const source = legacy.devices[0];
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT });
+    expect(result).toMatchObject({ ok: true, changed: true, migratedFromVersion: 3 });
     if (!result.ok) return;
-    expect(result.db.schemaVersion).toBe(CURRENT_DB_SCHEMA_VERSION);
-    expect(result.db.devices).toHaveLength(legacy.devices.length);
-    result.db.devices.forEach((device, index) => {
-      expect(device).toMatchObject({
-        ...legacy.devices[index],
-        deviceType: 'desktop_pc',
-        lifecycleStatus: 'in_service',
-      });
-      expect(device.qrPublicId).toMatch(/^qr_[A-Za-z0-9_-]{16,}$/);
+    const migrated = result.db.devices[0];
+    expect(result.db.schemaVersion).toBe(4);
+    expect(migrated.technicalProfile).toEqual({
+      kind: 'desktop_pc', processor: source.processor, ramGB: source.ramGB, storageGB: source.storageGB,
+      gpu: source.gpu, monitor: source.monitor, os: source.os, peripherals: source.peripherals,
     });
-    expect(new Set(result.db.devices.map((device) => device.qrPublicId))).toHaveLength(result.db.devices.length);
-    expect(result.db.layouts).toEqual(legacy.layouts);
-
-    const unrelatedKeys = Object.keys(legacy).filter((key) => !['schemaVersion', 'devices'].includes(key));
-    for (const key of unrelatedKeys) {
-      expect((result.db as unknown as Record<string, unknown>)[key]).toEqual((legacy as unknown as Record<string, unknown>)[key]);
-    }
+    expect(migrated.technicalProfile.kind === 'desktop_pc' && migrated.technicalProfile.peripherals).not.toBe(source.peripherals);
+    ['processor', 'ramGB', 'storageGB', 'gpu', 'monitor', 'os', 'peripherals'].forEach((field) => {
+      expect(Object.prototype.hasOwnProperty.call(migrated, field)).toBe(false);
+    });
   });
 
-  it('persists a version-2 migration once and preserves exact QR identities on every later read', () => {
-    storage.seed(DB_KEY, JSON.stringify(versionTwoDatabase()));
-    storage.seed(STORAGE_KEYS.VERSION, '2.0.0');
+  it('preserves identity, lifecycle, Asset link, status, telemetry, layouts, and unrelated collections', () => {
+    const legacy = versionThreeDatabase();
+    const source = legacy.devices[0];
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT });
+    if (!result.ok) throw new Error('expected successful migration');
+    expect(result.db.devices[0]).toMatchObject({
+      id: source.id, deviceType: source.deviceType, lifecycleStatus: source.lifecycleStatus,
+      qrPublicId: source.qrPublicId, assetId: source.assetId, assetCode: source.assetCode, status: source.status,
+      cpuUsage: source.cpuUsage, ramUsage: source.ramUsage, diskUsage: source.diskUsage,
+      temperature: source.temperature, uptimeHours: source.uptimeHours, network: source.network,
+      lastHeartbeat: source.lastHeartbeat,
+    });
+    expect(result.db.layouts).toEqual(legacy.layouts);
+    Object.keys(legacy).filter((key) => !['schemaVersion', 'devices'].includes(key)).forEach((key) => {
+      expect((result.db as unknown as Record<string, unknown>)[key]).toEqual((legacy as unknown as Record<string, unknown>)[key]);
+    });
+  });
 
+  it('persists v3 once and does not rerun migration or regenerate QR on the second read', () => {
+    const legacy = versionThreeDatabase();
+    storage.seed(DB_KEY, JSON.stringify(legacy));
+    storage.seed(STORAGE_KEYS.VERSION, '3.0.0');
     const first = loadDB();
     expect(first).toMatchObject({ ok: true, mode: 'persisted', migrated: true });
     if (!first.ok) return;
-    const firstQrPublicIds = first.db.devices.map((device) => device.qrPublicId);
+    expect(first.db.devices.map((device) => device.qrPublicId)).toEqual(legacy.devices.map((device) => device.qrPublicId));
     expect(storage.writesFor(DB_KEY)).toBe(1);
-    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe(CURRENT_STORAGE_VERSION);
-
-    const persistedAfterMigration = storage.getItem(DB_KEY);
-    const second = loadDB();
-    expect(second).toMatchObject({ ok: true, mode: 'persisted', migrated: false });
-    if (!second.ok) return;
-    expect(second.db.devices.map((device) => device.qrPublicId)).toEqual(firstQrPublicIds);
-    expect(storage.getItem(DB_KEY)).toBe(persistedAfterMigration);
+    expect(storage.getItem(STORAGE_KEYS.VERSION)).toBe('4.0.0');
+    const persisted = storage.getItem(DB_KEY);
+    expect(loadDB()).toMatchObject({ ok: true, mode: 'persisted', migrated: false });
+    expect(storage.getItem(DB_KEY)).toBe(persisted);
     expect(storage.writesFor(DB_KEY)).toBe(1);
   });
 
-  it('round-trips a current canonical database without changing QR identity', () => {
+  it('round-trips canonical v4 profiles without rewriting storage', () => {
     const db = generateSeedData();
     storage.seed(DB_KEY, JSON.stringify(db));
     storage.seed(STORAGE_KEYS.VERSION, CURRENT_STORAGE_VERSION);
-
     const loaded = loadDB();
     expect(loaded).toMatchObject({ ok: true, mode: 'persisted', migrated: false });
     if (!loaded.ok) return;
-    expect(loaded.db.devices.map((device) => device.qrPublicId)).toEqual(db.devices.map((device) => device.qrPublicId));
+    expect(loaded.db.devices.map((device) => device.technicalProfile)).toEqual(db.devices.map((device) => device.technicalProfile));
     expect(storage.writesFor(DB_KEY)).toBe(0);
   });
 
-  it('fails QR migration atomically without mutating or returning a partial database', () => {
-    const legacy = versionTwoDatabase();
-    const before = JSON.stringify(legacy);
-    const result = normalizeDatabase(legacy, {
-      migratedAt: MIGRATED_AT,
-      generateQrPublicId: () => 'qr_samepublicidentifier000000000000',
-    });
+  it('preserves malformed v4 profile source bytes in recovery', () => {
+    const db = generateSeedData();
+    (db.devices[0] as unknown as Record<string, unknown>).technicalProfile = { kind: 'desktop_pc', ramGB: -1 };
+    const raw = JSON.stringify(db);
+    storage.seed(DB_KEY, raw);
+    storage.seed(STORAGE_KEYS.VERSION, CURRENT_STORAGE_VERSION);
+    expect(loadDB()).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(storage.getItem(DB_KEY)).toBe(raw);
+    expect(storage.writesFor(DB_KEY)).toBe(0);
+  });
 
-    expect(result).toMatchObject({
-      ok: false,
-      issues: [expect.objectContaining({ code: 'managed-device-migration-failed', validationIssueCode: 'qr-generation-failed' })],
-    });
+  it('fails closed and atomically for an unexpected non-desktop v3 Device', () => {
+    const legacy = versionThreeDatabase();
+    legacy.devices[1].deviceType = 'router';
+    const before = JSON.stringify(legacy);
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT });
+    expect(result).toMatchObject({ ok: false, issues: [expect.objectContaining({
+      code: 'managed-device-profile-migration-failed', validationIssueCode: 'unsupported-v3-device-profile-migration', deviceId: legacy.devices[1].id,
+    })] });
     expect(JSON.stringify(legacy)).toBe(before);
     expect('db' in result).toBe(false);
   });
 
-  it('preserves malformed version-2 source bytes and enters the existing recovery mode', () => {
+  it('keeps unexpected non-desktop v3 raw storage protected', () => {
+    const legacy = versionThreeDatabase();
+    legacy.devices[0].deviceType = 'network_switch';
+    const raw = JSON.stringify(legacy);
+    storage.seed(DB_KEY, raw);
+    storage.seed(STORAGE_KEYS.VERSION, '3.0.0');
+    expect(loadDB()).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(storage.getItem(DB_KEY)).toBe(raw);
+    expect(storage.writesFor(DB_KEY)).toBe(0);
+  });
+
+  it('migrates v2 through identity and profile directly to canonical v4', () => {
+    const legacy = versionTwoDatabase();
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT, generateQrPublicId: qrFactory() });
+    expect(result).toMatchObject({ ok: true, changed: true, migratedFromVersion: 2 });
+    if (!result.ok) return;
+    expect(result.db.schemaVersion).toBe(CURRENT_DB_SCHEMA_VERSION);
+    result.db.devices.forEach((device, index) => {
+      expect(device).toMatchObject({ id: legacy.devices[index].id, deviceType: 'desktop_pc', lifecycleStatus: 'in_service', technicalProfile: {
+        kind: 'desktop_pc', processor: legacy.devices[index].processor, peripherals: legacy.devices[index].peripherals,
+      } });
+      expect(device.qrPublicId).toMatch(/^qr_[A-Za-z0-9_-]{16,}$/);
+    });
+    expect(result.db.layouts).toEqual(legacy.layouts);
+  });
+
+  it('migrates v1 layout, identity, and profile in one canonical result', () => {
+    const result = normalizeDatabase(versionOneDatabase(), { migratedAt: MIGRATED_AT, generateQrPublicId: qrFactory() });
+    expect(result).toMatchObject({ ok: true, changed: true, migratedFromVersion: 1 });
+    if (!result.ok) return;
+    expect(result.db.schemaVersion).toBe(4);
+    expect(result.db.layouts.length).toBeGreaterThan(0);
+    expect(result.db.devices.every((device) => device.technicalProfile.kind === 'desktop_pc')).toBe(true);
+    expect(result.db.devices.every((device) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
+  });
+
+  it('fails v2 QR migration atomically without returning a partial profile database', () => {
+    const legacy = versionTwoDatabase();
+    const before = JSON.stringify(legacy);
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT, generateQrPublicId: () => 'qr_samepublicidentifier000000000000' });
+    expect(result).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: 'managed-device-migration-failed', validationIssueCode: 'qr-generation-failed' })] });
+    expect(JSON.stringify(legacy)).toBe(before);
+    expect('db' in result).toBe(false);
+  });
+
+  it('preserves malformed v2 source bytes and enters recovery', () => {
     const malformed = versionTwoDatabase() as unknown as Record<string, unknown>;
     delete malformed.devices;
     const raw = JSON.stringify(malformed);
     storage.seed(DB_KEY, raw);
     storage.seed(STORAGE_KEYS.VERSION, '2.0.0');
-
-    const loaded = loadDB();
-    expect(loaded).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(loadDB()).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
     expect(storage.getItem(DB_KEY)).toBe(raw);
     expect(storage.writesFor(DB_KEY)).toBe(0);
   });

@@ -1,4 +1,4 @@
-# Managed Device Inventory Foundation (Stage 4D.1A)
+# Managed Device Inventory Foundation (Stages 4D.1A–4D.1B)
 
 ## Domain ownership
 
@@ -7,6 +7,8 @@ SmartLab keeps three separate responsibilities:
 - `Asset` is the administrative inventory record: acquisition, funding, supplier, warranty, condition, and inventory status.
 - `Device` is the stable physical managed-hardware identity and operational record.
 - `LayoutElement` is the physical placement and geometry. Its optional `referenceId` binds a position to a `Device`.
+
+Stage 4D.1B adds a fourth explicitly separate responsibility: `Device.technicalProfile` stores hardware-type-specific specifications, while optional root Device telemetry stores runtime observations. `Asset` remains the procurement/administrative record and does not own the technical profile.
 
 `Device.deviceType` describes hardware (`desktop_pc`, `laptop`, `server`, network equipment, printer, projector, UPS, or other). It is independent from the layout role. A desktop Device can be referenced by a `student_pc` element and later by a `teacher_pc` element without changing Device identity or hardware type.
 
@@ -34,6 +36,35 @@ Migration never fabricates an Asset or invents procurement data. Link status is 
 
 Ordinary Asset mutations are link-aware. A linked Asset may retain administrative edits that preserve the relationship, but its `assetCode` and `laboratoryId` cannot change independently. Linked Asset deletion and Asset-only transfer are rejected before persistence or audit. Unlinked Assets retain their existing edit, delete, and transfer behavior. A future controlled Device transfer must coordinate Device, Asset, placement, and history atomically; Stage 4D.1A does not simulate that workflow.
 
+Stage 4D.1B also locks `brand`, `model`, and `serialNumber` during ordinary edits of a linked Asset. Those fields remain on both legacy/admin Asset presentation and Device technical identity, but canonical validation deliberately does not require historical values to be equal. This prevents new drift without forcing valid legacy databases into recovery. A future controlled Device workflow must coordinate technical-identity changes.
+
+## Type-specific technical profiles
+
+`DeviceTechnicalProfile` is a `kind`-discriminated union. Its discriminator must exactly equal `Device.deviceType`:
+
+| Device type / profile kind | Optional specification scope |
+| --- | --- |
+| `desktop_pc` | processor, RAM, storage, GPU, monitor, OS, desktop peripherals |
+| `laptop` | processor, RAM, storage, GPU, OS, display, battery health |
+| `server` | processor, sockets, cores, RAM, storage, RAID, OS |
+| `network_switch` | ports, managed/PoE capability, PoE budget, switching/uplink capacity, firmware |
+| `router` | WAN/LAN ports, throughput, Wi-Fi capability, firmware |
+| `access_point` | Wi-Fi standard and bands, client capacity, PoE, firmware |
+| `printer` | print technology, color, duplex, network capability, paper size |
+| `projector` | technology, brightness, native resolution, lamp hours |
+| `ups` | VA/watt capacity, battery details, runtime |
+| `other` | conservative scalar key/value specifications |
+
+Specification fields are optional because incomplete inventory information is valid. Validation rejects an absent profile, unknown or mismatched kind, invalid primitive values, non-finite or negative capacities/counts, battery health outside 0–100, unsupported access-point bands, unsupported printer technology, and non-scalar `other` values. Canonical schema-version-4 Devices also reject legacy root `processor`, `ramGB`, `storageGB`, `gpu`, `monitor`, `os`, and `peripherals` fields so there is no second specification source.
+
+The generic Device repository treats the profile, hardware type, lifecycle, QR, Asset relationship, code, serial, brand, model, and laboratory as protected identity. Stage 4D.1B does not expose a technical-profile editing UI.
+
+## Optional operational telemetry
+
+`cpuUsage`, `ramUsage`, `diskUsage`, `temperature`, `uptimeHours`, `network`, and `lastHeartbeat` remain root operational telemetry and are optional. They are not technical specifications. Monitoring display helpers render missing measurements as unavailable, and heartbeat/status simulation mutates only telemetry fields already present. A router, printer, unmanaged switch, projector, or UPS is never assigned fabricated PC metrics.
+
+The current desktop seed retains all existing telemetry and PC-card behavior. Monitoring specifications and peripherals are read through centralized technical-profile accessors; non-desktop profiles can be represented without fake desktop fields even though non-PC creation and generic monitoring-card design remain future work.
+
 ## Lifecycle policy and audit
 
 Lifecycle states are `in_service`, `spare`, `retired`, and terminal `decommissioned`. Transfer is a future location-history event, not a lifecycle state.
@@ -54,6 +85,17 @@ The candidate database is validated before any write. QR generation exhaustion o
 
 Canonical validation checks managed hardware type, lifecycle state, QR format and global uniqueness, linked Asset existence and one-to-one ownership, and linked code/laboratory agreement. Legacy Devices may remain intentionally unlinked. This stage does not add global serial-number or Asset-code uniqueness rules.
 
+Stage 4D.1B advances AppDB schema 3 to 4 and external storage `3.0.0` to `4.0.0`. Every official v3 Device is a desktop PC. Migration moves its seven root PC specification areas into a deeply independent `desktop_pc` profile, removes those root fields, and preserves Device identity, QR, lifecycle, Asset link/code, operational status, telemetry, timestamps, layout references, and unrelated collections. Existing QR values are never regenerated and Assets are never relinked.
+
+Older imports still reach the final schema in one in-memory normalization and one atomic canonical write:
+
+- v1: migrate coordinates to layouts, add managed identity, then create desktop profiles;
+- v2: add managed identity, then create desktop profiles;
+- v3: create desktop profiles only;
+- v4: validate canonical data without rerunning migration.
+
+An unexpected non-desktop v3 Device fails with `unsupported-v3-device-profile-migration`; SmartLab does not guess specifications or coerce its type. The existing recovery path keeps the original raw storage bytes and prevents partial writes. Malformed canonical profiles use the same raw-preserving recovery semantics.
+
 ## Stage boundary
 
-Stage 4D.1A adds domain identity, lifecycle, QR resolution, migration, validation, tests, and documentation only. It does not add non-PC creation UI, type-specific technical profiles, hard deletion, replacement, transfer, detach/place operations, layout binding changes, QR routes/images/scanning/printing, backend contracts, or monitoring redesign. Device coordinates remain absent; LaboratoryLayout remains the only persisted coordinate source.
+Stages 4D.1A–4D.1B provide managed identity, lifecycle, QR resolution, type-specific technical profiles, safe legacy migration, validation, monitoring compatibility, tests, and documentation. They do not add non-PC creation UI, hard deletion, replacement, transfer, detach/place operations, layout binding changes, QR routes/images/scanning/printing, backend contracts, or a monitoring subsystem redesign. Device coordinates remain absent; LaboratoryLayout remains the only persisted coordinate source.
