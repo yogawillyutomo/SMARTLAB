@@ -2,21 +2,137 @@ openapi: 3.1.0
 info:
   title: SmartLab API
   version: 0.1.0
-  description: Initial contract scaffold. Endpoints will be added domain by domain.
+  description: Contract for implemented SmartLab API v1 foundation endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
-paths: {}
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Read the public SmartLab API health status
+      responses:
+        '200':
+          description: Safe API health response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /me:
+    get:
+      operationId: getCurrentUser
+      summary: Read the authenticated user's current school membership context
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Current user and exactly one active school membership context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Authentication is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: No active membership exists, or school context selection is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
+  securitySchemes:
+    sanctumSession:
+      type: apiKey
+      in: cookie
+      name: smartlab-api-session
+      description: Browser-managed Laravel session cookie for the first-party stateful SPA. This is the local default derived from APP_NAME; deployments may configure SESSION_COOKIE, so the cookie name is not a stable production contract.
+    sanctumBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: Sanctum personal access token for mobile or API token clients.
   schemas:
+    HealthResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, service]
+          properties:
+            status:
+              type: string
+              const: ok
+            service:
+              type: string
+              const: smartlab-api
+    CurrentUserResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CurrentUser'
+    CurrentUser:
+      type: object
+      required: [id, name, email, school, membership, permissions]
+      properties:
+        id:
+          type: string
+          format: ulid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        school:
+          $ref: '#/components/schemas/SchoolContext'
+        membership:
+          $ref: '#/components/schemas/MembershipContext'
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z-]+\.[a-z]+$'
+    SchoolContext:
+      type: object
+      required: [id, code, name]
+      properties:
+        id:
+          type: string
+          format: ulid
+        code:
+          type: string
+        name:
+          type: string
+    MembershipContext:
+      type: object
+      required: [id, status, roles]
+      properties:
+        id:
+          type: string
+          format: ulid
+        status:
+          type: string
+          enum: [active]
+        roles:
+          type: array
+          items:
+            type: string
     ApiError:
       type: object
-      required: [message]
+      required: [message, code]
       properties:
         message:
           type: string
         code:
           type: string
+          enum: [UNAUTHENTICATED, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED]
         errors:
           type: object
           additionalProperties: true
