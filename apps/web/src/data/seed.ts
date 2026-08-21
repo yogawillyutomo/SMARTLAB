@@ -43,6 +43,14 @@ function randInt(min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
+function createSeedQrPublicIdFactory(): () => string {
+  const qrRandom = seeded(20260819);
+  return () => {
+    const token = Array.from({ length: 32 }, () => Math.floor(qrRandom() * 16).toString(16)).join('');
+    return `qr_${token}`;
+  };
+}
+
 export const LABS: Laboratory[] = [
   {
     id: 'lab-rpl-1',
@@ -100,6 +108,7 @@ interface SeedDeviceWithLegacyCoordinate extends Device {
 
 function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
   const devices: SeedDeviceWithLegacyCoordinate[] = [];
+  const nextQrPublicId = createSeedQrPublicIdFactory();
   LABS.forEach((lab, labIdx) => {
     for (let i = 0; i < lab.pcCount; i++) {
       const n = i + 1;
@@ -131,6 +140,10 @@ function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
 
       devices.push({
         id: `dev-${code}-${pad(n)}`,
+        deviceType: 'desktop_pc',
+        lifecycleStatus: 'in_service',
+        qrPublicId: nextQrPublicId(),
+        assetId: `ast-dev-${code}-${pad(n)}`,
         positionCode,
         hostname: `PC-${code}-${pad(n)}`,
         laboratoryId: lab.id,
@@ -141,12 +154,23 @@ function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
         brand,
         model,
         yearAcquired: 2024,
-        processor: pick(['Intel Core i5-11400', 'Intel Core i7-11700', 'AMD Ryzen 5 5600']),
-        ramGB: pick([8, 16, 16]),
-        storageGB: pick([256, 512, 512]),
-        gpu: 'Intel UHD Graphics 730',
-        monitor: 'Dell 24" P2422H',
-        os: OS_LIST[(labIdx + n) % OS_LIST.length],
+        technicalProfile: {
+          kind: 'desktop_pc',
+          processor: pick(['Intel Core i5-11400', 'Intel Core i7-11700', 'AMD Ryzen 5 5600']),
+          ramGB: pick([8, 16, 16]),
+          storageGB: pick([256, 512, 512]),
+          gpu: 'Intel UHD Graphics 730',
+          monitor: 'Dell 24" P2422H',
+          os: OS_LIST[(labIdx + n) % OS_LIST.length],
+          peripherals: {
+            monitor: n !== 23 && n !== 3,
+            keyboard: n !== 23,
+            mouse: n !== 5,
+            headset: n % 6 === 0,
+            network: status !== 'Offline',
+            ups: n % 12 === 0,
+          },
+        },
         status,
         cpuUsage: status === 'Online' ? randInt(8, 65) : status === 'Warning' ? randInt(70, 89) : 0,
         ramUsage: status === 'Online' ? randInt(20, 55) : status === 'Warning' ? randInt(75, 92) : 0,
@@ -155,14 +179,6 @@ function generateDevices(): SeedDeviceWithLegacyCoordinate[] {
         uptimeHours: status === 'Online' ? randInt(1, 120) : 0,
         network: status === 'Offline' ? 'Disconnected' : status === 'Warning' ? 'Limited' : 'Connected',
         lastHeartbeat: status === 'Offline' ? '2026-07-24T08:15:00Z' : '2026-07-25T07:30:00Z',
-        peripherals: {
-          monitor: n !== 23 && n !== 3,
-          keyboard: n !== 23,
-          mouse: n !== 5,
-          headset: n % 6 === 0,
-          network: status !== 'Offline',
-          ups: n % 12 === 0,
-        },
         col,
         row,
       });

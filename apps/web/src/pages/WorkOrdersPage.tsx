@@ -14,6 +14,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, formatCurrency, relativeTime, cn } from '@/utils';
+import { applyDeviceOperationalStatus } from '@/domain/managed-device';
 import type { WorkOrder, WorkOrderStatus, Priority, WorkOrderSparePart } from '@/types';
 
 const STATUSES: WorkOrderStatus[] = ['Draft', 'Assigned', 'In Progress', 'On Hold', 'Waiting Part', 'Completed', 'Verified', 'Cancelled'];
@@ -96,7 +97,7 @@ export function WorkOrdersPage() {
           const aIdx = d.assets.findIndex((a) => a.assetCode === updated.assetCode);
           if (aIdx >= 0) { d.assets[aIdx].condition = 'Baik'; d.assets[aIdx].status = 'Aktif'; }
           const dvIdx = d.devices.findIndex((dv) => dv.assetCode === updated.assetCode);
-          if (dvIdx >= 0) { d.devices[dvIdx].status = 'Online'; d.devices[dvIdx].lastHeartbeat = new Date().toISOString(); }
+          if (dvIdx >= 0) d.devices[dvIdx] = applyDeviceOperationalStatus(d.devices[dvIdx], 'Online', new Date().toISOString());
         }
         changed = true;
       }

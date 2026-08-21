@@ -22,7 +22,18 @@ function physicalFixture() {
   const lab = db.labs[0];
   const original = db.devices.find((device) => device.laboratoryId === lab.id)!;
   const baseDevices = db.devices.filter((device) => device.laboratoryId === lab.id).slice(0, 36);
-  const teacher: Device = { ...original, id: `${original.id}-37`, positionCode: 'PC-37', hostname: 'PC-RPL1-37', assetCode: 'AST-RPL1-037', ipAddress: '10.10.99.37', macAddress: '02:00:99:37:38:39', serialNumber: 'SNRPL10372026' };
+  const teacher: Device = {
+    ...original,
+    id: `${original.id}-37`,
+    qrPublicId: 'qr_physicalteacherdevice000000000001',
+    assetId: undefined,
+    positionCode: 'PC-37',
+    hostname: 'PC-RPL1-37',
+    assetCode: 'AST-RPL1-037',
+    ipAddress: '10.10.99.37',
+    macAddress: '02:00:99:37:38:39',
+    serialNumber: 'SNRPL10372026',
+  };
   db.devices = [...db.devices.filter((device) => device.laboratoryId !== lab.id), ...baseDevices, teacher];
   db.labs[0] = { ...lab, pcCount: 37, layoutRows: 7, layoutCols: 6 };
   const devices = db.devices.filter((device) => device.laboratoryId === lab.id);

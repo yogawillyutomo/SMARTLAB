@@ -16,6 +16,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, formatCurrency } from '@/utils';
+import { getAssetDeviceLink, validateAssetMutation } from '@/domain/managed-device';
 import type { Asset } from '@/types';
 
 export function AssetsPage() {
@@ -46,6 +47,8 @@ export function AssetsPage() {
 
   const categories = [...new Set(db.assets.map((a) => a.category))];
   const totalValue = db.assets.reduce((sum, a) => sum + a.price, 0);
+  const editingLink = editing ? getAssetDeviceLink(db, editing.id) : null;
+  const editingIdentityLocked = Boolean(editingLink && editingLink.status !== 'unlinked');
 
   function openCreate() {
     if (!canCreate) return;
@@ -63,7 +66,11 @@ export function AssetsPage() {
   function save() {
     if (editing ? !canUpdate : !canCreate) return;
     if (!form.name || !form.assetCode) { toast('Nama dan kode aset wajib diisi', 'error'); return; }
-    mutate((d) => {
+    if (editing) {
+      const policy = validateAssetMutation(db, { operation: 'update', assetId: editing.id, changes: form });
+      if (!policy.ok) { toast(policy.message, 'error'); return; }
+    }
+    const result = mutate((d) => {
       if (editing) {
         const idx = d.assets.findIndex((a) => a.id === editing.id);
         if (idx >= 0) d.assets[idx] = { ...d.assets[idx], ...form } as Asset;
@@ -71,13 +78,17 @@ export function AssetsPage() {
         d.assets.push({ ...form, id: `ast-${Date.now()}` } as Asset);
       }
     });
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast(editing ? 'Aset diperbarui' : 'Aset ditambahkan', 'success');
     setOpen(false);
   }
 
   function remove() {
     if (!confirmDel || !canDelete) return;
-    mutate((d) => { d.assets = d.assets.filter((a) => a.id !== confirmDel.id); });
+    const policy = validateAssetMutation(db, { operation: 'delete', assetId: confirmDel.id });
+    if (!policy.ok) { toast(policy.message, 'error'); return; }
+    const result = mutate((d) => { d.assets = d.assets.filter((a) => a.id !== confirmDel.id); });
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast('Aset dihapus', 'success');
     setConfirmDel(null);
   }
@@ -85,7 +96,9 @@ export function AssetsPage() {
   function doTransfer() {
     if (!canUpdate) return;
     if (!transferOpen || !transferForm.toLabId) { toast('Pilih lokasi tujuan', 'error'); return; }
-    mutate((d) => {
+    const policy = validateAssetMutation(db, { operation: 'transfer', assetId: transferOpen.id, toLaboratoryId: transferForm.toLabId });
+    if (!policy.ok) { toast(policy.message, 'error'); return; }
+    const result = mutate((d) => {
       const idx = d.assets.findIndex((a) => a.id === transferOpen.id);
       if (idx >= 0) {
         d.assets[idx].laboratoryId = transferForm.toLabId;
@@ -96,8 +109,24 @@ export function AssetsPage() {
         });
       }
     });
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast('Mutasi aset berhasil', 'success');
     setTransferOpen(null);
+    setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' });
+  }
+
+  function requestDelete(asset: Asset) {
+    if (!canDelete) return;
+    const policy = validateAssetMutation(db, { operation: 'delete', assetId: asset.id });
+    if (!policy.ok) { toast(policy.message, 'error'); return; }
+    setConfirmDel(asset);
+  }
+
+  function openTransfer(asset: Asset) {
+    if (!canUpdate) return;
+    const policy = validateAssetMutation(db, { operation: 'transfer', assetId: asset.id, toLaboratoryId: asset.laboratoryId });
+    if (!policy.ok) { toast(policy.message, 'error'); return; }
+    setTransferOpen(asset);
     setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' });
   }
 
@@ -130,8 +159,8 @@ export function AssetsPage() {
       <div className="flex gap-1">
         <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
         {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canUpdate && <button onClick={() => { setTransferOpen(a); setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' }); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
-        {canDelete && <button onClick={() => setConfirmDel(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
+        {canUpdate && <button onClick={() => openTransfer(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
+        {canDelete && <button onClick={() => requestDelete(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
       </div>
     ) },
   ];
@@ -174,24 +203,31 @@ export function AssetsPage() {
       </Card>
 
       <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Aset' : 'Tambah Aset'} onSubmit={save} size="lg">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Kode Aset" value={form.assetCode ?? ''} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
-          <Input label="Nama" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input label="Kategori" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-          <Input label="Brand" value={form.brand ?? ''} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-          <Input label="Model" value={form.model ?? ''} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-          <Input label="Serial Number" value={form.serialNumber ?? ''} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
-          <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-          <Input label="Posisi" value={form.position ?? ''} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-          <Select label="Kondisi" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as Asset['condition'] })} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} />
-          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Asset['status'] })} options={['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'].map((s) => ({ value: s, label: s }))} />
-          <Input label="Tahun Perolehan" type="number" value={form.yearAcquired ?? 2026} onChange={(e) => setForm({ ...form, yearAcquired: Number(e.target.value) })} />
-          <Input label="Harga" type="number" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
-          <Input label="Tanggal Pembelian" type="date" value={form.purchaseDate ?? ''} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
-          <Input label="Garansi Sampai" type="date" value={form.warrantyUntil ?? ''} onChange={(e) => setForm({ ...form, warrantyUntil: e.target.value })} />
-          <Input label="Supplier" value={form.supplier ?? ''} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-          <Input label="Sumber Dana" value={form.fundingSource ?? ''} onChange={(e) => setForm({ ...form, fundingSource: e.target.value })} />
-          <div className="sm:col-span-2"><Textarea label="Catatan" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+        <div className="space-y-4">
+          {editingIdentityLocked && (
+            <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
+              Kode, laboratorium, brand, model, dan serial number dikunci karena terhubung ke perangkat terkelola. Perubahan identitas atau lokasi harus menggunakan alur perangkat terkontrol.
+            </p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Kode Aset" value={form.assetCode ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
+            <Input label="Nama" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input label="Kategori" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+            <Input label="Brand" value={form.brand ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+            <Input label="Model" value={form.model ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+            <Input label="Serial Number" value={form.serialNumber ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
+            <Select label="Lab" value={form.laboratoryId} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
+            <Input label="Posisi" value={form.position ?? ''} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+            <Select label="Kondisi" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as Asset['condition'] })} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} />
+            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Asset['status'] })} options={['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'].map((s) => ({ value: s, label: s }))} />
+            <Input label="Tahun Perolehan" type="number" value={form.yearAcquired ?? 2026} onChange={(e) => setForm({ ...form, yearAcquired: Number(e.target.value) })} />
+            <Input label="Harga" type="number" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+            <Input label="Tanggal Pembelian" type="date" value={form.purchaseDate ?? ''} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
+            <Input label="Garansi Sampai" type="date" value={form.warrantyUntil ?? ''} onChange={(e) => setForm({ ...form, warrantyUntil: e.target.value })} />
+            <Input label="Supplier" value={form.supplier ?? ''} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+            <Input label="Sumber Dana" value={form.fundingSource ?? ''} onChange={(e) => setForm({ ...form, fundingSource: e.target.value })} />
+            <div className="sm:col-span-2"><Textarea label="Catatan" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+          </div>
         </div>
       </FormDialog>
 

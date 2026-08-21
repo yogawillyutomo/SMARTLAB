@@ -1,6 +1,7 @@
 import { Monitor, MonitorCheck, MonitorX, AlertTriangle, Wrench, Lock, Cpu, MemoryStick, Wifi, WifiOff } from 'lucide-react';
 import type { Device, DeviceStatus } from '@/types';
 import { cn, relativeTime } from '@/utils';
+import { formatOptionalTelemetry } from '@/domain/managed-device';
 
 interface PCIconCardProps {
   device: Device;
@@ -32,6 +33,8 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
   const Icon = cfg.icon;
   const isOnline = device.status === 'Online';
   const isProblem = device.status === 'Critical' || device.status === 'Warning' || device.status === 'Offline';
+  const hasCpu = typeof device.cpuUsage === 'number' && Number.isFinite(device.cpuUsage);
+  const hasRam = typeof device.ramUsage === 'number' && Number.isFinite(device.ramUsage);
 
   return (
     <button
@@ -61,18 +64,18 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
         {!compact && <p className="text-[10px] text-ink-muted truncate">{device.hostname}</p>}
       </div>
 
-      {!compact && isOnline && (
+      {!compact && isOnline && (hasCpu || hasRam) && (
         <div className="mt-1 flex w-full items-center justify-between gap-1 text-[10px] text-ink-muted">
-          <span className="inline-flex items-center gap-0.5" title="CPU">
-            <Cpu className="h-2.5 w-2.5" /> {Math.round(device.cpuUsage)}%
-          </span>
-          <span className="inline-flex items-center gap-0.5" title="RAM">
-            <MemoryStick className="h-2.5 w-2.5" /> {Math.round(device.ramUsage)}%
-          </span>
+          {hasCpu && <span className="inline-flex items-center gap-0.5" title="CPU">
+            <Cpu className="h-2.5 w-2.5" /> {formatOptionalTelemetry(device.cpuUsage, '%')}
+          </span>}
+          {hasRam && <span className="inline-flex items-center gap-0.5" title="RAM">
+            <MemoryStick className="h-2.5 w-2.5" /> {formatOptionalTelemetry(device.ramUsage, '%')}
+          </span>}
         </div>
       )}
 
-      {!compact && (
+      {!compact && (device.network !== undefined || device.lastHeartbeat !== undefined) && (
         <div className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-muted">
           {device.network === 'Connected' ? (
             <Wifi className="h-2.5 w-2.5 text-success" />
@@ -81,7 +84,7 @@ export function PCIconCard({ device, onClick, selected, compact }: PCIconCardPro
           ) : (
             <WifiOff className="h-2.5 w-2.5 text-ink-muted" />
           )}
-          <span>{relativeTime(device.lastHeartbeat)}</span>
+          <span>{device.lastHeartbeat ? relativeTime(device.lastHeartbeat) : 'Tidak tersedia'}</span>
         </div>
       )}
     </button>

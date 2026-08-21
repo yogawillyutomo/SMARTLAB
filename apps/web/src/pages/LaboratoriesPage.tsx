@@ -44,6 +44,7 @@ import {
   CUSTOM_LAYOUT_MIN_COLUMNS,
   CUSTOM_LAYOUT_MIN_ROWS,
   createLaboratoryWithInitialLayout,
+  createInitialLaboratoryDevices,
   canEditLayoutStructure,
   deleteLaboratorySafely,
   getActiveLaboratoryLayout,
@@ -109,28 +110,13 @@ export function LaboratoriesPage() {
       const cols = form.layoutCols ?? 6;
       const count = form.pcCount ?? 0;
       const laboratory = { ...form, id, layoutRows: rows, layoutCols: cols, pcCount: count } as Laboratory;
-      const devices: Device[] = Array.from({ length: count }, (_, index) => {
-        const n = index + 1;
-        return {
-          id: `dev-${form.code}-${String(n).padStart(2, '0')}`,
-          positionCode: `PC-${String(n).padStart(2, '0')}`,
-          hostname: `PC-${form.code}-${String(n).padStart(2, '0')}`,
-          laboratoryId: id,
-          assetCode: `AST-${form.code}-${String(n).padStart(3, '0')}`,
-          ipAddress: `10.10.99.${n}`,
-          macAddress: `02:00:99:${String(n).padStart(2, '0')}:${String(n + 1).padStart(2, '0')}:${String(n + 2).padStart(2, '0')}`,
-          serialNumber: `SN${form.code}${String(n).padStart(3, '0')}2026`,
-          brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026, processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
-          gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro', status: 'Offline', cpuUsage: 0, ramUsage: 0,
-          diskUsage: 40, temperature: 45, uptimeHours: 0, network: 'Disconnected', lastHeartbeat: new Date().toISOString(),
-          peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
-        };
-      });
+      const createdAt = new Date().toISOString();
+      const devices = createInitialLaboratoryDevices(laboratory, createdAt);
       const created = createLaboratoryWithInitialLayout({
         db,
         laboratory,
         devices,
-        createdAt: new Date().toISOString(),
+        createdAt,
         layoutId: `layout:${id}:v1`,
         actor: { name: user?.name ?? 'Admin', role: user?.role ?? 'Admin Lab', device: 'Web' },
         auditId: uid('al'),
@@ -340,8 +326,8 @@ export function LaboratoryDetailPage() {
               { key: 'hostname', header: 'Hostname', sortable: true },
               { key: 'ipAddress', header: 'IP' },
               { key: 'status', header: 'Status', render: (d: Device) => <StatusBadge status={d.status} /> },
-              { key: 'cpu', header: 'CPU', render: (d: Device) => `${Math.round(d.cpuUsage)}%` },
-              { key: 'ram', header: 'RAM', render: (d: Device) => `${Math.round(d.ramUsage)}%` },
+              { key: 'cpu', header: 'CPU', render: (d: Device) => typeof d.cpuUsage === 'number' && Number.isFinite(d.cpuUsage) ? `${Math.round(d.cpuUsage)}%` : 'Tidak tersedia' },
+              { key: 'ram', header: 'RAM', render: (d: Device) => typeof d.ramUsage === 'number' && Number.isFinite(d.ramUsage) ? `${Math.round(d.ramUsage)}%` : 'Tidak tersedia' },
             ]}
             data={devices}
             rowKey={(d) => d.id}

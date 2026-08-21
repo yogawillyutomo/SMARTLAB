@@ -32,8 +32,146 @@ export type DeviceStatus =
   | 'Maintenance'
   | 'Reserved';
 
+export type ManagedDeviceType =
+  | 'desktop_pc'
+  | 'laptop'
+  | 'server'
+  | 'network_switch'
+  | 'router'
+  | 'access_point'
+  | 'printer'
+  | 'projector'
+  | 'ups'
+  | 'other';
+
+export type DeviceLifecycleStatus =
+  | 'in_service'
+  | 'spare'
+  | 'retired'
+  | 'decommissioned';
+
+export interface DesktopPcTechnicalProfile {
+  kind: 'desktop_pc';
+  processor?: string;
+  ramGB?: number;
+  storageGB?: number;
+  gpu?: string;
+  monitor?: string;
+  os?: string;
+  peripherals?: {
+    monitor: boolean;
+    keyboard: boolean;
+    mouse: boolean;
+    headset: boolean;
+    network: boolean;
+    ups: boolean;
+  };
+}
+
+export interface LaptopTechnicalProfile {
+  kind: 'laptop';
+  processor?: string;
+  ramGB?: number;
+  storageGB?: number;
+  gpu?: string;
+  os?: string;
+  display?: string;
+  batteryHealthPercent?: number;
+}
+
+export interface ServerTechnicalProfile {
+  kind: 'server';
+  processor?: string;
+  cpuSockets?: number;
+  cpuCores?: number;
+  ramGB?: number;
+  storageGB?: number;
+  raidLevel?: string;
+  os?: string;
+}
+
+export interface NetworkSwitchTechnicalProfile {
+  kind: 'network_switch';
+  portCount?: number;
+  managed?: boolean;
+  poe?: boolean;
+  poeBudgetWatts?: number;
+  switchingCapacityGbps?: number;
+  uplinkSpeedGbps?: number;
+  firmwareVersion?: string;
+}
+
+export interface RouterTechnicalProfile {
+  kind: 'router';
+  wanPortCount?: number;
+  lanPortCount?: number;
+  throughputMbps?: number;
+  wifiCapable?: boolean;
+  firmwareVersion?: string;
+}
+
+export type AccessPointBand = '2.4GHz' | '5GHz' | '6GHz';
+
+export interface AccessPointTechnicalProfile {
+  kind: 'access_point';
+  wifiStandard?: string;
+  bands?: AccessPointBand[];
+  maxClients?: number;
+  poe?: boolean;
+  firmwareVersion?: string;
+}
+
+export type PrinterTechnology = 'inkjet' | 'laser' | 'dot_matrix' | 'thermal' | 'other';
+
+export interface PrinterTechnicalProfile {
+  kind: 'printer';
+  technology?: PrinterTechnology;
+  color?: boolean;
+  duplex?: boolean;
+  networkCapable?: boolean;
+  paperSize?: string;
+}
+
+export interface ProjectorTechnicalProfile {
+  kind: 'projector';
+  technology?: string;
+  brightnessLumens?: number;
+  nativeResolution?: string;
+  lampHours?: number;
+}
+
+export interface UpsTechnicalProfile {
+  kind: 'ups';
+  capacityVA?: number;
+  powerWatts?: number;
+  batteryCount?: number;
+  batteryVoltage?: number;
+  runtimeMinutes?: number;
+}
+
+export interface OtherTechnicalProfile {
+  kind: 'other';
+  specifications?: Record<string, string | number | boolean>;
+}
+
+export type DeviceTechnicalProfile =
+  | DesktopPcTechnicalProfile
+  | LaptopTechnicalProfile
+  | ServerTechnicalProfile
+  | NetworkSwitchTechnicalProfile
+  | RouterTechnicalProfile
+  | AccessPointTechnicalProfile
+  | PrinterTechnicalProfile
+  | ProjectorTechnicalProfile
+  | UpsTechnicalProfile
+  | OtherTechnicalProfile;
+
 export interface Device {
   id: ID;
+  deviceType: ManagedDeviceType;
+  lifecycleStatus: DeviceLifecycleStatus;
+  qrPublicId: string;
+  assetId?: ID;
   positionCode: string;
   hostname: string;
   laboratoryId: ID;
@@ -44,28 +182,15 @@ export interface Device {
   brand: string;
   model: string;
   yearAcquired: number;
-  processor: string;
-  ramGB: number;
-  storageGB: number;
-  gpu: string;
-  monitor: string;
-  os: string;
+  technicalProfile: DeviceTechnicalProfile;
   status: DeviceStatus;
-  cpuUsage: number;
-  ramUsage: number;
-  diskUsage: number;
-  temperature: number;
-  uptimeHours: number;
-  network: 'Connected' | 'Disconnected' | 'Limited';
-  lastHeartbeat: string;
-  peripherals: {
-    monitor: boolean;
-    keyboard: boolean;
-    mouse: boolean;
-    headset: boolean;
-    network: boolean;
-    ups: boolean;
-  };
+  cpuUsage?: number;
+  ramUsage?: number;
+  diskUsage?: number;
+  temperature?: number;
+  uptimeHours?: number;
+  network?: 'Connected' | 'Disconnected' | 'Limited';
+  lastHeartbeat?: string;
 }
 
 export interface Laboratory {

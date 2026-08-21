@@ -1,5 +1,6 @@
 import type { AuditLog, Device, ID, Laboratory, LaboratoryLayout, LayoutElement, RoleName } from '@/types';
 import type { SeedData } from '@/data/seed';
+import { generateDeviceQrPublicId, isValidQrPublicId, type QrPublicIdFactory } from '@/domain/managed-device';
 import { migrateLegacyDeviceCoordinates } from './legacyMigration';
 import { inspectLaboratoryDependencies } from './laboratoryDependencies';
 import { isPositiveInteger, validateLaboratoryLayout } from './validation';
@@ -331,12 +332,27 @@ export interface CreateLaboratoryWithInitialLayoutInput {
   auditId?: ID;
 }
 
-export function createInitialLaboratoryDevices(laboratory: Laboratory, createdAt: string): Device[] {
+export function createInitialLaboratoryDevices(
+  laboratory: Laboratory,
+  createdAt: string,
+  generateQrPublicId: QrPublicIdFactory = generateDeviceQrPublicId,
+): Device[] {
+  const qrPublicIds = new Set<string>();
   return Array.from({ length: laboratory.pcCount }, (_, index) => {
     const number = index + 1;
     const padded = String(number).padStart(2, '0');
+    let qrPublicId = '';
+    for (let attempt = 0; attempt < 32 && !qrPublicId; attempt += 1) {
+      const candidate = generateQrPublicId();
+      if (isValidQrPublicId(candidate) && !qrPublicIds.has(candidate)) qrPublicId = candidate;
+    }
+    if (!qrPublicId) throw new Error('QR publik perangkat awal tidak dapat dibuat secara unik.');
+    qrPublicIds.add(qrPublicId);
     return {
       id: `dev-${laboratory.code}-${padded}`,
+      deviceType: 'desktop_pc',
+      lifecycleStatus: 'in_service',
+      qrPublicId,
       positionCode: `PC-${padded}`,
       hostname: `PC-${laboratory.code}-${padded}`,
       laboratoryId: laboratory.id,
@@ -344,10 +360,14 @@ export function createInitialLaboratoryDevices(laboratory: Laboratory, createdAt
       ipAddress: `10.10.99.${number}`,
       macAddress: `02:00:99:${padded}:${String(number + 1).padStart(2, '0')}:${String(number + 2).padStart(2, '0')}`,
       serialNumber: `SN${laboratory.code}${String(number).padStart(3, '0')}2026`,
-      brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026, processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
-      gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro', status: 'Offline', cpuUsage: 0, ramUsage: 0,
+      brand: 'Dell', model: 'OptiPlex 7090', yearAcquired: 2026,
+      technicalProfile: {
+        kind: 'desktop_pc', processor: 'Intel Core i5-11400', ramGB: 16, storageGB: 512,
+        gpu: 'Intel UHD Graphics 730', monitor: 'Dell 24"', os: 'Windows 11 Pro',
+        peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
+      },
+      status: 'Offline', cpuUsage: 0, ramUsage: 0,
       diskUsage: 40, temperature: 45, uptimeHours: 0, network: 'Disconnected', lastHeartbeat: createdAt,
-      peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: false, ups: false },
     };
   });
 }

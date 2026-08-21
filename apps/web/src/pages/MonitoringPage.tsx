@@ -37,6 +37,13 @@ import { usePermission } from '@/components/common/PermissionGuard';
 import { toast } from '@/stores/toastStore';
 import { cn, relativeTime } from '@/utils';
 import { mutationSucceeded, runHeartbeat } from '@/lib/mutationOutcome';
+import {
+  applyDeviceOperationalStatus,
+  formatOptionalTelemetry,
+  getDesktopPcTechnicalProfile,
+  getDeviceOperatingSystem,
+  getDeviceTechnicalProfileDisplayRows,
+} from '@/domain/managed-device';
 import type { Asset, Device, DeviceStatus, Incident, MaintenanceExecution } from '@/types';
 
 const STATUS_FILTERS: (DeviceStatus | 'all')[] = ['all', 'Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
@@ -97,14 +104,11 @@ export function MonitoringPage() {
 
   function handleStatusChange(device: Device, newStatus: DeviceStatus) {
     if (!canUpdateMonitoring) return;
+    const changedAt = new Date().toISOString();
     const result = mutate((d) => {
       const idx = d.devices.findIndex((x) => x.id === device.id);
       if (idx >= 0) {
-        d.devices[idx].status = newStatus;
-        d.devices[idx].lastHeartbeat = new Date().toISOString();
-        d.devices[idx].network = newStatus === 'Offline' ? 'Disconnected' : newStatus === 'Warning' ? 'Limited' : 'Connected';
-        d.devices[idx].cpuUsage = newStatus === 'Online' ? Math.max(5, d.devices[idx].cpuUsage) : 0;
-        d.devices[idx].ramUsage = newStatus === 'Online' ? Math.max(15, d.devices[idx].ramUsage) : 0;
+        d.devices[idx] = applyDeviceOperationalStatus(d.devices[idx], newStatus, changedAt);
         // sync asset condition
         const aIdx = d.assets.findIndex((a) => a.assetCode === device.assetCode);
         if (aIdx >= 0) {
@@ -114,7 +118,7 @@ export function MonitoringPage() {
       }
     });
     if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
-    setSelected((s) => (s && s.id === device.id ? { ...s, status: newStatus } : s));
+    setSelected((s) => (s && s.id === device.id ? applyDeviceOperationalStatus(s, newStatus, changedAt) : s));
     toast(`Status ${device.hostname} diubah menjadi ${newStatus}`, 'success');
   }
 
@@ -274,9 +278,9 @@ export function MonitoringPage() {
                     <td className="px-4 py-2 text-ink-secondary">{d.hostname}</td>
                     <td className="px-4 py-2 text-ink-muted">{d.ipAddress}</td>
                     <td className="px-4 py-2"><StatusBadge status={d.status} /></td>
-                    <td className="px-4 py-2 text-ink-secondary">{Math.round(d.cpuUsage)}%</td>
-                    <td className="px-4 py-2 text-ink-secondary">{Math.round(d.ramUsage)}%</td>
-                    <td className="px-4 py-2 text-ink-muted">{relativeTime(d.lastHeartbeat)}</td>
+                    <td className="px-4 py-2 text-ink-secondary">{formatOptionalTelemetry(d.cpuUsage, '%')}</td>
+                    <td className="px-4 py-2 text-ink-secondary">{formatOptionalTelemetry(d.ramUsage, '%')}</td>
+                    <td className="px-4 py-2 text-ink-muted">{d.lastHeartbeat ? relativeTime(d.lastHeartbeat) : 'Tidak tersedia'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -343,6 +347,10 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
 }) {
   const [tab, setTab] = useState('overview');
   const statuses: DeviceStatus[] = ['Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
+  const operatingSystem = getDeviceOperatingSystem(device.technicalProfile);
+  const specificationRows = getDeviceTechnicalProfileDisplayRows(device.technicalProfile);
+  const desktopProfile = getDesktopPcTechnicalProfile(device.technicalProfile);
+  const peripherals = desktopProfile?.peripherals;
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -361,7 +369,7 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
         </div>
         <div className="flex-1">
           <p className="font-semibold text-ink-primary">{device.hostname}</p>
-          <p className="text-xs text-ink-muted">{device.brand} {device.model} · {device.os}</p>
+          <p className="text-xs text-ink-muted">{device.brand} {device.model}{operatingSystem ? ` · ${operatingSystem}` : ''}</p>
         </div>
         <StatusBadge status={device.status} />
       </div>
@@ -389,36 +397,33 @@ function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, o
 
       {tab === 'spec' && (
         <div className="space-y-3">
-          <DetailRow icon={<Cpu className="h-4 w-4" />} label="Processor" value={device.processor} />
-          <DetailRow icon={<MemoryStick className="h-4 w-4" />} label="RAM" value={`${device.ramGB} GB`} />
-          <DetailRow icon={<HardDrive className="h-4 w-4" />} label="Storage" value={`${device.storageGB} GB`} />
-          <DetailRow icon={<Activity className="h-4 w-4" />} label="GPU" value={device.gpu} />
-          <DetailRow icon={<Monitor className="h-4 w-4" />} label="Monitor" value={device.monitor} />
-          <DetailRow icon={<Server className="h-4 w-4" />} label="OS" value={device.os} />
+          {specificationRows.length === 0
+            ? <EmptyState title="Spesifikasi teknis belum tersedia" className="py-4" />
+            : specificationRows.map((row) => <DetailRow key={row.key} icon={technicalProfileIcon(row.key)} label={row.label} value={row.value} />)}
         </div>
       )}
 
       {tab === 'realtime' && (
         <div className="space-y-3">
-          <MetricBar icon={<Cpu className="h-4 w-4" />} label="CPU Usage" value={device.cpuUsage} max={100} unit="%" tone={device.cpuUsage > 80 ? 'danger' : device.cpuUsage > 60 ? 'warning' : 'success'} />
-          <MetricBar icon={<MemoryStick className="h-4 w-4" />} label="RAM Usage" value={device.ramUsage} max={100} unit="%" tone={device.ramUsage > 80 ? 'danger' : device.ramUsage > 60 ? 'warning' : 'success'} />
-          <MetricBar icon={<HardDrive className="h-4 w-4" />} label="Disk Usage" value={device.diskUsage} max={100} unit="%" tone={device.diskUsage > 85 ? 'danger' : device.diskUsage > 70 ? 'warning' : 'success'} />
-          <MetricBar icon={<Thermometer className="h-4 w-4" />} label="Suhu" value={device.temperature} max={100} unit="°C" tone={device.temperature > 80 ? 'danger' : device.temperature > 65 ? 'warning' : 'success'} />
-          <DetailRow icon={<Clock className="h-4 w-4" />} label="Uptime" value={`${device.uptimeHours} jam`} />
-          <DetailRow icon={device.network === 'Connected' ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />} label="Network" value={device.network} />
-          <DetailRow icon={<Clock className="h-4 w-4" />} label="Last Heartbeat" value={relativeTime(device.lastHeartbeat)} />
+          <MetricBar icon={<Cpu className="h-4 w-4" />} label="CPU Usage" value={device.cpuUsage} max={100} unit="%" tone={metricTone(device.cpuUsage, 60, 80)} />
+          <MetricBar icon={<MemoryStick className="h-4 w-4" />} label="RAM Usage" value={device.ramUsage} max={100} unit="%" tone={metricTone(device.ramUsage, 60, 80)} />
+          <MetricBar icon={<HardDrive className="h-4 w-4" />} label="Disk Usage" value={device.diskUsage} max={100} unit="%" tone={metricTone(device.diskUsage, 70, 85)} />
+          <MetricBar icon={<Thermometer className="h-4 w-4" />} label="Suhu" value={device.temperature} max={100} unit="°C" tone={metricTone(device.temperature, 65, 80)} />
+          <DetailRow icon={<Clock className="h-4 w-4" />} label="Uptime" value={formatOptionalTelemetry(device.uptimeHours, ' jam')} />
+          <DetailRow icon={device.network === 'Connected' ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />} label="Network" value={device.network ?? 'Tidak tersedia'} />
+          <DetailRow icon={<Clock className="h-4 w-4" />} label="Last Heartbeat" value={device.lastHeartbeat ? relativeTime(device.lastHeartbeat) : 'Tidak tersedia'} />
         </div>
       )}
 
       {tab === 'peripherals' && (
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(device.peripherals).map(([key, val]) => (
+        peripherals ? <div className="grid grid-cols-2 gap-2">
+          {Object.entries(peripherals).map(([key, val]) => (
             <div key={key} className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-800/40 p-3">
               <span className="text-sm capitalize text-ink-secondary">{key}</span>
               <Badge tone={val ? 'success' : 'danger'}>{val ? 'Tersedia' : 'Tidak'}</Badge>
             </div>
           ))}
-        </div>
+        </div> : <EmptyState title="Data periferal tidak tersedia untuk perangkat ini" className="py-4" />
       )}
 
       {tab === 'history' && (
@@ -506,14 +511,30 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
   );
 }
 
-function MetricBar({ icon, label, value, max, unit, tone }: { icon: React.ReactNode; label: string; value: number; max: number; unit: string; tone: 'success' | 'warning' | 'danger' }) {
-  const pct = Math.min(100, (value / max) * 100);
+function technicalProfileIcon(key: string): React.ReactNode {
+  if (key === 'processor' || key === 'cpuSockets' || key === 'cpuCores') return <Cpu className="h-4 w-4" />;
+  if (key === 'ramGB') return <MemoryStick className="h-4 w-4" />;
+  if (key === 'storageGB') return <HardDrive className="h-4 w-4" />;
+  if (key === 'gpu') return <Activity className="h-4 w-4" />;
+  if (key === 'monitor' || key === 'display') return <Monitor className="h-4 w-4" />;
+  if (key === 'os') return <Server className="h-4 w-4" />;
+  return <Tag className="h-4 w-4" />;
+}
+
+function metricTone(value: number | undefined, warning: number, danger: number): 'success' | 'warning' | 'danger' {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'success';
+  return value > danger ? 'danger' : value > warning ? 'warning' : 'success';
+}
+
+function MetricBar({ icon, label, value, max, unit, tone }: { icon: React.ReactNode; label: string; value?: number; max: number; unit: string; tone: 'success' | 'warning' | 'danger' }) {
+  const available = typeof value === 'number' && Number.isFinite(value);
+  const pct = available ? Math.min(100, (value / max) * 100) : 0;
   const color = tone === 'success' ? 'bg-success' : tone === 'warning' ? 'bg-warning' : 'bg-danger';
   return (
     <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3">
       <div className="flex items-center justify-between text-xs">
         <span className="flex items-center gap-2 text-ink-muted">{icon}{label}</span>
-        <span className="font-semibold text-ink-primary">{Math.round(value)}{unit}</span>
+        <span className="font-semibold text-ink-primary">{formatOptionalTelemetry(value, unit)}</span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-base-700">
         <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />

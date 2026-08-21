@@ -4,6 +4,7 @@ import { loadDB, persistDB, resetDB, updateDB } from '@/lib/db';
 import { STORAGE_KEYS, readStorageJSON, readStoredVersion } from '@/lib/storage';
 import { clearAllStorageIfAllowed, canClearAllStorage } from '@/lib/storageRecovery';
 import { mergeStorageHealthAfterSave, storageHealthOf } from '@/lib/storageHealth';
+import { CURRENT_STORAGE_VERSION } from '@/lib/dbSchema';
 
 const DB_KEY = 'smartlab_pplg_db';
 
@@ -45,7 +46,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function seedCurrentDatabase(version = '2.0.0') {
+function seedCurrentDatabase(version = CURRENT_STORAGE_VERSION) {
   storage.seed(DB_KEY, JSON.stringify(generateSeedData()));
   if (version) storage.seed(STORAGE_KEYS.VERSION, version);
   storage.resetCounts();
@@ -61,7 +62,11 @@ function legacyDatabase() {
   delete legacy.layouts;
   legacy.devices = db.devices.map((device) => {
     const element = placements.get(device.id)!;
-    return { ...device, row: element.row, col: element.column };
+    if (device.technicalProfile.kind !== 'desktop_pc') throw new Error('expected desktop seed');
+    const { technicalProfile, ...common } = device;
+    const { kind: _kind, ...technical } = technicalProfile;
+    void _kind;
+    return { ...common, ...technical, row: element.row, col: element.column };
   });
   return legacy;
 }

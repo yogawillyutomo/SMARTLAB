@@ -1,5 +1,6 @@
 import { delay, getDB, saveDB, updateDB } from '@/lib/db';
 import { createInitialLaboratoryDevices, createLaboratoryWithInitialLayout, deleteLaboratorySafely } from '@/domain/laboratory-layout';
+import { simulateDeviceHeartbeat, validateAssetMutation } from '@/domain/managed-device';
 import type {
   Asset,
   AuditLog,
@@ -124,6 +125,10 @@ export const laboratoryRepository: Repository<Laboratory> = {
 };
 
 // Devices
+type DeviceRepositoryUpdate = Partial<Omit<Device,
+  'id' | 'deviceType' | 'technicalProfile' | 'lifecycleStatus' | 'qrPublicId' | 'assetId' | 'assetCode' | 'serialNumber' | 'brand' | 'model' | 'laboratoryId'
+>>;
+
 export const deviceRepository = {
   async getAll(): Promise<Device[]> {
     await delay();
@@ -137,13 +142,40 @@ export const deviceRepository = {
     await delay();
     return getDB().devices.find((d) => d.id === id) ?? null;
   },
-  async update(id: string, input: Partial<Device>): Promise<Device | null> {
+  async update(id: string, input: DeviceRepositoryUpdate): Promise<Device | null> {
     await delay();
     let updated: Device | null = null;
     updateDB((db) => {
       const idx = db.devices.findIndex((d) => d.id === id);
       if (idx >= 0) {
-        db.devices[idx] = { ...db.devices[idx], ...input, lastHeartbeat: input.status ? new Date().toISOString() : db.devices[idx].lastHeartbeat };
+        const {
+          id: _id,
+          deviceType: _deviceType,
+          technicalProfile: _technicalProfile,
+          lifecycleStatus: _lifecycleStatus,
+          qrPublicId: _qrPublicId,
+          assetId: _assetId,
+          assetCode: _assetCode,
+          serialNumber: _serialNumber,
+          brand: _brand,
+          model: _model,
+          laboratoryId: _laboratoryId,
+          ...safeInput
+        } = input as Partial<Device>;
+        void _id;
+        void _deviceType;
+        void _technicalProfile;
+        void _lifecycleStatus;
+        void _qrPublicId;
+        void _assetId;
+        void _assetCode;
+        void _serialNumber;
+        void _brand;
+        void _model;
+        void _laboratoryId;
+        const current = db.devices[idx];
+        db.devices[idx] = { ...current, ...safeInput };
+        if (input.status && current.lastHeartbeat !== undefined) db.devices[idx].lastHeartbeat = new Date().toISOString();
         updated = db.devices[idx];
       }
     });
@@ -154,11 +186,12 @@ export const deviceRepository = {
     updateDB((db) => {
       db.devices.forEach((d) => {
         if (labId && d.laboratoryId !== labId) return;
-        if (d.status === 'Online') {
-          d.cpuUsage = Math.min(95, Math.max(5, d.cpuUsage + (Math.random() * 20 - 10)));
-          d.ramUsage = Math.min(95, Math.max(15, d.ramUsage + (Math.random() * 15 - 7)));
-          d.lastHeartbeat = new Date().toISOString();
-        }
+        const next = simulateDeviceHeartbeat(d, {
+          at: new Date().toISOString(),
+          cpuDelta: Math.random() * 20 - 10,
+          ramDelta: Math.random() * 15 - 7,
+        });
+        Object.assign(d, next);
       });
     });
     return labId ? getDB().devices.filter((d) => d.laboratoryId === labId) : getDB().devices;
@@ -205,6 +238,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async update(id, input) {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) throw new Error('Aset tidak ditemukan.');
+    const policy = validateAssetMutation(source, { operation: 'update', assetId: id, changes: input });
+    if (!policy.ok) throw new Error(policy.message);
     let updated: Asset | null = null;
     updateDB((db) => {
       const idx = db.assets.findIndex((a) => a.id === id);
@@ -218,6 +255,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async remove(id) {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) return;
+    const policy = validateAssetMutation(source, { operation: 'delete', assetId: id });
+    if (!policy.ok) throw new Error(policy.message);
     updateDB((db) => {
       db.assets = db.assets.filter((a) => a.id !== id);
     });
@@ -225,6 +266,10 @@ export const assetRepository: Repository<Asset> & {
   },
   async transfer(id: string, transfer: { toLabId: string; toPosition: string; reason: string; by: string }): Promise<Asset | null> {
     await delay();
+    const source = getDB();
+    if (!source.assets.some((asset) => asset.id === id)) return null;
+    const policy = validateAssetMutation(source, { operation: 'transfer', assetId: id, toLaboratoryId: transfer.toLabId });
+    if (!policy.ok) throw new Error(policy.message);
     let updated: Asset | null = null;
     updateDB((db) => {
       const idx = db.assets.findIndex((a) => a.id === id);

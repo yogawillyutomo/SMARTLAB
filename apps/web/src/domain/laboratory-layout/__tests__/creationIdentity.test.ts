@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateSeedData } from '@/data/seed';
 import { createInitialLaboratoryDevices, createLaboratoryWithInitialLayout } from '../index';
+import { isValidQrPublicId, validateManagedDeviceInventory } from '@/domain/managed-device';
 
 const CREATED_AT = '2026-08-06T00:00:00.000Z';
 
@@ -21,6 +22,25 @@ function failureCode(result: ReturnType<typeof createLaboratoryWithInitialLayout
 }
 
 describe('laboratory creation identity taxonomy', () => {
+  it('creates schema-v4 desktop profiles and unique QR identities without Assets or Device coordinates', () => {
+    const value = input();
+    const beforeAssets = structuredClone(value.db.assets);
+    const devices = value.devices;
+    expect(devices).toHaveLength(1);
+    expect(devices[0]).toMatchObject({
+      deviceType: 'desktop_pc',
+      lifecycleStatus: 'in_service',
+      technicalProfile: { kind: 'desktop_pc', processor: 'Intel Core i5-11400' },
+    });
+    expect(isValidQrPublicId(devices[0].qrPublicId)).toBe(true);
+    expect(devices[0].assetId).toBeUndefined();
+    expect(devices.every((device) => !Object.prototype.hasOwnProperty.call(device, 'row') && !Object.prototype.hasOwnProperty.call(device, 'col'))).toBe(true);
+    const created = createLaboratoryWithInitialLayout(value);
+    if (!created.ok) throw new Error('expected laboratory creation');
+    expect(created.db.assets).toEqual(beforeAssets);
+    expect(validateManagedDeviceInventory(created.db).valid).toBe(true);
+  });
+
   it('returns exact identity issue codes without mutating the source database', () => {
     const cases = [
       () => { const value = input(); value.laboratory.id = ''; return { value, code: 'invalid-laboratory-id' }; },
