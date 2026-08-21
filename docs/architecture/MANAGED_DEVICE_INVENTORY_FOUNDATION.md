@@ -55,7 +55,9 @@ Stage 4D.1B also locks `brand`, `model`, and `serialNumber` during ordinary edit
 | `ups` | VA/watt capacity, battery details, runtime |
 | `other` | conservative scalar key/value specifications |
 
-Specification fields are optional because incomplete inventory information is valid. Validation rejects an absent profile, unknown or mismatched kind, invalid primitive values, non-finite or negative capacities/counts, battery health outside 0–100, unsupported access-point bands, unsupported printer technology, and non-scalar `other` values. Canonical schema-version-4 Devices also reject legacy root `processor`, `ramGB`, `storageGB`, `gpu`, `monitor`, `os`, and `peripherals` fields so there is no second specification source.
+Specification fields are optional because incomplete inventory information is valid. Each profile kind has an exact top-level field allowlist; fields belonging to another hardware kind and unknown fields fail validation instead of being retained silently. Desktop `peripherals`, when present, has the exact required boolean keys `monitor`, `keyboard`, `mouse`, `headset`, `network`, and `ups`. The `other.specifications` map alone allows arbitrary keys, and every value must be a finite number, string, or boolean.
+
+Validation also rejects an absent profile, unknown or mismatched kind, invalid primitive values, non-finite or negative capacities/counts, battery health outside 0–100, unsupported access-point bands, unsupported printer technology, and non-scalar `other` values. Canonical schema-version-4 Devices reject legacy root `processor`, `ramGB`, `storageGB`, `gpu`, `monitor`, `os`, and `peripherals` fields so there is no second specification source.
 
 The generic Device repository treats the profile, hardware type, lifecycle, QR, Asset relationship, code, serial, brand, model, and laboratory as protected identity. Stage 4D.1B does not expose a technical-profile editing UI.
 
@@ -94,7 +96,7 @@ Older imports still reach the final schema in one in-memory normalization and on
 - v3: create desktop profiles only;
 - v4: validate canonical data without rerunning migration.
 
-An unexpected non-desktop v3 Device fails with `unsupported-v3-device-profile-migration`; SmartLab does not guess specifications or coerce its type. The existing recovery path keeps the original raw storage bytes and prevents partial writes. Malformed canonical profiles use the same raw-preserving recovery semantics.
+An unexpected non-desktop v3 Device fails with `unsupported-v3-device-profile-migration`; SmartLab does not guess specifications or coerce its type. Because official schema v3 has no nested profile, any own `Device.technicalProfile` property fails closed with `unexpected-v3-technical-profile` instead of being discarded or merged. The existing recovery path keeps the original raw storage bytes and prevents partial writes. Malformed canonical profiles, including foreign profile fields, use the same raw-preserving recovery semantics.
 
 ## Stage boundary
 

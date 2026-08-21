@@ -62,6 +62,67 @@ describe('Device technical-profile validation', () => {
     expect(validateDeviceTechnicalProfile('other', { kind: 'other', specifications: { nested: { invalid: true } } }).valid).toBe(false);
   });
 
+  it.each([
+    ['network_switch', 'processor', { kind: 'network_switch', processor: 'foreign' }],
+    ['network_switch', 'ramGB', { kind: 'network_switch', ramGB: 8 }],
+    ['router', 'technology', { kind: 'router', technology: 'laser' }],
+    ['desktop_pc', 'portCount', { kind: 'desktop_pc', portCount: 24 }],
+    ['ups', 'os', { kind: 'ups', os: 'foreign' }],
+    ['access_point', 'gpu', { kind: 'access_point', gpu: 'foreign' }],
+    ['printer', 'firmwareVersion', { kind: 'printer', firmwareVersion: 'foreign' }],
+    ['other', 'processor', { kind: 'other', processor: 'foreign' }],
+    ['router', 'mysteryField', { kind: 'router', mysteryField: true }],
+  ] as const)('rejects a foreign %s profile field %s', (deviceType, field, profile) => {
+    expect(validateDeviceTechnicalProfile(deviceType, profile)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: 'unexpected-technical-profile-field', field })],
+    });
+  });
+
+  it('accepts the exact desktop peripheral shape with required boolean values', () => {
+    expect(validateDeviceTechnicalProfile('desktop_pc', {
+      kind: 'desktop_pc',
+      peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: true, ups: false },
+    })).toEqual({ valid: true, issues: [] });
+  });
+
+  it('preserves required desktop peripheral boolean validation and rejects extra keys', () => {
+    const missing = validateDeviceTechnicalProfile('desktop_pc', {
+      kind: 'desktop_pc', peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: true },
+    });
+    expect(missing.issues).toContainEqual(expect.objectContaining({ code: 'invalid-technical-profile-field', field: 'peripherals' }));
+
+    const invalid = validateDeviceTechnicalProfile('desktop_pc', {
+      kind: 'desktop_pc', peripherals: { monitor: true, keyboard: true, mouse: 'yes', headset: false, network: true, ups: false },
+    });
+    expect(invalid.issues).toContainEqual(expect.objectContaining({ code: 'invalid-technical-profile-field', field: 'mouse' }));
+
+    const unexpected = validateDeviceTechnicalProfile('desktop_pc', {
+      kind: 'desktop_pc',
+      peripherals: { monitor: true, keyboard: true, mouse: true, headset: false, network: true, ups: false, camera: true },
+    });
+    expect(unexpected.issues).toContainEqual(expect.objectContaining({
+      code: 'unexpected-technical-profile-field', field: 'peripherals.camera',
+    }));
+  });
+
+  it('accepts arbitrary scalar other specifications and rejects nested, array, and non-finite values', () => {
+    expect(validateDeviceTechnicalProfile('other', {
+      kind: 'other', specifications: { vendorCode: 'X-1', rackUnits: 2, managed: true },
+    })).toEqual({ valid: true, issues: [] });
+    [
+      { nested: { value: true } },
+      { list: ['invalid'] },
+      { infinite: Number.POSITIVE_INFINITY },
+      { nan: Number.NaN },
+    ].forEach((specifications) => {
+      expect(validateDeviceTechnicalProfile('other', { kind: 'other', specifications }).issues)
+        .toContainEqual(expect.objectContaining({ code: 'invalid-technical-profile-field', field: 'specifications' }));
+    });
+    expect(validateDeviceTechnicalProfile('other', { kind: 'other', processor: 'foreign' }).issues)
+      .toContainEqual(expect.objectContaining({ code: 'unexpected-technical-profile-field', field: 'processor' }));
+  });
+
   it.each(['processor', 'ramGB', 'storageGB', 'gpu', 'monitor', 'os', 'peripherals'] as const)('rejects stale root %s in a canonical v4 Device', (field) => {
     const db = generateSeedData();
     (db.devices[0] as unknown as Record<string, unknown>)[field] = 'stale duplicate';

@@ -22,12 +22,26 @@ const PRINTER_TECHNOLOGIES = ['inkjet', 'laser', 'dot_matrix', 'thermal', 'other
 const TECHNICAL_PROFILE_KINDS = [
   'desktop_pc', 'laptop', 'server', 'network_switch', 'router', 'access_point', 'printer', 'projector', 'ups', 'other',
 ] as const satisfies readonly ManagedDeviceType[];
+const TECHNICAL_PROFILE_ALLOWED_FIELDS = {
+  desktop_pc: ['kind', 'processor', 'ramGB', 'storageGB', 'gpu', 'monitor', 'os', 'peripherals'],
+  laptop: ['kind', 'processor', 'ramGB', 'storageGB', 'gpu', 'os', 'display', 'batteryHealthPercent'],
+  server: ['kind', 'processor', 'cpuSockets', 'cpuCores', 'ramGB', 'storageGB', 'raidLevel', 'os'],
+  network_switch: ['kind', 'portCount', 'managed', 'poe', 'poeBudgetWatts', 'switchingCapacityGbps', 'uplinkSpeedGbps', 'firmwareVersion'],
+  router: ['kind', 'wanPortCount', 'lanPortCount', 'throughputMbps', 'wifiCapable', 'firmwareVersion'],
+  access_point: ['kind', 'wifiStandard', 'bands', 'maxClients', 'poe', 'firmwareVersion'],
+  printer: ['kind', 'technology', 'color', 'duplex', 'networkCapable', 'paperSize'],
+  projector: ['kind', 'technology', 'brightnessLumens', 'nativeResolution', 'lampHours'],
+  ups: ['kind', 'capacityVA', 'powerWatts', 'batteryCount', 'batteryVoltage', 'runtimeMinutes'],
+  other: ['kind', 'specifications'],
+} as const satisfies Record<ManagedDeviceType, readonly string[]>;
+const DESKTOP_PERIPHERAL_FIELDS = ['monitor', 'keyboard', 'mouse', 'headset', 'network', 'ups'] as const;
 
 export type DeviceTechnicalProfileIssueCode =
   | 'missing-technical-profile'
   | 'invalid-technical-profile-kind'
   | 'device-profile-kind-mismatch'
   | 'invalid-technical-profile-field'
+  | 'unexpected-technical-profile-field'
   | 'legacy-device-technical-field';
 
 export interface DeviceTechnicalProfileIssue {
@@ -37,7 +51,7 @@ export interface DeviceTechnicalProfileIssue {
 }
 
 export type LegacyTechnicalProfileMigrationIssue = {
-  code: 'unsupported-v3-device-profile-migration';
+  code: 'unsupported-v3-device-profile-migration' | 'unexpected-v3-technical-profile';
   message: string;
   deviceId?: string;
 };
@@ -68,6 +82,24 @@ function invalidField(field: string): DeviceTechnicalProfileIssue {
   };
 }
 
+function validateAllowedFields(
+  value: Record<string, unknown>,
+  allowedFields: readonly string[],
+  issues: DeviceTechnicalProfileIssue[],
+  prefix = '',
+): void {
+  Object.keys(value).forEach((field) => {
+    if (!allowedFields.includes(field)) {
+      const qualifiedField = prefix ? `${prefix}.${field}` : field;
+      issues.push({
+        code: 'unexpected-technical-profile-field',
+        message: `Field technicalProfile.${qualifiedField} tidak diizinkan untuk jenis perangkat ini.`,
+        field: qualifiedField,
+      });
+    }
+  });
+}
+
 function validateOptionalString(profile: Record<string, unknown>, fields: readonly string[], issues: DeviceTechnicalProfileIssue[]): void {
   fields.forEach((field) => {
     if (profile[field] !== undefined && typeof profile[field] !== 'string') issues.push(invalidField(field));
@@ -93,8 +125,9 @@ function validatePeripherals(value: unknown, issues: DeviceTechnicalProfileIssue
     issues.push(invalidField('peripherals'));
     return;
   }
-  validateOptionalBoolean(value, ['monitor', 'keyboard', 'mouse', 'headset', 'network', 'ups'], issues);
-  if (['monitor', 'keyboard', 'mouse', 'headset', 'network', 'ups'].some((field) => typeof value[field] !== 'boolean')) {
+  validateAllowedFields(value, DESKTOP_PERIPHERAL_FIELDS, issues, 'peripherals');
+  validateOptionalBoolean(value, DESKTOP_PERIPHERAL_FIELDS, issues);
+  if (DESKTOP_PERIPHERAL_FIELDS.some((field) => typeof value[field] !== 'boolean')) {
     if (!issues.some((issue) => issue.field === 'peripherals')) issues.push(invalidField('peripherals'));
   }
 }
@@ -114,11 +147,14 @@ export function validateDeviceTechnicalProfile(
   if (typeof profileValue.kind !== 'string' || !(TECHNICAL_PROFILE_KINDS as readonly string[]).includes(profileValue.kind)) {
     return { valid: false, issues: [{ code: 'invalid-technical-profile-kind', message: 'Jenis technical profile perangkat tidak valid.', field: 'kind' }] };
   }
-  if (deviceType !== profileValue.kind) {
+  const profileKind = profileValue.kind as ManagedDeviceType;
+  if (deviceType !== profileKind) {
     issues.push({ code: 'device-profile-kind-mismatch', message: 'Jenis perangkat dan technical profile harus sama.', field: 'kind' });
   }
 
-  switch (profileValue.kind) {
+  validateAllowedFields(profileValue, TECHNICAL_PROFILE_ALLOWED_FIELDS[profileKind], issues);
+
+  switch (profileKind) {
     case 'desktop_pc':
       validateOptionalString(profileValue, ['processor', 'gpu', 'monitor', 'os'], issues);
       validateOptionalNonNegativeNumber(profileValue, ['ramGB', 'storageGB'], issues);
@@ -206,13 +242,33 @@ export function validateCanonicalDeviceTechnicalProfile(device: Device): { valid
 export function migrateLegacyDeviceTechnicalProfiles(devices: readonly unknown[]): LegacyTechnicalProfileMigrationResult {
   const migrated: Device[] = [];
   for (const value of devices) {
-    if (!isRecord(value) || value.deviceType !== 'desktop_pc') {
+    if (!isRecord(value)) {
       return {
         ok: false,
         issues: [{
           code: 'unsupported-v3-device-profile-migration',
           message: 'Migrasi technical profile hanya mendukung Device desktop_pc resmi dari schema versi 3.',
           deviceId: isRecord(value) && typeof value.id === 'string' ? value.id : undefined,
+        }],
+      };
+    }
+    if (hasOwn(value, 'technicalProfile')) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'unexpected-v3-technical-profile',
+          message: 'Schema versi 3 resmi tidak boleh memiliki Device.technicalProfile.',
+          deviceId: typeof value.id === 'string' ? value.id : undefined,
+        }],
+      };
+    }
+    if (value.deviceType !== 'desktop_pc') {
+      return {
+        ok: false,
+        issues: [{
+          code: 'unsupported-v3-device-profile-migration',
+          message: 'Migrasi technical profile hanya mendukung Device desktop_pc resmi dari schema versi 3.',
+          deviceId: typeof value.id === 'string' ? value.id : undefined,
         }],
       };
     }
@@ -224,10 +280,8 @@ export function migrateLegacyDeviceTechnicalProfiles(devices: readonly unknown[]
       monitor,
       os,
       peripherals,
-      technicalProfile: _legacyTechnicalProfile,
       ...common
     } = value;
-    void _legacyTechnicalProfile;
     const profile: Record<string, unknown> = {
       kind: 'desktop_pc',
       processor,

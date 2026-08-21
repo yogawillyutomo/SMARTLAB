@@ -164,6 +164,20 @@ describe('managed Device technical-profile schema migration', () => {
     expect(storage.writesFor(DB_KEY)).toBe(0);
   });
 
+  it('preserves canonical v4 source bytes when a profile contains a foreign field', () => {
+    const db = generateSeedData();
+    db.devices[0].deviceType = 'network_switch';
+    (db.devices[0] as unknown as Record<string, unknown>).technicalProfile = {
+      kind: 'network_switch', processor: 'must not survive silently',
+    };
+    const raw = JSON.stringify(db);
+    storage.seed(DB_KEY, raw);
+    storage.seed(STORAGE_KEYS.VERSION, CURRENT_STORAGE_VERSION);
+    expect(loadDB()).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(storage.getItem(DB_KEY)).toBe(raw);
+    expect(storage.writesFor(DB_KEY)).toBe(0);
+  });
+
   it('fails closed and atomically for an unexpected non-desktop v3 Device', () => {
     const legacy = versionThreeDatabase();
     legacy.devices[1].deviceType = 'router';
@@ -179,6 +193,31 @@ describe('managed Device technical-profile schema migration', () => {
   it('keeps unexpected non-desktop v3 raw storage protected', () => {
     const legacy = versionThreeDatabase();
     legacy.devices[0].deviceType = 'network_switch';
+    const raw = JSON.stringify(legacy);
+    storage.seed(DB_KEY, raw);
+    storage.seed(STORAGE_KEYS.VERSION, '3.0.0');
+    expect(loadDB()).toMatchObject({ ok: false, mode: 'recovery', rawPreserved: true });
+    expect(storage.getItem(DB_KEY)).toBe(raw);
+    expect(storage.writesFor(DB_KEY)).toBe(0);
+  });
+
+  it('fails closed and atomically when a v3 Device already owns technicalProfile', () => {
+    const legacy = versionThreeDatabase();
+    (legacy.devices[0] as unknown as Record<string, unknown>).technicalProfile = { kind: 'desktop_pc' };
+    const before = JSON.stringify(legacy);
+    const result = normalizeDatabase(legacy, { migratedAt: MIGRATED_AT });
+    expect(result).toMatchObject({ ok: false, issues: [expect.objectContaining({
+      code: 'managed-device-profile-migration-failed',
+      validationIssueCode: 'unexpected-v3-technical-profile',
+      deviceId: legacy.devices[0].id,
+    })] });
+    expect(JSON.stringify(legacy)).toBe(before);
+    expect('db' in result).toBe(false);
+  });
+
+  it('keeps v3 storage with an unexpected technicalProfile byte-for-byte protected', () => {
+    const legacy = versionThreeDatabase();
+    (legacy.devices[0] as unknown as Record<string, unknown>).technicalProfile = { kind: 'desktop_pc' };
     const raw = JSON.stringify(legacy);
     storage.seed(DB_KEY, raw);
     storage.seed(STORAGE_KEYS.VERSION, '3.0.0');
