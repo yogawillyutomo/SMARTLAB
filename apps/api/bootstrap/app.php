@@ -1,5 +1,6 @@
 <?php
 
+use App\Application\Identity\SpaAuthenticationException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -45,5 +46,21 @@ return Application::configure(basePath: dirname(__DIR__))
                 'code' => 'VALIDATION_FAILED',
                 'errors' => $exception->errors(),
             ], 422);
+        });
+        $exceptions->render(function (SpaAuthenticationException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $response = response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+
+            if ($exception->retryAfter !== null) {
+                $response->headers->set('Retry-After', (string) $exception->retryAfter);
+            }
+
+            return $response;
         });
     })->create();
