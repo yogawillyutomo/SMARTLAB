@@ -27,8 +27,8 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppData } from '@/hooks/useAppData';
 import { relativeTime, initials, cn } from '@/utils';
-import { getNavGroupsForPermissions } from '@/routes/nav';
-import { canView, type ModuleKey } from '@/lib/permissions';
+import { canViewNavigationModule, getVisibleNavItemsForUser } from '@/routes/nav';
+import { type ModuleKey } from '@/lib/permissions';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { usePermissionStore } from '@/stores/permissionStore';
 import { authIssueMessage } from '@/lib/authMessages';
@@ -45,26 +45,14 @@ function useGlobalSearch() {
   const { db } = useAppData();
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
-  const canViewModule = (module: ModuleKey) => Boolean(user && canView(permissions, user.role, module));
-  const pageItems = user
-    ? getNavGroupsForPermissions(permissions, user.role)
-      .flatMap((group) => group.items)
-      .filter((item) => canViewModule(item.module))
-    : [];
+  const canViewModule = (module: ModuleKey) => canViewNavigationModule(permissions, user, module);
+  const pageItems = getVisibleNavItemsForUser(permissions, user);
 
   return (q: string): SearchResult[] => {
     if (!q) return [];
     const query = q.toLowerCase();
     const results: SearchResult[] = [];
     const limit = 8;
-    if (canViewModule('laboratories')) {
-      db.labs.forEach((l) => {
-        if (results.length >= limit) return;
-        if (l.name.toLowerCase().includes(query) || l.code.toLowerCase().includes(query)) {
-          results.push({ label: l.name, sub: `Laboratorium · ${l.location}`, to: `/laboratories/${l.id}`, icon: FlaskConical });
-        }
-      });
-    }
     if (canViewModule('monitoring')) {
       db.devices.forEach((d) => {
         if (results.length >= limit) return;

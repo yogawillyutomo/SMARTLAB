@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { derivePrimaryRole, hasServerPermission, toAuthenticatedUser, UnsupportedRoleError } from '@/lib/authIdentity';
 import { isSafeInternalPath, postLoginPath } from '@/lib/authNavigation';
+import { getVisibleNavGroupsForUser, getVisibleNavItemsForUser } from '@/routes/nav';
+import { createDefaultPermissionMatrix } from '@/lib/permissions';
 import type { CurrentUserPayload } from '@/services/authApi';
+import type { AuthenticatedUser } from '@/types';
 
 const payload: CurrentUserPayload = {
   id: '01TEST',
@@ -50,5 +53,68 @@ describe('protected deep-link navigation', () => {
       expect(postLoginPath({ from: { pathname } })).toBe('/dashboard');
     }
     expect(isSafeInternalPath('/dashboard')).toBe(true);
+  });
+});
+
+describe('dynamic navigation topology with server-authoritative Laboratory access', () => {
+  function navigationUser(serverPermissions: string[]): AuthenticatedUser {
+    return {
+      ...toAuthenticatedUser(payload),
+      permissions: serverPermissions,
+      role: 'Admin Lab',
+    };
+  }
+
+  function navigationItems(
+    sessions: boolean,
+    journals: boolean,
+    localLaboratory: boolean,
+    serverPermissions: string[] = [],
+  ) {
+    const permissions = createDefaultPermissionMatrix();
+    permissions['Admin Lab'].sessions = sessions ? ['view'] : [];
+    permissions['Admin Lab'].journals = journals ? ['view'] : [];
+    permissions['Admin Lab'].laboratories = localLaboratory ? ['view'] : [];
+    const user = navigationUser(serverPermissions);
+
+    return {
+      sidebar: getVisibleNavGroupsForUser(permissions, user).flatMap((group) => group.items),
+      global: getVisibleNavItemsForUser(permissions, user),
+    };
+  }
+
+  it('preserves the journals-only shortcut in sidebar and global page items', () => {
+    const items = navigationItems(false, true, false);
+
+    for (const navigation of [items.sidebar, items.global]) {
+      expect(navigation).toEqual(expect.arrayContaining([
+        expect.objectContaining({ label: 'Riwayat & Laporan', to: '/journals' }),
+      ]));
+    }
+  });
+
+  it('keeps the normal session route without an independent journal shortcut', () => {
+    const items = navigationItems(true, true, false);
+
+    for (const navigation of [items.sidebar, items.global]) {
+      expect(navigation.filter(({ label }) => label === 'Pelaksanaan Lab')).toHaveLength(1);
+      expect(navigation.filter(({ label }) => label === 'Riwayat & Laporan')).toHaveLength(0);
+    }
+  });
+
+  it('hides Laboratory when only the local role matrix grants access', () => {
+    const items = navigationItems(true, true, true);
+
+    for (const navigation of [items.sidebar, items.global]) {
+      expect(navigation.some(({ module }) => module === 'laboratories')).toBe(false);
+    }
+  });
+
+  it('shows Laboratory from exact server permission without a local-role fallback', () => {
+    const items = navigationItems(true, true, false, ['laboratories.view']);
+
+    for (const navigation of [items.sidebar, items.global]) {
+      expect(navigation.filter(({ module }) => module === 'laboratories')).toHaveLength(1);
+    }
   });
 });

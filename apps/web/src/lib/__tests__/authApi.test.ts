@@ -35,6 +35,7 @@ describe('authentication gateway', () => {
         order.push('me');
         return await get(path) as T;
       },
+      patch: vi.fn(async () => { throw new Error('PATCH is not used by the authentication gateway.'); }) as ApiClient['patch'],
     };
     const gateway = createAuthGateway(client);
 

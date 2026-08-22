@@ -72,17 +72,48 @@ describe('API transport contracts', () => {
   });
 
   it('includes credentials and Accept on authenticated reads', async () => {
+    const readCookie = vi.fn(() => 'XSRF-TOKEN=should-not-be-read');
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void input;
       void init;
       return jsonResponse({ data: {} });
     });
-    const client = createApiClient({ fetchImpl: fetchMock as typeof fetch });
+    const client = createApiClient({ fetchImpl: fetchMock as typeof fetch, readCookie });
 
     await client.get('/me');
     const [, init] = fetchMock.mock.calls[0];
     expect(init).toMatchObject({ method: 'GET', credentials: 'include' });
-    expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('Accept')).toBe('application/json');
+    expect(headers.get('Content-Type')).toBeNull();
+    expect(headers.get('X-XSRF-TOKEN')).toBeNull();
+    expect(readCookie).not.toHaveBeenCalled();
+  });
+
+  it('sends PATCH mutations with credentials, JSON headers, and the decoded XSRF token', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input;
+      void _init;
+      return jsonResponse({ data: { id: '01LAB' } });
+    });
+    const client = createApiClient({
+      fetchImpl: fetchMock as typeof fetch,
+      readCookie: () => 'XSRF-TOKEN=patch%3Dtoken',
+    });
+
+    await client.patch('/laboratories/01LAB', { status: 'inactive' });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const headers = new Headers(init?.headers);
+    expect(url).toBe('/api/v1/laboratories/01LAB');
+    expect(init).toMatchObject({
+      method: 'PATCH',
+      credentials: 'include',
+      body: JSON.stringify({ status: 'inactive' }),
+    });
+    expect(headers.get('Accept')).toBe('application/json');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-XSRF-TOKEN')).toBe('patch=token');
   });
 
   it('parses stable API errors and Retry-After metadata', async () => {
@@ -145,6 +176,29 @@ describe('API transport contracts', () => {
 
     await expect(client.post('/auth/logout')).rejects.toMatchObject({ status: 419, code: 'CSRF_TOKEN_MISMATCH' });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('refreshes CSRF and retries a PATCH 419 response at most once', async () => {
+    let cookie = 'XSRF-TOKEN=old';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      void _init;
+      const url = String(input);
+      if (url.endsWith('/sanctum/csrf-cookie')) {
+        cookie = 'XSRF-TOKEN=fresh';
+        return new Response(null, { status: 204 });
+      }
+      return jsonResponse({ message: 'CSRF token mismatch.', code: 'CSRF_TOKEN_MISMATCH' }, 419);
+    });
+    const client = createApiClient({ fetchImpl: fetchMock as typeof fetch, readCookie: () => cookie });
+
+    await expect(client.patch('/laboratories/01LAB', { name: 'Updated' })).rejects.toMatchObject({
+      status: 419,
+      code: 'CSRF_TOKEN_MISMATCH',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['PATCH', 'GET', 'PATCH']);
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('X-XSRF-TOKEN')).toBe('fresh');
   });
 
   it('never turns a network failure into success', async () => {

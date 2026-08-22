@@ -46,7 +46,7 @@ Logout clears the in-memory principal only after backend `204` or a confirming `
 
 The backend role list currently matches the eight legacy frontend role names. The compatibility adapter selects the first recognized role in the server-provided order for existing local-only prototype guards. It never invents a role or falls back to Super Admin; an identity with no recognized role fails closed. The profile displays the complete server role list rather than permitting role switching.
 
-The complete backend permission list is retained read-only, and `hasServerPermission` performs an exact permission-key check for future API-integrated features. Existing module guards continue to use the local permission matrix only for prototype modules not yet migrated to API authority. Those guards are a presentation convenience, not a backend security boundary. Laboratory API persistence and authorization integration remain explicitly outside this change.
+The complete backend permission list is retained read-only, and `hasServerPermission` performs an exact permission-key check for API-integrated features. Existing module guards continue to use the local permission matrix only for prototype modules not yet migrated to API authority. Those guards are a presentation convenience, not a backend security boundary. Laboratory API persistence and authorization now use exact server permissions as documented in `frontend-laboratory-api-integration.md`.
 
 ## Legacy cleanup
 

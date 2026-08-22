@@ -167,10 +167,9 @@ export function DashboardPage() {
               {labStatuses.length === 0 ? (
                 <EmptyState title="Belum ada laboratorium" description="Status laboratorium akan tampil setelah data laboratorium tersedia." className="py-8 sm:col-span-3" />
               ) : labStatuses.map(({ lab, online, problem, total, inUse, todaySchedule }) => (
-                <Link
+                <div
                   key={lab.id}
-                  to={`/laboratories/${lab.id}`}
-                  className="rounded-xl border border-base-700/70 bg-base-800/60 p-4 transition-all hover:border-base-600 hover:shadow-soft"
+                  className="rounded-xl border border-base-700/70 bg-base-800/60 p-4"
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -195,7 +194,8 @@ export function DashboardPage() {
                   ) : (
                     <p className="mt-2 text-[10px] text-ink-muted">Tidak ada jadwal</p>
                   )}
-                </Link>
+                  <p className="mt-2 text-[10px] text-ink-muted">Data operasional lokal · belum terhubung ke Laboratory API</p>
+                </div>
               ))}
             </CardContent>
           </Card>
