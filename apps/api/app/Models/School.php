@@ -25,4 +25,9 @@ class School extends Model
     {
         return $this->hasMany(SchoolMembership::class);
     }
+
+    public function laboratories(): HasMany
+    {
+        return $this->hasMany(Laboratory::class);
+    }
 }

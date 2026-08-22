@@ -1,6 +1,6 @@
 # Backend Foundation Sprint 1
 
-SmartLab's backend is a Laravel 13 REST API under `apps/api`. PostgreSQL is the canonical application database for local development and production. The early automated suite uses SQLite in-memory storage only for portable tests; it does not validate PostgreSQL-specific behavior. PostgreSQL integration validation is therefore pending.
+SmartLab's backend is a Laravel 13 REST API under `apps/api`. PostgreSQL is the canonical application database for local development and production. The portable automated suite uses SQLite in-memory storage, while repository CI also validates PostgreSQL 16 with `migrate:fresh --seed --force`.
 
 Authentication uses Laravel Sanctum with stateful session-cookie middleware for the first-party SPA and bearer tokens for mobile or API token clients. Application identity models use ULIDs, including `User`; Sanctum's `personal_access_tokens.tokenable_id` is an ULID morph key so token authentication remains compatible with that identity type.
 
