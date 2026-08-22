@@ -1,105 +1,231 @@
 import { create } from 'zustand';
-import type { RoleName, User } from '@/types';
-import {
-  readSessionStorage,
-  readStorage,
-  removeSessionStorage,
-  removeStorage,
-  writeSessionStorage,
-  writeStorage,
-  STORAGE_KEYS,
-} from '@/lib/storage';
+import { createStore } from 'zustand/vanilla';
+import type { StateCreator } from 'zustand';
+import { ApiClientError } from '@/lib/apiClient';
+import { clearLegacyAuthStorage } from '@/lib/authStorage';
+import { toAuthenticatedUser, UnsupportedRoleError } from '@/lib/authIdentity';
+import { authGateway, type AuthGateway } from '@/services/authApi';
+import type { AuthenticatedUser } from '@/types';
 
-interface AuthState {
-  user: User | null;
+export type AuthStatus =
+  | 'bootstrapping'
+  | 'unauthenticated'
+  | 'authenticating'
+  | 'authenticated'
+  | 'logging_out'
+  | 'context_error'
+  | 'error';
+
+export interface AuthIssue {
+  code: string;
+  message: string;
+  status?: number;
+  errors?: Record<string, string[]>;
+  retryAfter?: number;
+  retryable: boolean;
+}
+
+export type AuthActionResult = { ok: true } | { ok: false; issue: AuthIssue };
+
+export interface AuthState {
+  user: AuthenticatedUser | null;
+  status: AuthStatus;
   isAuthenticated: boolean;
-  isHydrated: boolean;
-  remember: boolean;
-  login: (email: string, password: string, users: User[], remember: boolean) => { ok: boolean; error?: string };
-  loginAs: (user: User, remember: boolean) => void;
-  switchRole: (role: RoleName, users: User[]) => void;
-  logout: () => void;
-  hydrate: (users: User[]) => void;
+  issue: AuthIssue | null;
+  bootstrapSession: () => Promise<void>;
+  login: (email: string, password: string, remember: boolean) => Promise<AuthActionResult>;
+  logout: () => Promise<AuthActionResult>;
 }
 
-interface PersistedAuth {
-  userId: string | null;
+interface AuthDependencies {
+  gateway: AuthGateway;
+  clearLegacyAuth: () => void;
 }
 
-function clearPersistedAuth(): void {
-  removeStorage(STORAGE_KEYS.AUTH);
-  removeSessionStorage(STORAGE_KEYS.AUTH);
-}
+const CONTEXT_ERROR_CODES = new Set(['ACTIVE_MEMBERSHIP_REQUIRED', 'SCHOOL_CONTEXT_REQUIRED', 'UNSUPPORTED_ROLE']);
+const ORDINARY_UNAUTHENTICATED_CODES = new Set([
+  'UNAUTHENTICATED',
+  'INVALID_CREDENTIALS',
+  'VALIDATION_FAILED',
+  'TOO_MANY_LOGIN_ATTEMPTS',
+]);
 
-function persistAuth(userId: string, remember: boolean): void {
-  clearPersistedAuth();
-  const auth = { userId };
-  if (remember) {
-    writeStorage(STORAGE_KEYS.AUTH, auth);
-  } else {
-    writeSessionStorage(STORAGE_KEYS.AUTH, auth);
+export function toAuthIssue(error: unknown): AuthIssue {
+  if (error instanceof UnsupportedRoleError) {
+    return {
+      code: 'UNSUPPORTED_ROLE',
+      message: error.message,
+      retryable: false,
+    };
   }
+
+  if (error instanceof ApiClientError) {
+    if (error.kind === 'network' || (error.status !== undefined && error.status >= 500)) {
+      return {
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+        message: 'Layanan autentikasi tidak dapat dijangkau.',
+        status: error.status,
+        retryable: true,
+      };
+    }
+
+    if (error.status === 419) {
+      return {
+        code: 'CSRF_RETRY_FAILED',
+        message: 'Sesi keamanan tidak dapat diperbarui.',
+        status: error.status,
+        retryable: true,
+      };
+    }
+
+    if (error.kind === 'api' && error.code) {
+      return {
+        code: error.code,
+        message: error.message,
+        status: error.status,
+        errors: error.errors,
+        retryAfter: error.retryAfter,
+        retryable: CONTEXT_ERROR_CODES.has(error.code) || !ORDINARY_UNAUTHENTICATED_CODES.has(error.code),
+      };
+    }
+
+    return {
+      code: 'UNEXPECTED_RESPONSE',
+      message: error.message,
+      status: error.status,
+      retryable: true,
+    };
+  }
+
+  return {
+    code: 'UNEXPECTED_RESPONSE',
+    message: 'Respons layanan autentikasi tidak dapat diproses.',
+    retryable: true,
+  };
 }
 
-function loadAuth(): { persisted: PersistedAuth; remember: boolean } {
-  const local = readStorage<PersistedAuth | null>(STORAGE_KEYS.AUTH, null);
-  if (local?.userId) return { persisted: local, remember: true };
-
-  const session = readSessionStorage<PersistedAuth | null>(STORAGE_KEYS.AUTH, null);
-  if (session?.userId) return { persisted: session, remember: false };
-
-  return { persisted: { userId: null }, remember: true };
+function statusForIssue(issue: AuthIssue): AuthStatus {
+  if (CONTEXT_ERROR_CODES.has(issue.code)) return 'context_error';
+  if (ORDINARY_UNAUTHENTICATED_CODES.has(issue.code)) return 'unauthenticated';
+  return 'error';
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isAuthenticated: false,
-  isHydrated: false,
-  remember: true,
-  login(email, password, users, remember) {
-    if (password !== 'password') {
-      return { ok: false, error: 'Password salah. Gunakan password: password' };
-    }
-    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return { ok: false, error: 'Email tidak ditemukan. Coba akun demo.' };
-    }
-    if (user.status !== 'active') {
-      return { ok: false, error: 'Akun nonaktif. Hubungi admin.' };
-    }
-    const updated = { ...user, lastLogin: new Date().toISOString() };
-    persistAuth(user.id, remember);
-    set({ user: updated, isAuthenticated: true, isHydrated: true, remember });
-    return { ok: true };
-  },
-  loginAs(user, remember) {
-    persistAuth(user.id, remember);
-    set({ user, isAuthenticated: true, isHydrated: true, remember });
-  },
-  switchRole(role, users) {
-    // Find a user with that role, fallback to keeping current with role changed
-    set((state) => {
-      if (!state.user) return state;
-      const candidate = users.find((u) => u.role === role);
-      const newUser = candidate ?? { ...state.user, role };
-      persistAuth(newUser.id, state.remember);
-      return { user: newUser, isAuthenticated: true, isHydrated: true };
-    });
-  },
-  logout() {
-    clearPersistedAuth();
-    set({ user: null, isAuthenticated: false, isHydrated: true, remember: true });
-  },
-  hydrate(users) {
-    const { persisted, remember } = loadAuth();
-    const { userId } = persisted;
-    if (userId) {
-      const user = users.find((u) => u.id === userId);
-      if (user) {
-        set({ user, isAuthenticated: true, isHydrated: true, remember });
-        return;
-      }
-    }
-    set({ user: null, isAuthenticated: false, isHydrated: true, remember: true });
-  },
-}));
+export function createAuthState({ gateway, clearLegacyAuth }: AuthDependencies): StateCreator<AuthState> {
+  let bootstrapInFlight: Promise<void> | null = null;
+  let loginInFlight: Promise<AuthActionResult> | null = null;
+  let logoutInFlight: Promise<AuthActionResult> | null = null;
+  let legacyStorageCleared = false;
+
+  function clearLegacyAuthOnce(): void {
+    if (legacyStorageCleared) return;
+    legacyStorageCleared = true;
+    clearLegacyAuth();
+  }
+
+  return (set, get) => ({
+    user: null,
+    status: 'bootstrapping',
+    isAuthenticated: false,
+    issue: null,
+
+    bootstrapSession() {
+      if (bootstrapInFlight) return bootstrapInFlight;
+      if (get().status === 'authenticated') return Promise.resolve();
+
+      clearLegacyAuthOnce();
+      set({ user: null, status: 'bootstrapping', isAuthenticated: false, issue: null });
+
+      const task = (async () => {
+        try {
+          const user = toAuthenticatedUser(await gateway.getCurrentUser());
+          set({ user, status: 'authenticated', isAuthenticated: true, issue: null });
+        } catch (error) {
+          const issue = toAuthIssue(error);
+          set({
+            user: null,
+            status: statusForIssue(issue),
+            isAuthenticated: false,
+            issue: issue.code === 'UNAUTHENTICATED' ? null : issue,
+          });
+        }
+      })();
+
+      bootstrapInFlight = task;
+      void task.finally(() => {
+        if (bootstrapInFlight === task) bootstrapInFlight = null;
+      });
+      return task;
+    },
+
+    login(email, password, remember) {
+      if (loginInFlight) return loginInFlight;
+      clearLegacyAuthOnce();
+      set({ user: null, status: 'authenticating', isAuthenticated: false, issue: null });
+
+      const task = (async (): Promise<AuthActionResult> => {
+        try {
+          await gateway.login(email, password, remember);
+          const user = toAuthenticatedUser(await gateway.getCurrentUser());
+          set({ user, status: 'authenticated', isAuthenticated: true, issue: null });
+          return { ok: true };
+        } catch (error) {
+          const issue = toAuthIssue(error);
+          set({ user: null, status: statusForIssue(issue), isAuthenticated: false, issue });
+          return { ok: false, issue };
+        }
+      })();
+
+      loginInFlight = task;
+      void task.finally(() => {
+        if (loginInFlight === task) loginInFlight = null;
+      });
+      return task;
+    },
+
+    logout() {
+      if (logoutInFlight) return logoutInFlight;
+      clearLegacyAuthOnce();
+      const currentUser = get().user;
+      set({ status: 'logging_out', isAuthenticated: Boolean(currentUser), issue: null });
+
+      const task = (async (): Promise<AuthActionResult> => {
+        try {
+          await gateway.logout();
+          set({ user: null, status: 'unauthenticated', isAuthenticated: false, issue: null });
+          return { ok: true };
+        } catch (error) {
+          const issue = toAuthIssue(error);
+          if (issue.code === 'UNAUTHENTICATED') {
+            set({ user: null, status: 'unauthenticated', isAuthenticated: false, issue: null });
+            return { ok: true };
+          }
+
+          set({
+            user: currentUser,
+            status: currentUser ? 'authenticated' : statusForIssue(issue),
+            isAuthenticated: Boolean(currentUser),
+            issue,
+          });
+          return { ok: false, issue };
+        }
+      })();
+
+      logoutInFlight = task;
+      void task.finally(() => {
+        if (logoutInFlight === task) logoutInFlight = null;
+      });
+      return task;
+    },
+  });
+}
+
+const defaultDependencies: AuthDependencies = {
+  gateway: authGateway,
+  clearLegacyAuth: clearLegacyAuthStorage,
+};
+
+export const useAuthStore = create<AuthState>(createAuthState(defaultDependencies));
+
+export function createAuthStoreForTesting(dependencies: AuthDependencies) {
+  return createStore<AuthState>(createAuthState(dependencies));
+}

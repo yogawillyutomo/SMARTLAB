@@ -24,6 +24,33 @@ export interface User {
   lastLogin?: string;
 }
 
+export interface AuthenticatedSchool {
+  id: ID;
+  code: string;
+  name: string;
+}
+
+export interface AuthenticatedMembership {
+  id: ID;
+  status: 'active';
+  roles: string[];
+}
+
+/**
+ * Server-authoritative identity returned by GET /api/v1/me.
+ * `role` is the narrow compatibility value used by local-only prototype guards;
+ * the complete server roles and permissions remain available alongside it.
+ */
+export interface AuthenticatedUser {
+  id: ID;
+  name: string;
+  email: string;
+  school: AuthenticatedSchool;
+  membership: AuthenticatedMembership;
+  permissions: string[];
+  role: RoleName;
+}
+
 export type DeviceStatus =
   | 'Online'
   | 'Offline'

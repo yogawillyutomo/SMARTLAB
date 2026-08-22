@@ -82,9 +82,8 @@ function AppRoutes() {
 const appRouter = createBrowserRouter([{ path: '*', element: <AppRoutes /> }]);
 
 function AppBootstrap() {
-  const { db, ready } = useAppData();
-  const hydrateAuth = useAuthStore((state) => state.hydrate);
-  const isAuthHydrated = useAuthStore((state) => state.isHydrated);
+  const { ready } = useAppData();
+  const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const hydrateUI = useUIStore((state) => state.hydrate);
   const isUIHydrated = useUIStore((state) => state.isHydrated);
   const hydrationStarted = useRef(false);
@@ -104,12 +103,10 @@ function AppBootstrap() {
   }, [isUIHydrated]);
 
   useEffect(() => {
-    if (ready && !isAuthHydrated) {
-      hydrateAuth(db.users);
-    }
-  }, [db.users, hydrateAuth, isAuthHydrated, ready]);
+    void bootstrapSession();
+  }, [bootstrapSession]);
 
-  if (!ready || !isAuthHydrated || !isUIHydrated) {
+  if (!ready || !isUIHydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-base-900 text-sm text-ink-muted">
         Memuat SmartLab...
