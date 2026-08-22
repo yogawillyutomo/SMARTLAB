@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.2.0
-  description: Contract for implemented SmartLab API v1 identity and Laboratory endpoints.
+  version: 0.3.0
+  description: Contract for implemented SmartLab API v1 session authentication, identity, and Laboratory endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -44,6 +44,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /auth/login:
+    post:
+      operationId: loginSpaSession
+      summary: Authenticate the first-party SPA with a Laravel session
+      description: After obtaining `/sanctum/csrf-cookie`, submit credentials from a configured Sanctum stateful origin. Successful authentication rotates the session identifier, clears the email-plus-IP throttle, and never issues a personal access token. Unknown email, wrong password, and inactive accounts share one response.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpaSessionLoginRequest'
+      responses:
+        '204':
+          description: Session authenticated; response has no body
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyLoginAttempts'
+  /auth/logout:
+    post:
+      operationId: logoutSpaSession
+      summary: End only the current first-party SPA session
+      description: Invalidates the current session, regenerates its CSRF token, and returns no body. It does not revoke personal access tokens, remember tokens for other devices, or other sessions.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '204':
+          description: Current session ended; response has no body
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
   /laboratories:
     get:
       operationId: listLaboratories
@@ -173,6 +207,9 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
+          example:
+            message: Authentication is required.
+            code: UNAUTHENTICATED
     Forbidden:
       description: The active membership lacks the endpoint permission
       content:
@@ -197,6 +234,30 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ValidationError'
+    InvalidCredentials:
+      description: Credentials are invalid or the account is inactive
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            message: The provided credentials are invalid.
+            code: INVALID_CREDENTIALS
+    TooManyLoginAttempts:
+      description: The email-plus-IP login limit has been exceeded; a Retry-After header is returned
+      headers:
+        Retry-After:
+          description: Seconds until another login attempt may be made
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            message: Too many login attempts. Please try again later.
+            code: TOO_MANY_LOGIN_ATTEMPTS
   schemas:
     HealthResponse:
       type: object
@@ -265,6 +326,22 @@ components:
           type: array
           items:
             type: string
+    SpaSessionLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          format: password
+          maxLength: 4096
+        remember:
+          type: boolean
+          default: false
     LaboratoryCollectionResponse:
       type: object
       required: [data]
@@ -366,7 +443,7 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND]
+          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND]
     ValidationError:
       type: object
       required: [message, code, errors]

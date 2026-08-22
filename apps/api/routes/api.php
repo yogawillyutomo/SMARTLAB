@@ -3,10 +3,14 @@
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('health', HealthController::class);
+    Route::post('auth/login', [SpaSessionAuthController::class, 'login']);
+    Route::post('auth/logout', [SpaSessionAuthController::class, 'logout'])
+        ->middleware('auth:sanctum');
     Route::get('me', MeController::class)->middleware('auth:sanctum');
 
     Route::middleware('auth:sanctum')->group(function (): void {
