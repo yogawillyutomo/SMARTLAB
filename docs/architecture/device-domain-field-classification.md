@@ -1,6 +1,6 @@
 # Device Domain Field Classification
 
-Status: Proposed companion to [Device Domain Contract RFC](device-domain-contract.md)
+Status: Approved companion to Device Domain Contract RFC
 
 Classification source: current frontend `Device`, technical profiles, monitoring behavior, Asset linkage, Layout references, and AppDB migration rules.
 

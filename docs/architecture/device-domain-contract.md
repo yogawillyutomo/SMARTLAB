@@ -1,6 +1,6 @@
 # Device Domain Contract RFC
 
-Status: Proposed for architecture review
+Status: Approved — Architecture Locked
 
 Scope: Contract and implementation sequencing only; no Device API, database, frontend, or migration implementation
 
