@@ -32,7 +32,7 @@ export interface AuthState {
   status: AuthStatus;
   isAuthenticated: boolean;
   issue: AuthIssue | null;
-  bootstrapSession: () => Promise<void>;
+  bootstrapSession: (options?: { force?: boolean }) => Promise<void>;
   login: (email: string, password: string, remember: boolean) => Promise<AuthActionResult>;
   logout: () => Promise<AuthActionResult>;
 }
@@ -128,9 +128,9 @@ export function createAuthState({ gateway, clearLegacyAuth }: AuthDependencies):
     isAuthenticated: false,
     issue: null,
 
-    bootstrapSession() {
+    bootstrapSession(options) {
       if (bootstrapInFlight) return bootstrapInFlight;
-      if (get().status === 'authenticated') return Promise.resolve();
+      if (get().status === 'authenticated' && !options?.force) return Promise.resolve();
 
       clearLegacyAuthOnce();
       set({ user: null, status: 'bootstrapping', isAuthenticated: false, issue: null });

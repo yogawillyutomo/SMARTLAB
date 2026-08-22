@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createBrowserRouter, Navigate, Route, RouterProvider, Routes } from 'react-router-dom';
 import { AppDataProvider } from '@/hooks/useAppData';
 import { AppLayout } from '@/layouts/AppLayout';
-import { RequireAuth, RequirePermission, NotFoundPage } from '@/routes/guards';
+import { RequireAuth, RequirePermission, RequireServerPermission, NotFoundPage } from '@/routes/guards';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { MonitoringPage } from '@/pages/MonitoringPage';
@@ -12,7 +12,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAppData } from '@/hooks/useAppData';
 
 // Pages
-import { LaboratoriesPage, LaboratoryDetailPage, LaboratoryLayoutPage } from '@/pages/LaboratoriesPage';
+import { LaboratoriesPage, LaboratoryDetailPage, LaboratoryLayoutUnavailablePage } from '@/pages/LaboratoryApiPages';
 import { SchedulesPage } from '@/pages/SchedulesPage';
 import { BookingsPage } from '@/pages/BookingsPage';
 import { SessionsPage } from '@/pages/SessionsPage';
@@ -44,9 +44,9 @@ function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
-        <Route path="/laboratories" element={<RequirePermission module="laboratories"><LaboratoriesPage /></RequirePermission>} />
-        <Route path="/laboratories/:id" element={<RequirePermission module="laboratories"><LaboratoryDetailPage /></RequirePermission>} />
-        <Route path="/laboratories/:id/layout" element={<RequirePermission module="laboratories"><LaboratoryLayoutPage /></RequirePermission>} />
+        <Route path="/laboratories" element={<RequireServerPermission permission="laboratories.view"><LaboratoriesPage /></RequireServerPermission>} />
+        <Route path="/laboratories/:id" element={<RequireServerPermission permission="laboratories.view"><LaboratoryDetailPage /></RequireServerPermission>} />
+        <Route path="/laboratories/:id/layout" element={<RequireServerPermission permission="laboratories.view"><LaboratoryLayoutUnavailablePage /></RequireServerPermission>} />
         <Route path="/schedules" element={<RequirePermission module="schedules"><SchedulesPage /></RequirePermission>} />
         <Route path="/bookings" element={<RequirePermission module="bookings"><BookingsPage /></RequirePermission>} />
         <Route path="/sessions" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />

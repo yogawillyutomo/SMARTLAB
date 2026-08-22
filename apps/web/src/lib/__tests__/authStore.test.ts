@@ -85,6 +85,23 @@ describe('session bootstrap', () => {
       issue: { code: 'CSRF_RETRY_FAILED', retryable: true },
     });
   });
+
+  it('can force an authoritative /me recheck after an API-integrated feature receives 401', async () => {
+    const getCurrentUser = vi.fn()
+      .mockResolvedValueOnce(currentUser)
+      .mockRejectedValueOnce(apiError(401, 'UNAUTHENTICATED'));
+    const store = createAuthStoreForTesting({
+      gateway: gateway({ getCurrentUser }),
+      clearLegacyAuth: vi.fn(),
+    });
+
+    await store.getState().bootstrapSession();
+    expect(store.getState().status).toBe('authenticated');
+    await store.getState().bootstrapSession({ force: true });
+
+    expect(getCurrentUser).toHaveBeenCalledTimes(2);
+    expect(store.getState()).toMatchObject({ status: 'unauthenticated', isAuthenticated: false, user: null });
+  });
 });
 
 describe('login orchestration and failures', () => {

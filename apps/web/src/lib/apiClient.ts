@@ -33,6 +33,7 @@ export interface ApiClient {
   ensureCsrfCookie: () => Promise<void>;
   get: <T>(path: string) => Promise<T>;
   post: <T = void>(path: string, body?: unknown) => Promise<T>;
+  patch: <T = void>(path: string, body?: unknown) => Promise<T>;
 }
 
 interface ApiClientOptions {
@@ -171,7 +172,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     await parseResponse<void>(response);
   }
 
-  async function request<T>(path: string, method: 'GET' | 'POST', body?: unknown, csrfRetry = true): Promise<T> {
+  async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown, csrfRetry = true): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' });
     const mutation = method !== 'GET';
     if (mutation) {
@@ -199,6 +200,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     ensureCsrfCookie,
     get: <T>(path: string) => request<T>(path, 'GET'),
     post: <T = void>(path: string, body?: unknown) => request<T>(path, 'POST', body),
+    patch: <T = void>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
   };
 }
 

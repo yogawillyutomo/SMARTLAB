@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { canView, type ModuleKey } from '@/lib/permissions';
 import { usePermissionStore } from '@/stores/permissionStore';
 import { authIssueMessage } from '@/lib/authMessages';
+import { hasServerPermission } from '@/lib/authIdentity';
 
 function SessionState({ context = false }: { context?: boolean }) {
   const issue = useAuthStore((state) => state.issue);
@@ -61,6 +62,12 @@ export function RequirePermission({ module, children }: { module: ModuleKey; chi
   if (!user || !canView(permissions, user.role, module)) {
     return <NoAccess />;
   }
+  return <>{children}</>;
+}
+
+export function RequireServerPermission({ permission, children }: { permission: string; children: ReactNode }) {
+  const user = useAuthStore((state) => state.user);
+  if (!hasServerPermission(user, permission)) return <NoAccess />;
   return <>{children}</>;
 }
 
