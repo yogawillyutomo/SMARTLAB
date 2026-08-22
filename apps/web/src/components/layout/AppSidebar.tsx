@@ -1,14 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, FlaskConical, X } from 'lucide-react';
-import { NAV_GROUPS } from '@/routes/nav';
+import { getVisibleNavGroupsForUser } from '@/routes/nav';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
-import { canView } from '@/lib/permissions';
 import { usePermissionStore } from '@/stores/permissionStore';
 import { useAppData } from '@/hooks/useAppData';
 import { cn } from '@/utils';
 import { Badge } from '@/components/ui/Badge';
-import { hasServerPermission } from '@/lib/authIdentity';
 
 function useBadgeCounts() {
   const { db } = useAppData();
@@ -24,12 +22,7 @@ export function AppSidebar() {
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
   const badges = useBadgeCounts();
-  const canViewItem = (module: (typeof NAV_GROUPS)[number]['items'][number]['module']) => {
-    if (!user) return false;
-    return module === 'laboratories'
-      ? hasServerPermission(user, 'laboratories.view')
-      : canView(permissions, user.role, module);
-  };
+  const navGroups = getVisibleNavGroupsForUser(permissions, user);
 
   return (
     <>
@@ -67,8 +60,8 @@ export function AppSidebar() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 no-scrollbar">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.filter((item) => canViewItem(item.module));
+          {navGroups.map((group) => {
+            const { items } = group;
             if (items.length === 0) return null;
             return (
               <div key={group.title} className="mb-4">

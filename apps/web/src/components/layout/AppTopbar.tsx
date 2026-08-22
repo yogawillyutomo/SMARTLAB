@@ -27,13 +27,12 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppData } from '@/hooks/useAppData';
 import { relativeTime, initials, cn } from '@/utils';
-import { NAV_GROUPS } from '@/routes/nav';
-import { canView, type ModuleKey } from '@/lib/permissions';
+import { canViewNavigationModule, getVisibleNavItemsForUser } from '@/routes/nav';
+import { type ModuleKey } from '@/lib/permissions';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { usePermissionStore } from '@/stores/permissionStore';
 import { authIssueMessage } from '@/lib/authMessages';
 import { toast } from '@/stores/toastStore';
-import { hasServerPermission } from '@/lib/authIdentity';
 
 interface SearchResult {
   label: string;
@@ -46,16 +45,8 @@ function useGlobalSearch() {
   const { db } = useAppData();
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
-  const canViewModule = (module: ModuleKey) => Boolean(user && (
-    module === 'laboratories'
-      ? hasServerPermission(user, 'laboratories.view')
-      : canView(permissions, user.role, module)
-  ));
-  const pageItems = user
-    ? NAV_GROUPS
-      .flatMap((group) => group.items)
-      .filter((item) => canViewModule(item.module))
-    : [];
+  const canViewModule = (module: ModuleKey) => canViewNavigationModule(permissions, user, module);
+  const pageItems = getVisibleNavItemsForUser(permissions, user);
 
   return (q: string): SearchResult[] => {
     if (!q) return [];

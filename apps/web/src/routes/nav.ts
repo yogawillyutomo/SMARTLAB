@@ -22,7 +22,9 @@ import {
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
+import { hasServerPermission } from '@/lib/authIdentity';
 import { canView, type ModuleKey, type PermissionMatrix, type RoleName } from '@/lib/permissions';
+import type { AuthenticatedUser } from '@/types';
 
 export interface NavItem {
   to: string;
@@ -89,6 +91,35 @@ export function getNavGroupsForPermissions(permissions: PermissionMatrix, role: 
   return NAV_GROUPS.map((group) => group.title === 'Operasional'
     ? { ...group, items: [...group.items, { to: '/journals', label: 'Riwayat & Laporan', icon: ClipboardList, module: 'journals' }] }
     : group);
+}
+
+export function canViewNavigationModule(
+  permissions: PermissionMatrix,
+  user: AuthenticatedUser | null,
+  module: ModuleKey,
+): boolean {
+  if (!user) return false;
+  return module === 'laboratories'
+    ? hasServerPermission(user, 'laboratories.view')
+    : canView(permissions, user.role, module);
+}
+
+export function getVisibleNavGroupsForUser(
+  permissions: PermissionMatrix,
+  user: AuthenticatedUser | null,
+): NavGroup[] {
+  if (!user) return [];
+  return getNavGroupsForPermissions(permissions, user.role).map((group) => ({
+    ...group,
+    items: group.items.filter((item) => canViewNavigationModule(permissions, user, item.module)),
+  }));
+}
+
+export function getVisibleNavItemsForUser(
+  permissions: PermissionMatrix,
+  user: AuthenticatedUser | null,
+): NavItem[] {
+  return getVisibleNavGroupsForUser(permissions, user).flatMap((group) => group.items);
 }
 
 export const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
