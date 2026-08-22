@@ -27,13 +27,12 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppData } from '@/hooks/useAppData';
 import { relativeTime, initials, cn } from '@/utils';
-import type { RoleName } from '@/types';
 import { getNavGroupsForPermissions } from '@/routes/nav';
 import { canView, type ModuleKey } from '@/lib/permissions';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { usePermissionStore } from '@/stores/permissionStore';
-
-const ROLES: RoleName[] = ['Super Admin', 'Admin Lab', 'Kepala Lab', 'Teknisi', 'Guru', 'Ketua Kelas', 'Siswa', 'Pimpinan'];
+import { authIssueMessage } from '@/lib/authMessages';
+import { toast } from '@/stores/toastStore';
 
 interface SearchResult {
   label: string;
@@ -145,7 +144,7 @@ function useGlobalSearch() {
 
 export function AppTopbar() {
   const { setMobileSidebar, activeLabId, setActiveLab, academicYear, semester, setCommandOpen, resolvedTheme, setTheme } = useUIStore();
-  const { user, switchRole, logout } = useAuthStore();
+  const { user, logout, status } = useAuthStore();
   const { db, refresh } = useAppData();
   const canCreateIncident = usePermission('incidents', 'create');
   const navigate = useNavigate();
@@ -161,8 +160,20 @@ export function AppTopbar() {
 
   const searchFn = useGlobalSearch();
   const searchResults = searchOpen ? searchFn(searchQuery) : [];
+  const loggingOut = status === 'logging_out';
 
   const unreadNotifs = db.notifications.filter((n) => !n.read);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    const result = await logout();
+    if (result.ok) {
+      setProfileOpen(false);
+      navigate('/login', { replace: true });
+      return;
+    }
+    toast(authIssueMessage(result.issue), 'error');
+  }
 
   // Cmd+K shortcut
   useEffect(() => {
@@ -356,27 +367,22 @@ export function AppTopbar() {
               <div className="border-b border-base-700 px-4 py-3">
                 <p className="text-sm font-semibold text-ink-primary">{user?.name}</p>
                 <p className="text-xs text-ink-muted">{user?.email}</p>
-                <p className="mt-1 inline-flex rounded-md bg-accent-primary/15 px-2 py-0.5 text-[10px] font-medium text-accent-content">{user?.role}</p>
+                {user && (
+                  <>
+                    <p className="mt-2 text-[10px] text-ink-muted">{user.school.name} · {user.school.code}</p>
+                    <div className="mt-2 flex flex-wrap gap-1" aria-label="Role akun">
+                      {user.membership.roles.map((role) => (
+                        <span key={role} className="inline-flex rounded-md bg-accent-primary/15 px-2 py-0.5 text-[10px] font-medium text-accent-content">
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="p-2">
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Ganti Role (Simulasi)</p>
-                <div className="max-h-44 overflow-y-auto">
-                  {ROLES.map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => {
-                        switchRole(r, db.users);
-                        setProfileOpen(false);
-                      }}
-                      className={cn(
-                        'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-base-700',
-                        user?.role === r ? 'text-accent-content' : 'text-ink-secondary'
-                      )}
-                    >
-                      {r}
-                      {user?.role === r && <span className="h-1.5 w-1.5 rounded-full bg-accent-content" />}
-                    </button>
-                  ))}
+                <div className="rounded-lg px-2 py-1.5 text-[10px] text-ink-muted">
+                  Role dan izin berasal dari sesi sekolah aktif.
                 </div>
               </div>
               <div className="border-t border-base-700 p-2">
@@ -384,13 +390,13 @@ export function AppTopbar() {
                   <Settings className="h-3.5 w-3.5" /> Pengaturan
                 </Link>
                 <button
-                  onClick={() => {
-                    logout();
-                    navigate('/login');
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-danger hover:bg-danger/10"
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  disabled={loggingOut}
+                  aria-busy={loggingOut}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-danger hover:bg-danger/10 disabled:pointer-events-none disabled:opacity-50"
                 >
-                  <LogOut className="h-3.5 w-3.5" /> Keluar
+                  <LogOut className="h-3.5 w-3.5" /> {loggingOut ? 'Keluar...' : 'Keluar'}
                 </button>
               </div>
             </div>

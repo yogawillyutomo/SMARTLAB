@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { can, type ModuleKey, type PermissionAction } from '@/lib/permissions';
 import { usePermissionStore } from '@/stores/permissionStore';
+import { hasServerPermission } from '@/lib/authIdentity';
 
 export function PermissionGuard({ module, action = 'view', children, fallback = null }: { module: ModuleKey; action?: PermissionAction; children: ReactNode; fallback?: ReactNode }) {
   const user = useAuthStore((s) => s.user);
@@ -12,7 +13,7 @@ export function PermissionGuard({ module, action = 'view', children, fallback = 
 
 export function RoleGuard({ roles, children, fallback = null }: { roles: string[]; children: ReactNode; fallback?: ReactNode }) {
   const user = useAuthStore((s) => s.user);
-  if (!user || !roles.includes(user.role)) return <>{fallback}</>;
+  if (!user || !user.membership.roles.some((role) => roles.includes(role))) return <>{fallback}</>;
   return <>{children}</>;
 }
 
@@ -21,4 +22,10 @@ export function usePermission(module: ModuleKey, action: PermissionAction = 'vie
   const user = useAuthStore((s) => s.user);
   const permissions = usePermissionStore((s) => s.permissions);
   return user ? can(permissions, user.role, module, action) : false;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- This hook is the server-permission boundary paired with the guards above.
+export function useServerPermission(permission: string): boolean {
+  const user = useAuthStore((state) => state.user);
+  return hasServerPermission(user, permission);
 }

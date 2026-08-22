@@ -2,7 +2,7 @@
 
 ## Purpose and boundary
 
-SmartLab's first-party React SPA authenticates with Laravel's `web` session guard through Sanctum's stateful API middleware. This stage implements only `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`. It does not add registration, password reset, email verification, MFA, OAuth, tenant selection, personal-access-token issuance, logout-all-devices, or frontend integration.
+SmartLab's first-party React SPA authenticates with Laravel's `web` session guard through Sanctum's stateful API middleware. The backend implements only `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`; the corresponding React integration is documented in `frontend-spa-auth-integration.md`. This flow does not add registration, password reset, email verification, MFA, OAuth, tenant selection, personal-access-token issuance, or logout-all-devices.
 
 Sanctum bearer tokens remain a separate authentication mechanism for future mobile or API clients. Session login never creates a token, and logout never deletes or revokes a bearer token.
 

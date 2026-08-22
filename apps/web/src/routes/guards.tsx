@@ -1,19 +1,54 @@
 import type { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { canView, type ModuleKey } from '@/lib/permissions';
 import { usePermissionStore } from '@/stores/permissionStore';
+import { authIssueMessage } from '@/lib/authMessages';
+
+function SessionState({ context = false }: { context?: boolean }) {
+  const issue = useAuthStore((state) => state.issue);
+  const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base-900 px-6 text-center">
+      <div>
+        <h1 className="text-lg font-bold text-ink-primary">
+          {context ? 'Konteks akun belum dapat digunakan' : 'Layanan autentikasi tidak tersedia'}
+        </h1>
+        <p className="mt-2 max-w-md text-sm text-ink-muted">{authIssueMessage(issue)}</p>
+      </div>
+      {issue?.retryable && (
+        <button
+          type="button"
+          onClick={() => void bootstrapSession()}
+          className="rounded-lg bg-accent-primary px-4 py-2 text-sm font-semibold text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          Coba lagi
+        </button>
+      )}
+      {context && (
+        <Link
+          to="/login"
+          className="text-sm font-medium text-accent-content hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          Kembali ke halaman masuk
+        </Link>
+      )}
+    </div>
+  );
+}
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isHydrated } = useAuthStore();
+  const { isAuthenticated, status } = useAuthStore();
   const location = useLocation();
-  if (!isHydrated) {
+  if (status === 'bootstrapping') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-base-900 text-sm text-ink-muted">
         Memuat sesi...
       </div>
     );
   }
+  if (status === 'error') return <SessionState />;
+  if (status === 'context_error') return <SessionState context />;
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
@@ -39,7 +74,7 @@ export function NoAccess() {
       </div>
       <h2 className="text-lg font-bold text-ink-primary">Akses Ditolak</h2>
       <p className="mt-1 max-w-sm text-sm text-ink-muted">
-        Role Anda tidak memiliki izin untuk mengakses halaman ini. Silakan hubungi administrator atau ganti role melalui menu profil.
+        Role Anda tidak memiliki izin untuk mengakses halaman ini. Silakan hubungi administrator.
       </p>
     </div>
   );
