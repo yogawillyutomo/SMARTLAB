@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.1.0
-  description: Contract for implemented SmartLab API v1 foundation endpoints.
+  version: 0.2.0
+  description: Contract for implemented SmartLab API v1 identity and Laboratory endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -44,6 +44,116 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /laboratories:
+    get:
+      operationId: listLaboratories
+      summary: List Laboratories owned by the current school
+      description: Requires the `laboratories.view` permission. Results are sorted by code and tenant-scoped to the active membership.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Current-school Laboratory collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaboratoryCollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/MembershipContextConflict'
+    post:
+      operationId: createLaboratory
+      summary: Create a Laboratory for the current school
+      description: Requires the `laboratories.create` permission. The server derives `schoolId` from the active membership and enforces code uniqueness inside that school.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLaboratoryRequest'
+      responses:
+        '201':
+          description: Laboratory created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaboratoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/MembershipContextConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /laboratories/{laboratoryId}:
+    parameters:
+      - name: laboratoryId
+        in: path
+        required: true
+        description: Laboratory ULID. Lookups are always scoped to the current school.
+        schema:
+          type: string
+          format: ulid
+    get:
+      operationId: getLaboratory
+      summary: Read one Laboratory owned by the current school
+      description: Requires the `laboratories.view` permission. Another school's Laboratory is indistinguishable from a missing Laboratory.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Current-school Laboratory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaboratoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/LaboratoryNotFound'
+        '409':
+          $ref: '#/components/responses/MembershipContextConflict'
+    patch:
+      operationId: updateLaboratory
+      summary: Partially update one Laboratory owned by the current school
+      description: Requires the `laboratories.update` permission. At least one mutable field must be supplied; identifiers, tenant ownership, and timestamps are immutable.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLaboratoryRequest'
+      responses:
+        '200':
+          description: Updated Laboratory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaboratoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/LaboratoryNotFound'
+        '409':
+          $ref: '#/components/responses/MembershipContextConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
 components:
   securitySchemes:
     sanctumSession:
@@ -56,6 +166,37 @@ components:
       scheme: bearer
       bearerFormat: Sanctum
       description: Sanctum personal access token for mobile or API token clients.
+  responses:
+    Unauthenticated:
+      description: Authentication is required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: The active membership lacks the endpoint permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    LaboratoryNotFound:
+      description: No Laboratory exists in the current school with this identifier
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    MembershipContextConflict:
+      description: No active membership exists, or school context selection is required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ValidationFailed:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
   schemas:
     HealthResponse:
       type: object
@@ -124,6 +265,99 @@ components:
           type: array
           items:
             type: string
+    LaboratoryCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Laboratory'
+    LaboratoryResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Laboratory'
+    Laboratory:
+      type: object
+      required: [id, schoolId, code, name, location, capacity, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: ulid
+        schoolId:
+          type: string
+          format: ulid
+          readOnly: true
+          description: Owning school derived from the active membership context.
+        code:
+          type: string
+          maxLength: 50
+          description: Unique only within the owning school.
+        name:
+          type: string
+          maxLength: 255
+        location:
+          type: string
+          maxLength: 255
+        capacity:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    CreateLaboratoryRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, location, capacity]
+      properties:
+        code:
+          type: string
+          maxLength: 50
+          description: Must be unique inside the current school.
+        name:
+          type: string
+          maxLength: 255
+        location:
+          type: string
+          maxLength: 255
+        capacity:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, inactive]
+          default: active
+    UpdateLaboratoryRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        code:
+          type: string
+          maxLength: 50
+          description: Must be unique inside the current school.
+        name:
+          type: string
+          maxLength: 255
+        location:
+          type: string
+          maxLength: 255
+        capacity:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, inactive]
     ApiError:
       type: object
       required: [message, code]
@@ -132,7 +366,19 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED]
+          enum: [UNAUTHENTICATED, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND]
+    ValidationError:
+      type: object
+      required: [message, code, errors]
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          const: VALIDATION_FAILED
         errors:
           type: object
-          additionalProperties: true
+          additionalProperties:
+            type: array
+            items:
+              type: string
