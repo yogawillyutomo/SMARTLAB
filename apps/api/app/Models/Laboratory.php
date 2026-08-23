@@ -33,6 +33,11 @@ class Laboratory extends Model
         return $this->hasMany(Device::class, 'home_laboratory_id');
     }
 
+    public function layouts(): HasMany
+    {
+        return $this->hasMany(Layout::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
