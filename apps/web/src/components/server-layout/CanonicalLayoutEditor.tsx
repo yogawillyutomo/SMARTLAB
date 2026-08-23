@@ -63,6 +63,10 @@ interface CanonicalLayoutEditorProps {
   onEditorChange: (editor: CanonicalLayoutEditorState) => void;
   onMetadata: (candidate: UnplacedDeviceCandidateDto) => void;
   showUnplacedPanel?: boolean;
+  metadataLoadingIds?: ReadonlySet<string>;
+  metadataErrors?: Readonly<Record<string, string>>;
+  canResolveDeviceMetadata?: boolean;
+  onDevicePlacementSelect?: (deviceId: string) => void;
 }
 
 export function CanonicalLayoutEditor({
@@ -78,6 +82,10 @@ export function CanonicalLayoutEditor({
   onEditorChange,
   onMetadata,
   showUnplacedPanel = true,
+  metadataLoadingIds = new Set(),
+  metadataErrors = {},
+  canResolveDeviceMetadata = false,
+  onDevicePlacementSelect,
 }: CanonicalLayoutEditorProps) {
   const [selection, setSelection] = useState<LayoutGridSelection>(null);
   const [tool, setTool] = useState<PlacementTool>(null);
@@ -219,7 +227,14 @@ export function CanonicalLayoutEditor({
           selection={selection}
           editable={editable}
           placingLabel={placingLabel}
-          onSelect={(next) => { setSelection(next); setTool(null); }}
+          onSelect={(next) => {
+            setSelection(next);
+            setTool(null);
+            if (next?.kind === 'device') {
+              const placement = editor.devicePlacements.find((item) => editorChildKey(item) === next.key);
+              if (placement && !metadataById[placement.deviceId]) onDevicePlacementSelect?.(placement.deviceId);
+            }
+          }}
           onEmptyCell={onEmptyCell}
         />
 
@@ -267,7 +282,7 @@ export function CanonicalLayoutEditor({
                       <Select
                         label="Role"
                         value={selectedDevice.role ?? ''}
-                        disabled={!editable}
+                        disabled={!editable || !metadataById[selectedDevice.deviceId]}
                         options={placementRoleOptions(metadataById[selectedDevice.deviceId]?.deviceType, selectedDevice.role)}
                         onChange={(event) => apply(updateDevicePlacement(
                           editor,
@@ -276,6 +291,15 @@ export function CanonicalLayoutEditor({
                           metadataById[selectedDevice.deviceId]?.deviceType,
                         ))}
                       />
+                      {!metadataById[selectedDevice.deviceId] && metadataLoadingIds.has(selectedDevice.deviceId) && (
+                        <p role="status" className="text-xs text-ink-muted">Memuat metadata Device canonical untuk pilihan role...</p>
+                      )}
+                      {!metadataById[selectedDevice.deviceId] && metadataErrors[selectedDevice.deviceId] && (
+                        <p role="alert" className="text-xs text-danger">{metadataErrors[selectedDevice.deviceId]}</p>
+                      )}
+                      {!metadataById[selectedDevice.deviceId] && !metadataLoadingIds.has(selectedDevice.deviceId) && !metadataErrors[selectedDevice.deviceId] && (
+                        <p className="text-xs text-ink-muted">{canResolveDeviceMetadata ? 'Pilih kembali Device untuk memuat jenis canonical.' : 'Role tidak dapat diubah tanpa izin devices.view; editing lain tetap tersedia.'}</p>
+                      )}
                     </>
                   )}
                   <div className="grid grid-cols-2 gap-2">

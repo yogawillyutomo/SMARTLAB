@@ -60,6 +60,28 @@ describe('canonical sparse Layout grid', () => {
     expect(markup).toContain('Halaman 2 dari 2 · 12 kandidat');
   });
 
+  it('does not eagerly resolve Device details while rendering existing placements', () => {
+    const onDevicePlacementSelect = vi.fn();
+    renderToStaticMarkup(
+      <CanonicalLayoutEditor
+        editor={layoutEditorStateFromServer(layout)}
+        editable
+        metadataById={{}}
+        unplaced={{ status: 'disabled', data: [], meta: null }}
+        unplacedSearch=""
+        onUnplacedSearchChange={vi.fn()}
+        onUnplacedSearch={vi.fn()}
+        onUnplacedPage={vi.fn()}
+        onRetryUnplaced={vi.fn()}
+        onEditorChange={vi.fn()}
+        onMetadata={vi.fn()}
+        canResolveDeviceMetadata
+        onDevicePlacementSelect={onDevicePlacementSelect}
+      />,
+    );
+    expect(onDevicePlacementSelect).not.toHaveBeenCalled();
+  });
+
   it('keeps read-only grid items keyboard-addressable while disabling empty-cell mutation', () => {
     const markup = renderToStaticMarkup(
       <LayoutGrid editor={layoutEditorStateFromServer(layout)} metadataById={{}} selection={null} editable={false} placingLabel={null} onSelect={vi.fn()} onEmptyCell={vi.fn()} />,

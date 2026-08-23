@@ -18,6 +18,14 @@ import {
   layoutPageContractIssue,
   loadLayoutWorkspaceData,
   LayoutMutationGate,
+  LayoutRouteScope,
+  LayoutDeviceMetadataCache,
+  assertLayoutOwnership,
+  assertLayoutPageOwnership,
+  workspaceAfterActivation,
+  workspaceAfterDraftDeletion,
+  shouldLoadPlacementMetadata,
+  mutationReconciliationIssue,
   saveCanonicalLayoutDraft,
   activateCanonicalLayoutDraft,
   deleteCanonicalLayoutDraft,
@@ -32,10 +40,12 @@ import {
   type LayoutCreateFormValues,
   type LayoutSection,
   type LayoutWorkspaceData,
+  type LayoutRouteScopeToken,
 } from '@/lib/layoutPage';
 import { layoutCapabilities, layoutPresentationIssue, type LayoutPresentationIssue } from '@/lib/layoutPresentation';
 import { laboratoryGateway } from '@/services/laboratoryApi';
-import { layoutGateway, type LayoutDto, type UnplacedDeviceCandidateDto, type UnplacedDevicePage } from '@/services/layoutApi';
+import { LayoutContractError, layoutGateway, type LayoutDto, type UnplacedDeviceCandidateDto, type UnplacedDevicePage } from '@/services/layoutApi';
+import { deviceGateway } from '@/services/deviceApi';
 import { indexLayoutDeviceMetadata, type CanonicalLayoutEditorState, type LayoutDeviceMetadataById } from '@/domain/server-layout';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';
@@ -90,6 +100,8 @@ export default function LaboratoryLayoutApiPage() {
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archivePage, setArchivePage] = useState(1);
   const [metadataById, setMetadataById] = useState<LayoutDeviceMetadataById>({});
+  const [metadataLoadingIds, setMetadataLoadingIds] = useState<ReadonlySet<string>>(new Set());
+  const [metadataErrors, setMetadataErrors] = useState<Readonly<Record<string, string>>>({});
   const [unplaced, setUnplaced] = useState<UnplacedState>({ status: 'disabled', data: [], meta: null });
   const [unplacedPage, setUnplacedPage] = useState(1);
   const [unplacedSearchInput, setUnplacedSearchInput] = useState('');
@@ -99,12 +111,28 @@ export default function LaboratoryLayoutApiPage() {
   const [createErrors, setCreateErrors] = useState<LayoutCreateFormErrors>({});
   const [mutation, setMutation] = useState<'create' | 'save' | 'activate' | 'delete' | null>(null);
   const [actionIssue, setActionIssue] = useState<LayoutPresentationIssue | null>(null);
+  const [reconciliationPending, setReconciliationPending] = useState<'activate' | 'delete' | null>(null);
   const [confirmAction, setConfirmAction] = useState<'activate' | 'delete' | 'reload' | null>(null);
   const loadGeneration = useRef(0);
   const unplacedGeneration = useRef(0);
   const archiveGeneration = useRef(0);
   const archiveListGeneration = useRef(0);
+  const metadataGeneration = useRef(0);
   const mutationGate = useRef(new LayoutMutationGate());
+  const metadataCache = useRef(new LayoutDeviceMetadataCache());
+  const routeScope = useRef(new LayoutRouteScope());
+  const routeEntry = routeScope.current.enter(laboratoryId ?? null);
+  const routeToken = routeEntry.token;
+
+  if (routeEntry.changed) {
+    loadGeneration.current += 1;
+    unplacedGeneration.current += 1;
+    archiveGeneration.current += 1;
+    archiveListGeneration.current += 1;
+    metadataGeneration.current += 1;
+    mutationGate.current = new LayoutMutationGate();
+    metadataCache.current = new LayoutDeviceMetadataCache();
+  }
 
   const dirty = layoutEditorIsDirty(baseline, editor);
   const blocker = useBlocker(dirty);
@@ -131,39 +159,88 @@ export default function LaboratoryLayoutApiPage() {
     setEditor(pair.editor);
   }, []);
 
-  const loadWorkspace = useCallback(async (targetArchivePage = 1, preserveSection = false) => {
-    if (!laboratoryId) {
+  const loadWorkspace = useCallback(async (
+    targetArchivePage = 1,
+    preserveSection = false,
+    scope: LayoutRouteScopeToken = routeToken,
+  ) => {
+    if (!routeScope.current.isCurrent(scope)) return false;
+    if (!scope.laboratoryId) {
       setPageState({ status: 'not_found', message: 'ID Laboratory pada route tidak tersedia.' });
-      return;
+      return false;
     }
     const generation = ++loadGeneration.current;
     setPageState({ status: 'loading' });
     try {
-      const workspace = await loadLayoutWorkspaceData(laboratoryId, { laboratory: laboratoryGateway, layout: layoutGateway }, targetArchivePage);
-      if (generation !== loadGeneration.current) return;
+      const workspace = await loadLayoutWorkspaceData(scope.laboratoryId, { laboratory: laboratoryGateway, layout: layoutGateway }, targetArchivePage);
+      if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return false;
       setPageState({ status: 'ready', workspace });
       installDraft(workspace.draft);
       setArchiveDetail(null);
       if (!preserveSection) setSection(initialLayoutSection(workspace, capabilities.update));
+      return true;
     } catch (error) {
-      if (generation !== loadGeneration.current) return;
+      if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return false;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth();
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return false;
+      }
       else setPageState(issue.notFound ? { status: 'not_found', message: issue.message } : { status: 'error', issue });
+      return false;
     }
-  }, [capabilities.update, installDraft, laboratoryId, recoverAuth]);
+  }, [capabilities.update, installDraft, recoverAuth, routeToken]);
 
   useEffect(() => {
-    void loadWorkspace(1);
-    return () => { loadGeneration.current += 1; };
-  }, [loadWorkspace]); // Route identity owns a fresh canonical workspace.
+    setPageState({ status: 'loading' });
+    setSection('draft');
+    setBaseline(null);
+    setEditor(null);
+    setArchiveDetail(null);
+    setArchiveLoading(false);
+    setArchivePage(1);
+    setMetadataById({});
+    setMetadataLoadingIds(new Set());
+    setMetadataErrors({});
+    setUnplaced({ status: 'disabled', data: [], meta: null });
+    setUnplacedPage(1);
+    setUnplacedSearchInput('');
+    setUnplacedSearch('');
+    setCreateOpen(false);
+    setCreateErrors({});
+    setMutation(null);
+    setActionIssue(null);
+    setReconciliationPending(null);
+    setConfirmAction(null);
+    void loadWorkspace(1, false, routeToken);
+    return () => {
+      loadGeneration.current += 1;
+      unplacedGeneration.current += 1;
+      archiveGeneration.current += 1;
+      archiveListGeneration.current += 1;
+      metadataGeneration.current += 1;
+    };
+  }, [loadWorkspace, routeToken]); // Route identity owns a fresh canonical workspace.
 
   const editorId = editor?.id;
   const editorStatus = editor?.status;
+  const editorLaboratoryId = editor?.laboratoryId;
+  const editorSchoolId = editor?.schoolId;
+  const workspaceLaboratory = pageState.status === 'ready' ? pageState.workspace.laboratory : null;
 
-  const loadUnplaced = useCallback(async (page = unplacedPage, search = unplacedSearch) => {
+  const loadUnplaced = useCallback(async (
+    page = unplacedPage,
+    search = unplacedSearch,
+    scope: LayoutRouteScopeToken = routeToken,
+  ) => {
+    if (!routeScope.current.isCurrent(scope)) return;
+    if (!workspaceLaboratory || workspaceLaboratory.id !== scope.laboratoryId) return;
     if (!editorId || editorStatus !== 'draft' || !capabilities.viewUnplacedDevices) {
       setUnplaced({ status: 'disabled', data: [], meta: null });
+      return;
+    }
+    if (editorLaboratoryId !== workspaceLaboratory.id || editorSchoolId !== workspaceLaboratory.schoolId) {
+      setUnplaced({ status: 'error', data: [], meta: null, message: 'Ownership draft Layout tidak sesuai Laboratory canonical.' });
       return;
     }
     const generation = ++unplacedGeneration.current;
@@ -174,21 +251,35 @@ export default function LaboratoryLayoutApiPage() {
         perPage: UNPLACED_PAGE_SIZE,
         ...(search.trim() === '' ? {} : { search: search.trim() }),
       });
-      if (generation !== unplacedGeneration.current) return;
+      if (!routeScope.current.isCurrent(scope) || generation !== unplacedGeneration.current) return;
       setUnplaced({ status: 'ready', data: response.data, meta: response.meta });
       setMetadataById((current) => ({ ...current, ...indexLayoutDeviceMetadata(response.data) }));
     } catch (error) {
-      if (generation !== unplacedGeneration.current) return;
+      if (!routeScope.current.isCurrent(scope) || generation !== unplacedGeneration.current) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth();
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      }
       else setUnplaced({ status: 'error', data: [], meta: null, message: issue.message });
     }
-  }, [capabilities.viewUnplacedDevices, editorId, editorStatus, recoverAuth, unplacedPage, unplacedSearch]);
+  }, [
+    capabilities.viewUnplacedDevices,
+    editorId,
+    editorLaboratoryId,
+    editorSchoolId,
+    editorStatus,
+    recoverAuth,
+    routeToken,
+    unplacedPage,
+    unplacedSearch,
+    workspaceLaboratory,
+  ]);
 
   useEffect(() => {
-    void loadUnplaced();
+    void loadUnplaced(unplacedPage, unplacedSearch, routeToken);
     return () => { unplacedGeneration.current += 1; };
-  }, [loadUnplaced]);
+  }, [loadUnplaced, routeToken, unplacedPage, unplacedSearch]);
 
   function openCreate(workspace: LayoutWorkspaceData) {
     setCreateForm(createFormForWorkspace(workspace.active));
@@ -197,42 +288,63 @@ export default function LaboratoryLayoutApiPage() {
   }
 
   async function createDraft(workspace: LayoutWorkspaceData) {
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope)) return;
     const validation = validateLayoutCreateForm(createForm, workspace.active);
     if (!validation.ok) {
       setCreateErrors(validation.errors);
       return;
     }
-    if (!mutationGate.current.begin()) return;
+    const gate = mutationGate.current;
+    if (!gate.begin()) return;
     setMutation('create');
     setActionIssue(null);
     setCreateErrors({});
     try {
       const created = await layoutGateway.createDraft(workspace.laboratory.id, validation.input);
+      if (!routeScope.current.isCurrent(scope)) return;
+      assertLayoutOwnership(created, workspace.laboratory);
       installDraft(created);
       setPageState({ status: 'ready', workspace: { ...workspace, draft: created } });
       setSection('draft');
       setCreateOpen(false);
       toast('Draft Layout dibuat dari respons server.', 'success');
     } catch (error) {
+      if (!routeScope.current.isCurrent(scope)) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth();
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      }
       else {
         setActionIssue(issue);
         setCreateErrors({ request: issue.message, ...issue.fieldErrors });
-        if (isDraftAlreadyExistsError(error)) await loadWorkspace(archivePage, true);
+        if (isDraftAlreadyExistsError(error) && routeScope.current.isCurrent(scope)) {
+          await loadWorkspace(archivePage, true, scope);
+          if (!routeScope.current.isCurrent(scope)) return;
+        }
       }
     } finally {
-      setMutation(null);
-      mutationGate.current.end();
+      if (routeScope.current.isCurrent(scope)) setMutation(null);
+      gate.end();
     }
   }
 
   async function saveDraft() {
-    if (!baseline || !editor || !mutationGate.current.begin()) return;
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || !baseline || !editor) return;
+    const gate = mutationGate.current;
+    if (!gate.begin()) return;
     setMutation('save');
     setActionIssue(null);
     try {
+      if (pageState.status !== 'ready') throw new LayoutContractError();
+      assertLayoutOwnership(baseline, pageState.workspace.laboratory);
+      assertLayoutOwnership(editor, pageState.workspace.laboratory);
       const saved = await saveCanonicalLayoutDraft(layoutGateway, baseline, editor);
+      if (!routeScope.current.isCurrent(scope)) return;
+      if (pageState.status !== 'ready') return;
+      assertLayoutOwnership(saved.layout, pageState.workspace.laboratory);
       setBaseline(saved.editor);
       setEditor(saved.editor);
       setPageState((current) => current.status === 'ready'
@@ -240,118 +352,257 @@ export default function LaboratoryLayoutApiPage() {
         : current);
       toast('Draft Layout tersimpan pada server.', 'success');
       setUnplacedPage(1);
-      if (unplacedPage === 1) void loadUnplaced(1, unplacedSearch);
+      if (unplacedPage === 1 && routeScope.current.isCurrent(scope)) void loadUnplaced(1, unplacedSearch, scope);
     } catch (error) {
+      if (!routeScope.current.isCurrent(scope)) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth();
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      }
       else {
         setActionIssue(issue);
         toast(issue.message, 'error');
         if (issue.versionConflict) setConfirmAction('reload');
       }
     } finally {
-      setMutation(null);
-      mutationGate.current.end();
+      if (routeScope.current.isCurrent(scope)) setMutation(null);
+      gate.end();
     }
   }
 
   async function reloadDraft() {
-    if (!baseline || !mutationGate.current.begin()) return;
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || !baseline || pageState.status !== 'ready') return;
+    const workspace = pageState.workspace;
+    const gate = mutationGate.current;
+    if (!gate.begin()) return;
     setMutation('save');
     setActionIssue(null);
     try {
+      assertLayoutOwnership(baseline, workspace.laboratory);
       const canonical = await layoutGateway.show(baseline.id);
+      if (!routeScope.current.isCurrent(scope)) return;
+      assertLayoutOwnership(canonical, workspace.laboratory);
       installDraft(canonical);
       setPageState((current) => current.status === 'ready'
         ? { status: 'ready', workspace: { ...current.workspace, draft: canonical } }
         : current);
       setConfirmAction(null);
       setUnplacedPage(1);
-      if (unplacedPage === 1) void loadUnplaced(1, unplacedSearch);
+      if (unplacedPage === 1 && routeScope.current.isCurrent(scope)) void loadUnplaced(1, unplacedSearch, scope);
       toast('Draft dimuat ulang dari server.', 'info');
     } catch (error) {
+      if (!routeScope.current.isCurrent(scope)) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth(); else { setActionIssue(issue); toast(issue.message, 'error'); }
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else { setActionIssue(issue); toast(issue.message, 'error'); }
     } finally {
-      setMutation(null);
-      mutationGate.current.end();
+      if (routeScope.current.isCurrent(scope)) setMutation(null);
+      gate.end();
+    }
+  }
+
+  async function reconcileWorkspace(
+    kind: 'activate' | 'delete',
+    scope: LayoutRouteScopeToken = routeToken,
+    targetArchivePage = 1,
+  ) {
+    if (!routeScope.current.isCurrent(scope) || !scope.laboratoryId) return;
+    const generation = ++loadGeneration.current;
+    try {
+      const workspace = await loadLayoutWorkspaceData(
+        scope.laboratoryId,
+        { laboratory: laboratoryGateway, layout: layoutGateway },
+        targetArchivePage,
+      );
+      if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return;
+      setPageState({ status: 'ready', workspace });
+      installDraft(workspace.draft);
+      setArchiveDetail(null);
+      setSection(initialLayoutSection(workspace, capabilities.update));
+      setReconciliationPending(null);
+      setActionIssue(null);
+    } catch (error) {
+      if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return;
+      const issue = issueFor(error);
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+        return;
+      }
+      setReconciliationPending(kind);
+      setActionIssue(mutationReconciliationIssue(kind, issue));
     }
   }
 
   async function activateDraft() {
-    if (!baseline || !editor || !mutationGate.current.begin()) return;
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || !baseline || !editor || pageState.status !== 'ready') return;
+    const workspace = pageState.workspace;
+    const gate = mutationGate.current;
+    if (!gate.begin()) return;
     setMutation('activate');
     setActionIssue(null);
     try {
+      assertLayoutOwnership(baseline, workspace.laboratory);
+      assertLayoutOwnership(editor, workspace.laboratory);
       const activated = await activateCanonicalLayoutDraft(layoutGateway, baseline, editor);
-      setPageState((current) => current.status === 'ready'
-        ? { status: 'ready', workspace: { ...current.workspace, active: activated, draft: null } }
-        : current);
+      if (!routeScope.current.isCurrent(scope)) return;
+      const committedWorkspace = workspaceAfterActivation(workspace, activated);
+      setPageState({ status: 'ready', workspace: committedWorkspace });
       setBaseline(null);
       setEditor(null);
       setConfirmAction(null);
+      setSection('active');
+      setReconciliationPending(null);
       toast('Layout berhasil diaktifkan.', 'success');
       setArchivePage(1);
-      await loadWorkspace(1);
+      if (!routeScope.current.isCurrent(scope)) return;
+      await reconcileWorkspace('activate', scope, 1);
+      if (!routeScope.current.isCurrent(scope)) return;
     } catch (error) {
+      if (!routeScope.current.isCurrent(scope)) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth(); else { setActionIssue(issue); toast(issue.message, 'error'); }
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else { setActionIssue(issue); toast(issue.message, 'error'); }
     } finally {
-      setMutation(null);
-      mutationGate.current.end();
+      if (routeScope.current.isCurrent(scope)) setMutation(null);
+      gate.end();
     }
   }
 
   async function deleteDraft() {
-    if (!baseline || !mutationGate.current.begin()) return;
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || !baseline || pageState.status !== 'ready') return;
+    const workspace = pageState.workspace;
+    const gate = mutationGate.current;
+    if (!gate.begin()) return;
     setMutation('delete');
     setActionIssue(null);
     try {
+      assertLayoutOwnership(baseline, workspace.laboratory);
+      if (!canDeleteLayoutDraft(workspace.laboratory, capabilities, baseline)) {
+        throw new LayoutContractError('Draft Layout tidak aman untuk dihapus dari workspace ini.');
+      }
       await deleteCanonicalLayoutDraft(layoutGateway, baseline);
+      if (!routeScope.current.isCurrent(scope)) return;
+      const committedWorkspace = workspaceAfterDraftDeletion(workspace);
+      setPageState({ status: 'ready', workspace: committedWorkspace });
+      setBaseline(null);
+      setEditor(null);
       setConfirmAction(null);
+      setReconciliationPending(null);
+      setSection(committedWorkspace.active ? 'active' : committedWorkspace.archives.data.length > 0 ? 'history' : 'draft');
       toast('Draft Layout dihapus.', 'success');
-      await loadWorkspace(archivePage);
+      if (!routeScope.current.isCurrent(scope)) return;
+      await reconcileWorkspace('delete', scope, archivePage);
+      if (!routeScope.current.isCurrent(scope)) return;
     } catch (error) {
+      if (!routeScope.current.isCurrent(scope)) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth(); else { setActionIssue(issue); toast(issue.message, 'error'); }
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else { setActionIssue(issue); toast(issue.message, 'error'); }
     } finally {
-      setMutation(null);
-      mutationGate.current.end();
+      if (routeScope.current.isCurrent(scope)) setMutation(null);
+      gate.end();
     }
   }
 
   async function selectArchive(layout: LayoutDto | LayoutWorkspaceData['archives']['data'][number]) {
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || pageState.status !== 'ready') return;
+    const laboratory = pageState.workspace.laboratory;
     const generation = ++archiveGeneration.current;
     setArchiveLoading(true);
     setActionIssue(null);
     try {
       const canonical = await layoutGateway.show(layout.id);
-      if (generation === archiveGeneration.current) setArchiveDetail(canonical);
+      if (!routeScope.current.isCurrent(scope) || generation !== archiveGeneration.current) return;
+      assertLayoutOwnership(canonical, laboratory);
+      setArchiveDetail(canonical);
     } catch (error) {
-      if (generation !== archiveGeneration.current) return;
+      if (!routeScope.current.isCurrent(scope) || generation !== archiveGeneration.current) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth(); else { setActionIssue(issue); setArchiveDetail(null); toast(issue.message, 'error'); }
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else { setActionIssue(issue); setArchiveDetail(null); toast(issue.message, 'error'); }
     } finally {
-      if (generation === archiveGeneration.current) setArchiveLoading(false);
+      if (routeScope.current.isCurrent(scope) && generation === archiveGeneration.current) setArchiveLoading(false);
     }
   }
 
   async function loadArchivePage(page: number) {
-    if (!laboratoryId) return;
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope) || !scope.laboratoryId || pageState.status !== 'ready') return;
+    const laboratory = pageState.workspace.laboratory;
     const generation = ++archiveListGeneration.current;
     setActionIssue(null);
     try {
-      const archives = await layoutGateway.list(laboratoryId, { status: 'archived', page, perPage: ARCHIVE_PAGE_SIZE });
-      if (generation !== archiveListGeneration.current) return;
+      const archives = await layoutGateway.list(scope.laboratoryId, { status: 'archived', page, perPage: ARCHIVE_PAGE_SIZE });
+      if (!routeScope.current.isCurrent(scope) || generation !== archiveListGeneration.current) return;
+      assertLayoutPageOwnership(archives, laboratory);
       setArchivePage(page);
       setArchiveDetail(null);
       setPageState((current) => current.status === 'ready'
         ? { status: 'ready', workspace: { ...current.workspace, archives } }
         : current);
     } catch (error) {
-      if (generation !== archiveListGeneration.current) return;
+      if (!routeScope.current.isCurrent(scope) || generation !== archiveListGeneration.current) return;
       const issue = issueFor(error);
-      if (issue.authBoundary) await recoverAuth(); else { setActionIssue(issue); toast(issue.message, 'error'); }
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else { setActionIssue(issue); toast(issue.message, 'error'); }
+    }
+  }
+
+  async function loadSelectedDeviceMetadata(deviceId: string) {
+    const scope = routeToken;
+    if (!routeScope.current.isCurrent(scope)
+      || pageState.status !== 'ready'
+      || pageState.workspace.laboratory.id !== scope.laboratoryId
+      || !editor) return;
+    const editableDraft = canEditLayoutDraft(pageState.workspace.laboratory, capabilities, editor);
+    if (!shouldLoadPlacementMetadata(editableDraft, capabilities, Boolean(metadataById[deviceId]))) return;
+    const laboratory = pageState.workspace.laboratory;
+    const generation = metadataGeneration.current;
+    setMetadataLoadingIds((current) => new Set(current).add(deviceId));
+    setMetadataErrors((current) => {
+      const next = { ...current };
+      delete next[deviceId];
+      return next;
+    });
+    try {
+      const metadata = await metadataCache.current.load(deviceId, deviceGateway.show, (device) => {
+        if (device.id !== deviceId || device.schoolId !== laboratory.schoolId) {
+          throw new LayoutContractError('Metadata Device tidak dimiliki sekolah canonical yang sedang dibuka.');
+        }
+      });
+      if (!routeScope.current.isCurrent(scope) || generation !== metadataGeneration.current) return;
+      setMetadataById((current) => ({ ...current, [deviceId]: metadata }));
+    } catch (error) {
+      if (!routeScope.current.isCurrent(scope) || generation !== metadataGeneration.current) return;
+      const issue = issueFor(error);
+      if (issue.authBoundary) {
+        await recoverAuth();
+        if (!routeScope.current.isCurrent(scope)) return;
+      } else setMetadataErrors((current) => ({ ...current, [deviceId]: issue.message }));
+    } finally {
+      if (routeScope.current.isCurrent(scope) && generation === metadataGeneration.current) {
+        setMetadataLoadingIds((current) => {
+          const next = new Set(current);
+          next.delete(deviceId);
+          return next;
+        });
+      }
     }
   }
 
@@ -372,6 +623,7 @@ export default function LaboratoryLayoutApiPage() {
   if (pageState.status === 'loading') return <Card><LoadingState label="Memuat workspace Layout canonical..." /></Card>;
   if (pageState.status === 'not_found') return <EmptyState title="Data Layout tidak ditemukan" description={pageState.message} action={<Button onClick={() => navigate('/laboratories')}>Kembali</Button>} />;
   if (pageState.status === 'error') return <Card><ErrorState message={pageState.issue.message} onRetry={pageState.issue.retryable ? () => void loadWorkspace() : undefined} /></Card>;
+  if (pageState.workspace.laboratory.id !== routeToken.laboratoryId) return <Card><LoadingState label="Mengganti workspace Laboratory..." /></Card>;
 
   const workspace = pageState.workspace;
   const canCreate = canCreateLayoutDraft(workspace.laboratory, capabilities, workspace.draft);
@@ -402,12 +654,17 @@ export default function LaboratoryLayoutApiPage() {
       {isInactive && <div role="status" className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-warning-foreground">Laboratorium nonaktif: Layout tetap dapat dibaca dan draft dapat dihapus, tetapi create, edit, save, dan activate diblokir.</div>}
       {dirty && <div role="status" className="rounded-xl border border-info/40 bg-info/10 p-3 text-sm text-info">Ada perubahan draft yang belum disimpan.</div>}
       {actionIssue && (
-        <div role="alert" className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+        <div role="alert" className={`rounded-xl border p-3 text-sm ${reconciliationPending ? 'border-warning/40 bg-warning/10 text-warning-foreground' : 'border-danger/40 bg-danger/10 text-danger'}`}>
           <p>{actionIssue.message}</p>
           {Object.entries(actionIssue.fieldErrors).length > 0 && (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
               {Object.entries(actionIssue.fieldErrors).map(([field, message]) => <li key={field}><span className="font-semibold">{field}:</span> {message}</li>)}
             </ul>
+          )}
+          {reconciliationPending && (
+            <Button className="mt-3" size="sm" variant="secondary" onClick={() => void reconcileWorkspace(reconciliationPending, routeToken, archivePage)}>
+              Sinkronkan ulang
+            </Button>
           )}
         </div>
       )}
@@ -426,7 +683,7 @@ export default function LaboratoryLayoutApiPage() {
             {section === 'draft' && (
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} disabled={Boolean(mutation)} onClick={() => dirty ? setConfirmAction('reload') : void reloadDraft()}>Muat ulang</Button>
-                {canDeleteLayoutDraft(capabilities, displayedEditor) && <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} disabled={Boolean(mutation)} onClick={() => setConfirmAction('delete')}>Hapus Draft</Button>}
+                {canDeleteLayoutDraft(workspace.laboratory, capabilities, displayedEditor) && <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} disabled={Boolean(mutation)} onClick={() => setConfirmAction('delete')}>Hapus Draft</Button>}
                 {editable && <Button size="sm" icon={<Save className="h-4 w-4" />} loading={mutation === 'save'} disabled={!dirty || Boolean(mutation)} onClick={() => void saveDraft()}>Simpan</Button>}
                 {editable && <Button variant="success" size="sm" icon={<CheckCircle2 className="h-4 w-4" />} disabled={dirty || Boolean(mutation)} onClick={() => setConfirmAction('activate')}>Aktifkan</Button>}
               </div>
@@ -438,6 +695,10 @@ export default function LaboratoryLayoutApiPage() {
             editor={displayedEditor}
             editable={section === 'draft' && editable}
             metadataById={metadataById}
+            metadataLoadingIds={metadataLoadingIds}
+            metadataErrors={metadataErrors}
+            canResolveDeviceMetadata={section === 'draft' && editable && capabilities.viewUnplacedDevices}
+            onDevicePlacementSelect={(deviceId) => void loadSelectedDeviceMetadata(deviceId)}
             unplaced={section === 'draft' ? unplaced : { status: 'disabled', data: [], meta: null }}
             showUnplacedPanel={section === 'draft'}
             unplacedSearch={unplacedSearchInput}

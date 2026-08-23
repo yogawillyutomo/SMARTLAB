@@ -4,6 +4,7 @@ import {
   replaceEditorStateWithServer,
   serializeLayoutEditorState,
   type CanonicalLayoutEditorState,
+  type LayoutDeviceMetadataById,
 } from '@/domain/server-layout';
 import { LaboratoryContractError, type LaboratoryDto, type LaboratoryGateway } from '@/services/laboratoryApi';
 import {
@@ -15,7 +16,7 @@ import {
   type UnplacedDeviceCandidateDto,
 } from '@/services/layoutApi';
 import type { LayoutCapabilities, LayoutPresentationIssue } from '@/lib/layoutPresentation';
-import type { DeviceType } from '@/services/deviceApi';
+import type { DeviceDto, DeviceGateway, DeviceType } from '@/services/deviceApi';
 import type { DevicePlacementRole } from '@/services/layoutApi';
 
 export const ARCHIVE_PAGE_SIZE = 10;
@@ -63,11 +64,74 @@ export class LayoutMutationGate {
   }
 }
 
+export interface LayoutRouteScopeToken {
+  laboratoryId: string | null;
+  generation: number;
+}
+
+export class LayoutRouteScope {
+  private laboratoryId: string | null = null;
+  private generation = 0;
+  private token: LayoutRouteScopeToken = { laboratoryId: null, generation: 0 };
+
+  enter(laboratoryId: string | null): { token: LayoutRouteScopeToken; changed: boolean } {
+    const changed = laboratoryId !== this.laboratoryId;
+    if (changed) {
+      this.laboratoryId = laboratoryId;
+      this.generation += 1;
+      this.token = { laboratoryId: this.laboratoryId, generation: this.generation };
+    }
+    return { token: this.token, changed };
+  }
+
+  isCurrent(token: LayoutRouteScopeToken): boolean {
+    return token.laboratoryId === this.laboratoryId && token.generation === this.generation;
+  }
+
+  commit(token: LayoutRouteScopeToken, write: () => void): boolean {
+    if (!this.isCurrent(token)) return false;
+    write();
+    return true;
+  }
+}
+
+export class LayoutDeviceMetadataCache {
+  private readonly requests = new Map<string, Promise<ReturnType<typeof layoutMetadataFromDevice>>>();
+
+  load(
+    deviceId: string,
+    show: Pick<DeviceGateway, 'show'>['show'],
+    validate?: (device: DeviceDto) => void,
+  ): Promise<ReturnType<typeof layoutMetadataFromDevice>> {
+    const existing = this.requests.get(deviceId);
+    if (existing) return existing;
+    const request = show(deviceId).then((device) => {
+      validate?.(device);
+      return layoutMetadataFromDevice(device);
+    });
+    this.requests.set(deviceId, request);
+    return request;
+  }
+}
+
 function onlyCurrentLayout(page: LayoutPage, status: 'active' | 'draft'): LayoutDto['id'] | null {
   if (page.data.length > 1) {
     throw new LayoutContractError(`Server mengembalikan lebih dari satu Layout ${status}.`);
   }
   return page.data[0]?.id ?? null;
+}
+
+export function assertLayoutOwnership(
+  layout: Pick<LayoutDto, 'laboratoryId' | 'schoolId'>,
+  laboratory: Pick<LaboratoryDto, 'id' | 'schoolId'>,
+): void {
+  if (layout.laboratoryId !== laboratory.id || layout.schoolId !== laboratory.schoolId) {
+    throw new LayoutContractError('Layout tidak dimiliki Laboratory dan sekolah canonical yang sedang dibuka.');
+  }
+}
+
+export function assertLayoutPageOwnership(page: LayoutPage, laboratory: Pick<LaboratoryDto, 'id' | 'schoolId'>): void {
+  page.data.forEach((layout) => assertLayoutOwnership(layout, laboratory));
 }
 
 export async function loadLayoutWorkspaceData(
@@ -81,12 +145,17 @@ export async function loadLayoutWorkspaceData(
     gateways.layout.list(laboratoryId, { status: 'active', page: 1, perPage: 25 }),
     gateways.layout.list(laboratoryId, { status: 'archived', page: archivePage, perPage: ARCHIVE_PAGE_SIZE }),
   ]);
+  assertLayoutPageOwnership(draftPage, laboratory);
+  assertLayoutPageOwnership(activePage, laboratory);
+  assertLayoutPageOwnership(archives, laboratory);
   const draftId = onlyCurrentLayout(draftPage, 'draft');
   const activeId = onlyCurrentLayout(activePage, 'active');
   const [draft, active] = await Promise.all([
     draftId ? gateways.layout.show(draftId) : Promise.resolve(null),
     activeId ? gateways.layout.show(activeId) : Promise.resolve(null),
   ]);
+  if (draft) assertLayoutOwnership(draft, laboratory);
+  if (active) assertLayoutOwnership(active, laboratory);
   return { laboratory, draft, active, archives };
 }
 
@@ -147,13 +216,24 @@ export function canCreateLayoutDraft(
 export function canEditLayoutDraft(
   laboratory: LaboratoryDto,
   capabilities: LayoutCapabilities,
-  draft: Pick<LayoutDto, 'status'>,
+  draft: Pick<LayoutDto, 'status' | 'laboratoryId' | 'schoolId'>,
 ): boolean {
-  return draft.status === 'draft' && laboratory.status === 'active' && capabilities.update;
+  return draft.status === 'draft'
+    && draft.laboratoryId === laboratory.id
+    && draft.schoolId === laboratory.schoolId
+    && laboratory.status === 'active'
+    && capabilities.update;
 }
 
-export function canDeleteLayoutDraft(capabilities: LayoutCapabilities, layout: Pick<LayoutDto, 'status'>): boolean {
-  return capabilities.delete && layout.status === 'draft';
+export function canDeleteLayoutDraft(
+  laboratory: Pick<LaboratoryDto, 'id' | 'schoolId'>,
+  capabilities: LayoutCapabilities,
+  layout: Pick<LayoutDto, 'status' | 'laboratoryId' | 'schoolId'>,
+): boolean {
+  return capabilities.delete
+    && layout.status === 'draft'
+    && layout.laboratoryId === laboratory.id
+    && layout.schoolId === laboratory.schoolId;
 }
 
 export function layoutEditorIsDirty(
@@ -194,6 +274,47 @@ export function placementRoleOptions(
   if (currentRole === 'student_station') options.push({ value: currentRole, label: 'PC Siswa (metadata tidak tersedia)' });
   if (currentRole === 'teacher_station') options.push({ value: currentRole, label: 'PC Guru (metadata tidak tersedia)' });
   return options;
+}
+
+export function shouldLoadPlacementMetadata(
+  editable: boolean,
+  capabilities: LayoutCapabilities,
+  hasMetadata: boolean,
+): boolean {
+  return editable && capabilities.viewUnplacedDevices && !hasMetadata;
+}
+
+export function layoutMetadataFromDevice(device: DeviceDto): LayoutDeviceMetadataById[string] {
+  return {
+    id: device.id,
+    deviceCode: device.deviceCode,
+    deviceType: device.deviceType,
+    lifecycleStatus: device.lifecycleStatus,
+    hostname: device.hostname,
+    brand: device.brand,
+    model: device.model,
+  };
+}
+
+export function workspaceAfterActivation(workspace: LayoutWorkspaceData, active: LayoutDto): LayoutWorkspaceData {
+  assertLayoutOwnership(active, workspace.laboratory);
+  if (active.status !== 'active') throw new LayoutContractError('Respons aktivasi tidak berstatus active.');
+  return { ...workspace, active, draft: null };
+}
+
+export function workspaceAfterDraftDeletion(workspace: LayoutWorkspaceData): LayoutWorkspaceData {
+  return { ...workspace, draft: null };
+}
+
+export function mutationReconciliationIssue(
+  kind: 'activate' | 'delete',
+  issue: LayoutPresentationIssue,
+): LayoutPresentationIssue {
+  return {
+    ...issue,
+    message: `${kind === 'activate' ? 'Layout sudah berhasil diaktifkan' : 'Draft sudah berhasil dihapus'}, tetapi sinkronisasi daftar terbaru gagal. Coba sinkronkan kembali; mutasi tidak akan diulang.`,
+    retryable: true,
+  };
 }
 
 export function isDraftAlreadyExistsError(error: unknown): boolean {
