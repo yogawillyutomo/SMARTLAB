@@ -30,4 +30,9 @@ class School extends Model
     {
         return $this->hasMany(Laboratory::class);
     }
+
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
+    }
 }

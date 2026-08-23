@@ -1,6 +1,7 @@
 <?php
 
 use App\Application\Identity\SpaAuthenticationException;
+use App\Domain\Device\DeviceDomainException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -62,5 +63,15 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return $response;
+        });
+        $exceptions->render(function (DeviceDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
         });
     })->create();
