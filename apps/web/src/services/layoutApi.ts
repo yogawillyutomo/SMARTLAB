@@ -1,4 +1,5 @@
 import { apiClient, type ApiClient } from '@/lib/apiClient';
+import { isUlid } from '@/lib/ulid';
 import { DEVICE_TYPES, type DeviceType } from '@/services/deviceApi';
 
 export const LAYOUT_STATUSES = ['draft', 'active', 'archived'] as const;
@@ -163,7 +164,6 @@ export class LayoutContractError extends Error {
   }
 }
 
-const ULID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const SUMMARY_FIELDS = [
   'id', 'schoolId', 'laboratoryId', 'name', 'templateKey', 'rows', 'columns', 'status', 'version',
@@ -208,7 +208,7 @@ function nullableString(record: Record<string, unknown>, field: string, maximum:
 
 function requiredUlid(record: Record<string, unknown>, field: string): string {
   const value = requiredString(record, field, 26);
-  if (!ULID_PATTERN.test(value)) throw new LayoutContractError();
+  if (!isUlid(value)) throw new LayoutContractError();
   return value;
 }
 
@@ -460,7 +460,7 @@ export function buildCreateLayoutDraftPayload(input: CreateLayoutDraftInput): Cr
 }
 
 function assertInputUlid(value: unknown, message: string): asserts value is string {
-  if (typeof value !== 'string' || !ULID_PATTERN.test(value)) throw new LayoutContractError(message);
+  if (!isUlid(value)) throw new LayoutContractError(message);
 }
 
 function mapStructuralInput(element: StructuralLayoutElementInput): StructuralLayoutElementInput {

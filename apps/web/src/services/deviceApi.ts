@@ -1,4 +1,5 @@
 import { apiClient, type ApiClient } from '@/lib/apiClient';
+import { isUlid } from '@/lib/ulid';
 
 export const DEVICE_TYPES = [
   'desktop_pc',
@@ -213,18 +214,16 @@ function nullableString(record: Record<string, unknown>, field: string): string 
   return value;
 }
 
-const ULID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-
 function requiredUlid(record: Record<string, unknown>, field: string): string {
   const value = requiredString(record, field);
-  if (!ULID_PATTERN.test(value)) throw new DeviceContractError();
+  if (!isUlid(value)) throw new DeviceContractError();
   return value;
 }
 
 function nullableUlid(record: Record<string, unknown>, field: string): string | null {
   const value = record[field];
   if (value === null) return null;
-  if (typeof value !== 'string' || !ULID_PATTERN.test(value)) throw new DeviceContractError();
+  if (!isUlid(value)) throw new DeviceContractError();
   return value;
 }
 
