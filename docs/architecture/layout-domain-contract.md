@@ -28,7 +28,7 @@ Layout v1 excludes Asset, Loan, Transfer, Maintenance, Incident, Work Order, tel
 5. Empty space is implicit. The backend does not persist one `empty` row per vacant cell and does not require complete grid coverage.
 6. Coordinates are one-based integer grid coordinates. Layout dimensions are 1 through 50 rows and columns. Every persisted footprint is a bounded rectangle with rotation `0`, `90`, `180`, or `270` degrees.
 7. Status is the sole lifecycle discriminator: `draft`, `active`, or `archived`. There is no `isActive` boolean. Each Laboratory may have at most one draft and at most one active Layout, and any number of archived Layouts.
-8. Active and archived Layouts are immutable through the ordinary editor. Editing occurs on the single draft, whose ID remains stable while it is saved. Activation atomically archives the prior active Layout and activates the draft.
+8. Active and archived Layouts are immutable through every editor and external-domain mutation path. Editing occurs on the single draft, whose ID remains stable while it is saved. Activation atomically archives the prior active Layout and activates the draft; external workflows must use a successor revision rather than mutate retained content.
 9. The aggregate has one integer `version`. A full draft save is transactional, requires strong `If-Match`, and either changes all submitted root fields/elements/placements or changes nothing. Children do not have independent concurrency versions.
 10. Effective no-ops preserve `version`, ETag, `updatedAt`, and audit history.
 11. Backend geometry is authoritative; `templateKey` is nullable frontend template provenance only. The backend does not implement or validate named template algorithms.
@@ -151,7 +151,7 @@ Rules:
 
 - at most one draft and one active Layout exist for a Laboratory;
 - many archived Layouts may exist;
-- active and archived content is immutable through ordinary update/delete endpoints;
+- active and archived content is immutable through ordinary update/delete endpoints and every external-domain workflow;
 - a draft may be deleted with `layouts.delete` and a matching ETag;
 - active and archived Layouts cannot be hard-deleted through v1;
 - there is no standalone archive endpoint in v1; activation archives the previous active;
@@ -267,8 +267,10 @@ The one-active-placement rule follows from three enforced invariants: one active
 ### Lifecycle interaction
 
 - `in_service -> spare`: an existing placement remains; spare equipment may also be intentionally placed in a storage/normal position.
+- `spare -> in_service`: an existing placement remains.
 - placing a `retired` or `decommissioned` Device is forbidden.
-- a future Device transition to `retired` or `decommissioned` while actively placed must be rejected until it is explicitly unplaced, or performed by a reviewed orchestration that atomically unplaces and audits it. Layout must never silently erase the placement.
+- a normal Device transition to `retired` or `decommissioned` is blocked while the Device has an active home placement or a reference in the current draft. An active placement requires activation of a successor Layout that omits the Device; a draft-only reference must be removed from or deleted with that draft before transition.
+- a future coordinated lifecycle workflow may combine successor-draft preparation, activation/archive, and the terminal transition atomically, but it cannot update or delete child rows of an existing active or archived Layout.
 - archived references remain regardless of later Device lifecycle.
 
 ## 12. Unplaced Device pool
@@ -287,11 +289,17 @@ The projection is advisory. A later save/activation revalidates Device state tra
 
 ## 13. Boundaries with other domains
 
+Active and archived Layout aggregates are immutable evidence. Transfer, terminal lifecycle, Loan, Maintenance, or any other external domain must never directly update or delete their structural elements or Device placements. Changes to the selected normal arrangement occur only by preparing a draft and activating it as the successor.
+
 ### Transfer
 
-Permanent Transfer is not implemented here. Its future application transaction must lock the Device and involved Layouts, preserve archived Layout evidence, remove the active LAB-A home placement, change `homeLaboratoryId` to LAB-B, and leave the Device unplaced in LAB-B unless an explicitly authorized placement is included. Device identity and QR remain unchanged.
+Permanent Transfer is not implemented here. From the Layout perspective, a normal future Transfer may proceed only when the Device has no active home placement and no reference in the current draft of the source Laboratory. Archived references are historical evidence and do not block Transfer.
 
-Once Layout is implemented, an ordinary Device metadata update cannot change `homeLaboratoryId` while the Device is referenced by an active or draft home placement. It must first be explicitly unplaced or use the future Transfer orchestration. Archived references do not block the change because they are historical evidence.
+If the active Layout contains the Device, the operator must create or edit the successor draft, remove the Device from that draft, and activate it. Activation archives the unchanged predecessor and makes the successor without that Device active. Only then may Transfer change `homeLaboratoryId` from LAB-A to LAB-B; the Device begins unplaced in LAB-B.
+
+A current source-Laboratory draft blocks Transfer only when that draft references the Device being transferred. An unrelated draft that does not reference the Device is not a Layout-level blocker when no active placement exists. A future Transfer orchestration may atomically coordinate a successor Layout revision, its activation/archive, the home-Laboratory change, and audit, but it must preserve existing active/archived rows unchanged; this RFC does not design that convenience workflow further.
+
+The locked generic Device PATCH is not a Transfer operation. Once Layout exists, generic Device metadata updates must not change established home-Laboratory custody, repair placement inconsistencies, or mutate Layout rows. Device identity and QR remain unchanged through a future Transfer.
 
 ### Loan
 
@@ -313,8 +321,10 @@ A Device placement is normal/home assignment, not guaranteed current location. T
 
 Layout detail GET emits a strong ETag equal to the quoted positive integer version, for example `"7"`. Draft PUT, activation, and draft deletion require `If-Match`.
 
+- the only accepted request format is exactly one strong quoted positive integer version: `If-Match: "<version>"`;
 - missing `If-Match` returns HTTP 428 `PRECONDITION_REQUIRED`;
-- malformed or stale `If-Match` returns HTTP 412 `LAYOUT_VERSION_CONFLICT` without disclosing cross-tenant state;
+- invalid preconditions also return HTTP 428 `PRECONDITION_REQUIRED`, including an unquoted value, weak ETag, non-numeric value, wildcard, multiple ETags, zero/negative version, or any other malformed form;
+- only after parsing a syntactically valid strong version, a value unequal to the current Layout version returns HTTP 412 `LAYOUT_VERSION_CONFLICT` without disclosing cross-tenant state;
 - every effective root, structure, placement, or status mutation increments the affected Layout version exactly once and updates `updatedAt` once;
 - canonical equality ignores array order, JSON object key order, request-only child temp order, and semantically empty optional values after normalization;
 - an effective no-op returns current canonical data and ETag without changing version, timestamps, or audit history.
@@ -368,8 +378,8 @@ Likely Layout v1 codes are intentionally limited:
 | 409 | `LAYOUT_DEVICE_HOME_MISMATCH` | Device has no home Laboratory or a different home Laboratory |
 | 409 | `LAYOUT_DEVICE_NOT_ELIGIBLE` | Device lifecycle forbids placement |
 | 409 | `LAYOUT_POSITION_OCCUPIED` | final footprints collide |
-| 412 | `LAYOUT_VERSION_CONFLICT` | stale or malformed strong precondition |
-| 428 | `PRECONDITION_REQUIRED` | required `If-Match` absent |
+| 412 | `LAYOUT_VERSION_CONFLICT` | syntactically valid strong Layout version is stale |
+| 428 | `PRECONDITION_REQUIRED` | required `If-Match` is absent or invalid |
 
 Malformed fields, unknown fields, invalid dimensions, unsupported type/role, invalid span/rotation, out-of-bounds geometry, and excessive text use HTTP 422 `VALIDATION_FAILED` with field errors rather than a proliferation of geometry codes. Cross-tenant Laboratory and Device identifiers follow not-found semantics without revealing existence; a supplied cross-tenant Device may surface only as a generic placement reference validation failure.
 
@@ -513,11 +523,12 @@ Backend implementation must add PostgreSQL-first and portable SQLite coverage fo
 - same-home, nullable-home, lifecycle, role/hardware, and duplicate Device rules;
 - draft clone identity and archived reference retention;
 - every geometry bound, span, rotation, collision, sparse empty, and safe resize rule;
-- strong ETag, 428, 412, effective no-op, and one-increment semantics;
+- exact single strong quoted positive-integer ETag parsing; absent/invalid 428; valid-but-stale 412; effective no-op; and one-increment semantics;
 - full transaction rollback on any invalid child;
 - atomic activation/archive under concurrency;
 - correct paginated unplaced query with more Devices than one page;
 - immutable active/archived and draft-only deletion;
+- Transfer and terminal-lifecycle preconditions for active placement, Device-specific draft reference, unrelated draft, archived-only reference, and successor-revision orchestration without direct active/archive mutation;
 - inactive Laboratory mutation policy;
 - bounded audit events with no sensitive/unrelated Device fields;
 - PostgreSQL migration/seed proof and SQLite test migration compatibility.
@@ -534,10 +545,10 @@ Frontend integration later needs strict DTO parsing, server permission guards, d
 | 4 | Device submitted twice/into second active placement | unique/final-state and activation validation reject it |
 | 5 | Device appears in archived and active Layout | valid; archived row is immutable history |
 | 6 | placed Device becomes spare | placement remains; spare is placeable |
-| 7 | placed Device becomes retired/decommissioned | transition must be blocked until explicit unplace or coordinated transaction; history remains |
+| 7 | placed Device becomes retired/decommissioned | blocked until a successor Layout omitting it is activated; existing active/archive rows remain unchanged |
 | 8 | Device loaned to Aula | home placement is unchanged; Loan wins current-location projection |
 | 9 | Device enters external repair | home placement is unchanged; Maintenance wins projection |
-| 10 | permanent LAB-A to LAB-B Transfer | future transaction unplaces LAB-A, changes home, preserves history, leaves LAB-B unplaced by default |
+| 10 | Transfer while active placement exists | blocked until a successor Layout omitting the Device is activated; Transfer never edits the active Layout directly |
 | 11 | two editors save same version | first wins; second receives 412 and cannot overwrite |
 | 12 | no-op save | version, ETag, timestamp, and events remain unchanged |
 | 13 | shrink clips content | entire save fails validation; nothing is dropped |
@@ -548,8 +559,13 @@ Frontend integration later needs strict DTO parsing, server permission guards, d
 | 18 | 1,000 Devices with paginated Device API | dedicated server query and independent pagination remain correct |
 | 19 | save fails after some proposed operations | database transaction rolls back root, children, and events |
 | 20 | legacy local Device IDs | no automatic binding; explicit mapped migration is required |
+| 21 | source draft still references transferring Device | Transfer is blocked because the draft would become invalid after the home-Laboratory change |
+| 22 | no active placement; unrelated source draft omits Device | Layout does not block Transfer merely because the unrelated draft exists |
+| 23 | only archived Layouts reference transferring Device | Transfer is allowed from the Layout perspective; archives remain unchanged |
+| 24 | terminal transition while current draft references Device | transition is blocked pending a successor/current draft that omits the Device and activation where required |
+| 25 | future atomic Transfer/lifecycle convenience workflow | may coordinate successor revision and activation/archive, but cannot mutate existing active/archived content |
 
-The proposed architecture passes all twenty scenarios without weakening locked Device boundaries.
+The proposed architecture passes all twenty-five scenarios without weakening locked Device boundaries.
 
 ## 23. Resolved decisions and remaining questions
 
