@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Eye, FlaskConical, Laptop, Map as MapIcon, Pencil, Plus, Power, ServerOff, Users } from 'lucide-react';
+import { ArrowLeft, Eye, FlaskConical, Laptop, Pencil, Plus, Power, ServerOff, Users } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -353,16 +353,18 @@ export function LaboratoriesPage() {
 interface LaboratoryDetailViewProps {
   state: LaboratoryDetailState;
   canViewDevices: boolean;
+  canViewLayouts: boolean;
   onRetry: () => void;
   onBack: () => void;
   onDevices: (laboratory: LaboratoryDto) => void;
+  onLayout: (laboratory: LaboratoryDto) => void;
 }
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-export function LaboratoryDetailView({ state, canViewDevices, onRetry, onBack, onDevices }: LaboratoryDetailViewProps) {
+export function LaboratoryDetailView({ state, canViewDevices, canViewLayouts, onRetry, onBack, onDevices, onLayout }: LaboratoryDetailViewProps) {
   if (state.status === 'loading') return <Card><LoadingState label="Memuat detail laboratorium..." /></Card>;
   if (state.status === 'not_found') {
     return <EmptyState title="Laboratorium tidak ditemukan" description="Data tidak tersedia pada konteks sekolah aktif." action={<Button onClick={onBack}>Kembali</Button>} />;
@@ -402,9 +404,9 @@ export function LaboratoryDetailView({ state, canViewDevices, onRetry, onBack, o
       <Card>
         <EmptyState
           icon={<ServerOff className="h-7 w-7" />}
-          title="Domain operasional belum terintegrasi"
-          description="Denah, aset, jadwal, jurnal, maintenance, dan aktivitas tetap berada pada domain lokal lama. Device canonical hanya terhubung melalui homeLaboratoryId."
-          action={canViewDevices ? <Button size="sm" onClick={() => onDevices(laboratory)}>Lihat Perangkat</Button> : undefined}
+          title="Domain legacy tetap terpisah"
+          description="Denah dan Device canonical tersedia dari server. Aset, jadwal, jurnal, maintenance, dan aktivitas lokal lama tidak digabungkan berdasarkan ID Laboratory API."
+          action={(canViewLayouts || canViewDevices) ? <div className="flex flex-wrap justify-center gap-2">{canViewLayouts && <Button size="sm" onClick={() => onLayout(laboratory)}>Buka Denah</Button>}{canViewDevices && <Button variant="secondary" size="sm" onClick={() => onDevices(laboratory)}>Lihat Perangkat</Button>}</div> : undefined}
         />
       </Card>
     </div>
@@ -417,6 +419,7 @@ export function LaboratoryDetailPage() {
   const user = useAuthStore((state) => state.user);
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const canViewDevices = hasServerPermission(user, 'devices.view');
+  const canViewLayouts = hasServerPermission(user, 'layouts.view');
   const [state, setState] = useState<LaboratoryDetailState>({ status: 'loading' });
   const loadSequence = useRef(0);
 
@@ -450,30 +453,11 @@ export function LaboratoryDetailPage() {
     <LaboratoryDetailView
       state={state}
       canViewDevices={canViewDevices}
+      canViewLayouts={canViewLayouts}
       onRetry={() => void load()}
       onBack={() => navigate('/laboratories')}
       onDevices={(laboratory) => navigate(`/devices?homeLaboratoryId=${encodeURIComponent(laboratory.id)}`)}
+      onLayout={(laboratory) => navigate(`/laboratories/${encodeURIComponent(laboratory.id)}/layout`)}
     />
   );
-}
-
-export function LaboratoryLayoutUnavailableView({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Denah Laboratorium" description="Batas integrasi Laboratory API" icon={<MapIcon className="h-5 w-5" />} />
-      <Card>
-        <EmptyState
-          icon={<ServerOff className="h-7 w-7" />}
-          title="Denah belum terintegrasi"
-          description="Route denah lokal tidak menghubungkan ID Laboratory API ke layout atau perangkat lokal. Integrasi akan tersedia setelah kontrak Layout dan Device tersedia di backend."
-          action={<Button onClick={onBack}>Kembali ke Laboratorium</Button>}
-        />
-      </Card>
-    </div>
-  );
-}
-
-export function LaboratoryLayoutUnavailablePage() {
-  const navigate = useNavigate();
-  return <LaboratoryLayoutUnavailableView onBack={() => navigate('/laboratories')} />;
 }

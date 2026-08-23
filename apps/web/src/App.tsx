@@ -12,7 +12,8 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAppData } from '@/hooks/useAppData';
 
 // Pages
-import { LaboratoriesPage, LaboratoryDetailPage, LaboratoryLayoutUnavailablePage } from '@/pages/LaboratoryApiPages';
+import { LaboratoriesPage, LaboratoryDetailPage } from '@/pages/LaboratoryApiPages';
+import LaboratoryLayoutApiPage from '@/pages/LaboratoryLayoutApiPage';
 import { DevicesPage, DeviceDetailPage } from '@/pages/DeviceApiPages';
 import { SchedulesPage } from '@/pages/SchedulesPage';
 import { BookingsPage } from '@/pages/BookingsPage';
@@ -47,7 +48,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<RequirePermission module="dashboard"><DashboardPage /></RequirePermission>} />
         <Route path="/laboratories" element={<RequireServerPermission permission="laboratories.view"><LaboratoriesPage /></RequireServerPermission>} />
         <Route path="/laboratories/:id" element={<RequireServerPermission permission="laboratories.view"><LaboratoryDetailPage /></RequireServerPermission>} />
-        <Route path="/laboratories/:id/layout" element={<RequireServerPermission permission="laboratories.view"><LaboratoryLayoutUnavailablePage /></RequireServerPermission>} />
+        <Route path="/laboratories/:laboratoryId/layout" element={<RequireServerPermission permission="layouts.view"><LaboratoryLayoutApiPage /></RequireServerPermission>} />
         <Route path="/devices" element={<RequireServerPermission permission="devices.view"><DevicesPage /></RequireServerPermission>} />
         <Route path="/devices/:id" element={<RequireServerPermission permission="devices.view"><DeviceDetailPage /></RequireServerPermission>} />
         <Route path="/schedules" element={<RequirePermission module="schedules"><SchedulesPage /></RequirePermission>} />

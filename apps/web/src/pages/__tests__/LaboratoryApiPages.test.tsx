@@ -4,7 +4,6 @@ import { hasServerPermission } from '@/lib/authIdentity';
 import {
   LaboratoryDetailView,
   LaboratoryFormFields,
-  LaboratoryLayoutUnavailableView,
   LaboratoryListView,
   type LaboratoryListState,
 } from '@/pages/LaboratoryApiPages';
@@ -110,7 +109,7 @@ describe('Laboratory API list presentation', () => {
 describe('Laboratory API detail and form presentation', () => {
   it('renders an explicit 404 state without consulting local data', () => {
     const markup = renderToStaticMarkup(
-      <LaboratoryDetailView state={{ status: 'not_found' }} canViewDevices={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} />,
+      <LaboratoryDetailView state={{ status: 'not_found' }} canViewDevices={false} canViewLayouts={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} onLayout={vi.fn()} />,
     );
     expect(markup).toContain('Laboratorium tidak ditemukan');
     expect(markup).toContain('konteks sekolah aktif');
@@ -118,18 +117,23 @@ describe('Laboratory API detail and form presentation', () => {
 
   it('renders canonical read-only metadata and marks local domains as not integrated', () => {
     const markup = renderToStaticMarkup(
-      <LaboratoryDetailView state={{ status: 'ready', laboratory }} canViewDevices={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} />,
+      <LaboratoryDetailView state={{ status: 'ready', laboratory }} canViewDevices={false} canViewLayouts={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} onLayout={vi.fn()} />,
     );
     expect(markup).toContain(laboratory.schoolId);
     expect(markup).toContain('Dibuat');
     expect(markup).toContain('Diperbarui');
-    expect(markup).toContain('Domain operasional belum terintegrasi');
+    expect(markup).toContain('Domain legacy tetap terpisah');
   });
 
-  it('fails the former layout route in a controlled state instead of binding local data', () => {
-    const markup = renderToStaticMarkup(<LaboratoryLayoutUnavailableView onBack={vi.fn()} />);
-    expect(markup).toContain('Denah belum terintegrasi');
-    expect(markup).toContain('tidak menghubungkan ID Laboratory API');
+  it('offers the canonical Layout route only from exact layouts.view permission', () => {
+    const hidden = renderToStaticMarkup(
+      <LaboratoryDetailView state={{ status: 'ready', laboratory }} canViewDevices={false} canViewLayouts={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} onLayout={vi.fn()} />,
+    );
+    const visible = renderToStaticMarkup(
+      <LaboratoryDetailView state={{ status: 'ready', laboratory }} canViewDevices={false} canViewLayouts onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} onLayout={vi.fn()} />,
+    );
+    expect(hidden).not.toContain('Buka Denah');
+    expect(visible).toContain('Buka Denah');
   });
 
   it('places 422 validation messages on the matching form fields', () => {
