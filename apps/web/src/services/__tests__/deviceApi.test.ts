@@ -45,7 +45,9 @@ function clientWith(overrides: Partial<ApiClient> = {}): ApiClient {
       ? { data: [current], meta: { page: 1, perPage: 25, total: 1, lastPage: 1 } }
       : { data: current }) as ApiClient['get'],
     post: vi.fn(async () => ({ data: current })) as ApiClient['post'],
+    put: vi.fn(async () => ({ data: current })) as ApiClient['put'],
     patch: vi.fn(async () => ({ data: current })) as ApiClient['patch'],
+    delete: vi.fn(async () => undefined) as ApiClient['delete'],
     ...overrides,
   };
 }
