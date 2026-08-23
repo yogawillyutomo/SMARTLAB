@@ -232,6 +232,99 @@ class LayoutApiTest extends TestCase
         );
     }
 
+    public function test_existing_placement_device_identity_cannot_be_reassigned(): void
+    {
+        [, $school] = $this->authenticate(['layouts.update']);
+        $lab = Laboratory::factory()->create(['school_id' => $school->id]);
+        $layout = $this->layout($lab, 'draft', ['updated_at' => now()->subMinute()]);
+        $original = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $replacement = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $placement = $this->placement($layout, $original);
+        $updatedAt = $layout->fresh()->updated_at->toISOString();
+        $payload = $this->replacePayload($layout);
+        $payload['devicePlacements'][0]['deviceId'] = $replacement->id;
+
+        $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"1"'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED')
+            ->assertJsonValidationErrors('devicePlacements.0.deviceId');
+
+        $this->assertDatabaseHas('layout_device_placements', [
+            'id' => $placement->id,
+            'device_id' => $original->id,
+        ]);
+        $this->assertSame(1, $layout->fresh()->version);
+        $this->assertSame($updatedAt, $layout->fresh()->updated_at->toISOString());
+        $this->assertDatabaseCount('layout_change_events', 0);
+    }
+
+    public function test_device_replacement_unplaces_old_identity_and_creates_a_new_placement(): void
+    {
+        [, $school] = $this->authenticate(['layouts.update']);
+        $lab = Laboratory::factory()->create(['school_id' => $school->id]);
+        $layout = $this->layout($lab);
+        $original = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $replacement = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $oldPlacement = $this->placement($layout, $original, ['row' => 2, 'column' => 3]);
+        $payload = $this->replacePayload($layout, ['devicePlacements' => [[
+            'deviceId' => $replacement->id, 'role' => null, 'label' => null,
+            'row' => 2, 'column' => 3, 'rowSpan' => 1, 'columnSpan' => 1, 'rotation' => 0,
+        ]]]);
+
+        $response = $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.devicePlacements.0.deviceId', $replacement->id);
+        $newPlacementId = $response->json('data.devicePlacements.0.id');
+
+        $this->assertNotSame($oldPlacement->id, $newPlacementId);
+        $this->assertDatabaseMissing('layout_device_placements', ['id' => $oldPlacement->id]);
+        $this->assertDatabaseHas('layout_device_placements', [
+            'id' => $newPlacementId,
+            'device_id' => $replacement->id,
+        ]);
+        $events = LayoutChangeEvent::query()->orderBy('id')->get();
+        $this->assertSame(['device.unplaced', 'device.placed'], $events->pluck('event_type')->all());
+        $this->assertSame($original->id, $events[0]->changes['deviceId']);
+        $this->assertSame($replacement->id, $events[1]->changes['deviceId']);
+        $this->assertSame(2, $layout->fresh()->version);
+    }
+
+    public function test_existing_placement_move_preserves_placement_and_device_identity(): void
+    {
+        [, $school] = $this->authenticate(['layouts.update']);
+        $lab = Laboratory::factory()->create(['school_id' => $school->id]);
+        $layout = $this->layout($lab);
+        $device = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $placement = $this->placement($layout, $device);
+        $payload = $this->replacePayload($layout);
+        $payload['devicePlacements'][0]['row'] = 2;
+        $payload['devicePlacements'][0]['label'] = 'Moved';
+
+        $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.devicePlacements.0.id', $placement->id)
+            ->assertJsonPath('data.devicePlacements.0.deviceId', $device->id)
+            ->assertJsonPath('data.devicePlacements.0.row', 2);
+
+        $event = LayoutChangeEvent::query()->sole();
+        $this->assertSame('device.moved', $event->event_type);
+        $this->assertSame($placement->id, $event->changes['placementId']);
+        $this->assertSame($device->id, $event->changes['deviceId']);
+    }
+
     public function test_semantically_reordered_trim_normalized_put_is_noop_but_stale_noop_fails_first(): void
     {
         [, $school] = $this->authenticate(['layouts.update']);
@@ -363,6 +456,79 @@ class LayoutApiTest extends TestCase
 
         $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"1"'])
             ->assertOk()->assertJsonCount(3, 'data.devicePlacements');
+    }
+
+    public function test_placement_role_is_optional_for_station_and_non_station_devices(): void
+    {
+        [, $school] = $this->authenticate(['layouts.update']);
+        $lab = Laboratory::factory()->create(['school_id' => $school->id]);
+        $layout = $this->layout($lab);
+        $deviceTypes = ['printer', 'router', 'network_switch', 'access_point', 'desktop_pc'];
+        $devices = collect($deviceTypes)->map(fn (string $deviceType) => Device::factory()->create([
+            'school_id' => $school->id,
+            'home_laboratory_id' => $lab->id,
+            'device_type' => $deviceType,
+        ]));
+        $laptop = Device::factory()->create([
+            'school_id' => $school->id,
+            'home_laboratory_id' => $lab->id,
+            'device_type' => 'laptop',
+        ]);
+        $placements = $devices->values()->map(fn (Device $device, int $index) => [
+            'deviceId' => $device->id, 'label' => null, 'row' => 1, 'column' => $index + 1,
+            'rowSpan' => 1, 'columnSpan' => 1, 'rotation' => 0,
+        ])->all();
+        $placements[] = [
+            'deviceId' => $laptop->id, 'role' => null, 'label' => null, 'row' => 1, 'column' => 6,
+            'rowSpan' => 1, 'columnSpan' => 1, 'rotation' => 0,
+        ];
+
+        $response = $this->putJson(
+            '/api/v1/layouts/'.$layout->id,
+            $this->replacePayload($layout, ['devicePlacements' => $placements]),
+            ['If-Match' => '"1"'],
+        )->assertOk()->assertJsonCount(6, 'data.devicePlacements');
+
+        $this->assertSame(array_fill(0, 6, null), collect($response->json('data.devicePlacements'))->pluck('role')->all());
+
+        $payload = $this->replacePayload($layout->fresh());
+        $printer = $devices->firstWhere('device_type', 'printer');
+        $printerIndex = collect($payload['devicePlacements'])->search(
+            fn (array $placement) => $placement['deviceId'] === $printer->id,
+        );
+        $this->assertNotFalse($printerIndex);
+        $payload['devicePlacements'][$printerIndex]['role'] = 'student_station';
+        $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"2"'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED')
+            ->assertJsonValidationErrors("devicePlacements.{$printerIndex}.role");
+        $this->assertSame(2, $layout->fresh()->version);
+    }
+
+    public function test_omitting_existing_placement_role_normalizes_it_to_null_as_one_move(): void
+    {
+        [, $school] = $this->authenticate(['layouts.update']);
+        $lab = Laboratory::factory()->create(['school_id' => $school->id]);
+        $layout = $this->layout($lab);
+        $device = Device::factory()->create([
+            'school_id' => $school->id, 'home_laboratory_id' => $lab->id,
+        ]);
+        $placement = $this->placement($layout, $device, ['role' => 'teacher_station']);
+        $payload = $this->replacePayload($layout);
+        unset($payload['devicePlacements'][0]['role']);
+
+        $this->putJson('/api/v1/layouts/'.$layout->id, $payload, ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.devicePlacements.0.id', $placement->id)
+            ->assertJsonPath('data.devicePlacements.0.role', null);
+
+        $event = LayoutChangeEvent::query()->sole();
+        $this->assertSame('device.moved', $event->event_type);
+        $this->assertSame(['role'], $event->changed_fields);
+        $this->assertSame('teacher_station', $event->changes['before']['role']);
+        $this->assertNull($event->changes['after']['role']);
     }
 
     public function test_put_rejects_closed_or_incomplete_payload_and_foreign_child_ids(): void

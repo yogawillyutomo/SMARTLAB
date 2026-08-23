@@ -1379,7 +1379,7 @@ components:
     DevicePlacementInput:
       type: object
       additionalProperties: false
-      required: [deviceId, role, row, column, rowSpan, columnSpan, rotation]
+      required: [deviceId, row, column, rowSpan, columnSpan, rotation]
       properties:
         id:
           type: string

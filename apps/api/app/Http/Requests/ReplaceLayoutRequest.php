@@ -56,7 +56,7 @@ class ReplaceLayoutRequest extends FormRequest
             'devicePlacements.*' => ['required', 'array:id,deviceId,role,label,row,column,rowSpan,columnSpan,rotation'],
             'devicePlacements.*.id' => ['sometimes', 'string', 'ulid', 'distinct'],
             'devicePlacements.*.deviceId' => ['required', 'string', 'ulid'],
-            'devicePlacements.*.role' => ['present', 'nullable', 'string', Rule::in(LayoutCatalog::PLACEMENT_ROLES)],
+            'devicePlacements.*.role' => ['sometimes', 'nullable', 'string', Rule::in(LayoutCatalog::PLACEMENT_ROLES)],
             'devicePlacements.*.label' => ['sometimes', 'nullable', 'string', 'max:60'],
             'devicePlacements.*.row' => ['required', 'integer', 'min:1'],
             'devicePlacements.*.column' => ['required', 'integer', 'min:1'],

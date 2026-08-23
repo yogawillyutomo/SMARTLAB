@@ -151,6 +151,7 @@ class LayoutMutationService
 
             $target = $this->validator->normalize($data);
             $this->assertChildIdsBelongToDraft($layout, $target);
+            $this->assertPlacementDeviceIdentitiesPreserved($layout, $target['devicePlacements']);
             $devices = $this->lockDevices($layout->school_id, $target['devicePlacements']);
             $this->validator->validate($target, $layout->laboratory_id, $devices);
 
@@ -349,6 +350,25 @@ class LayoutMutationService
         }
     }
 
+    /** @param list<array<string, mixed>> $placements */
+    private function assertPlacementDeviceIdentitiesPreserved(Layout $layout, array $placements): void
+    {
+        $existing = $layout->devicePlacements->keyBy('id');
+
+        foreach ($placements as $index => $placement) {
+            if (! array_key_exists('id', $placement)) {
+                continue;
+            }
+
+            $current = $existing->get((string) $placement['id']);
+            if ($current !== null && $current->device_id !== (string) $placement['deviceId']) {
+                throw ValidationException::withMessages([
+                    "devicePlacements.{$index}.deviceId" => ['The selected Device is invalid.'],
+                ]);
+            }
+        }
+    }
+
     /** @param list<array<string, mixed>> $placements @return Collection<string, Device> */
     private function lockDevices(string $schoolId, array $placements): Collection
     {
@@ -479,12 +499,7 @@ class LayoutMutationService
 
             $placement->fill($attributes)->save();
             $after = $this->placementState($placement);
-            if ($before['deviceId'] !== $after['deviceId']) {
-                $events[] = $this->placementEvent('device.unplaced', $before, null);
-                $events[] = $this->placementEvent('device.placed', null, $after);
-            } else {
-                $events[] = $this->placementEvent('device.moved', $before, $after);
-            }
+            $events[] = $this->placementEvent('device.moved', $before, $after);
         }
 
         return $events;
@@ -605,7 +620,7 @@ class LayoutMutationService
         array $changedFields,
         array $changes,
     ): void {
-        $user = $context->membership->user()->first();
+        $context->membership->loadMissing('user');
         LayoutChangeEvent::query()->create([
             'school_id' => $layout->school_id,
             'layout_id' => $layout->id,
@@ -613,7 +628,7 @@ class LayoutMutationService
             'laboratory_id_snapshot' => $layout->laboratory_id,
             'actor_user_id' => $context->membership->user_id,
             'actor_id_snapshot' => $context->membership->user_id,
-            'actor_name_snapshot' => $user?->name,
+            'actor_name_snapshot' => $context->membership->user?->name,
             'event_type' => $eventType,
             'changed_fields' => array_values(array_unique($changedFields)),
             'changes' => $changes,
