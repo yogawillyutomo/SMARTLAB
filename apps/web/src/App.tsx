@@ -13,6 +13,7 @@ import { useAppData } from '@/hooks/useAppData';
 
 // Pages
 import { LaboratoriesPage, LaboratoryDetailPage, LaboratoryLayoutUnavailablePage } from '@/pages/LaboratoryApiPages';
+import { DevicesPage, DeviceDetailPage } from '@/pages/DeviceApiPages';
 import { SchedulesPage } from '@/pages/SchedulesPage';
 import { BookingsPage } from '@/pages/BookingsPage';
 import { SessionsPage } from '@/pages/SessionsPage';
@@ -47,6 +48,8 @@ function AppRoutes() {
         <Route path="/laboratories" element={<RequireServerPermission permission="laboratories.view"><LaboratoriesPage /></RequireServerPermission>} />
         <Route path="/laboratories/:id" element={<RequireServerPermission permission="laboratories.view"><LaboratoryDetailPage /></RequireServerPermission>} />
         <Route path="/laboratories/:id/layout" element={<RequireServerPermission permission="laboratories.view"><LaboratoryLayoutUnavailablePage /></RequireServerPermission>} />
+        <Route path="/devices" element={<RequireServerPermission permission="devices.view"><DevicesPage /></RequireServerPermission>} />
+        <Route path="/devices/:id" element={<RequireServerPermission permission="devices.view"><DeviceDetailPage /></RequireServerPermission>} />
         <Route path="/schedules" element={<RequirePermission module="schedules"><SchedulesPage /></RequirePermission>} />
         <Route path="/bookings" element={<RequirePermission module="bookings"><BookingsPage /></RequirePermission>} />
         <Route path="/sessions" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />

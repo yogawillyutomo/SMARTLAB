@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Eye, FlaskConical, Map as MapIcon, Pencil, Plus, Power, ServerOff, Users } from 'lucide-react';
+import { ArrowLeft, Eye, FlaskConical, Laptop, Map as MapIcon, Pencil, Plus, Power, ServerOff, Users } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -40,24 +40,28 @@ interface LaboratoryListViewProps {
   state: LaboratoryListState;
   canCreate: boolean;
   canUpdate: boolean;
+  canViewDevices: boolean;
   statusUpdatingId: string | null;
   onRetry: () => void;
   onCreate: () => void;
   onEdit: (laboratory: LaboratoryDto) => void;
   onToggleStatus: (laboratory: LaboratoryDto) => void;
   onDetail: (laboratory: LaboratoryDto) => void;
+  onDevices: (laboratory: LaboratoryDto) => void;
 }
 
 export function LaboratoryListView({
   state,
   canCreate,
   canUpdate,
+  canViewDevices,
   statusUpdatingId,
   onRetry,
   onCreate,
   onEdit,
   onToggleStatus,
   onDetail,
+  onDevices,
 }: LaboratoryListViewProps) {
   return (
     <div className="space-y-6">
@@ -114,13 +118,18 @@ export function LaboratoryListView({
                 </dl>
 
                 <p className="rounded-lg border border-base-700 bg-base-900/30 px-3 py-2 text-xs text-ink-muted">
-                  Denah dan perangkat belum terintegrasi dengan Laboratory API.
+                  Denah dan domain lokal tetap terpisah. Inventaris Device canonical tersedia melalui filter laboratorium asal.
                 </p>
 
                 <div className="flex flex-wrap gap-2 border-t border-base-700/60 pt-3">
                   <Button variant="secondary" size="sm" icon={<Eye className="h-3.5 w-3.5" />} className="flex-1" onClick={() => onDetail(laboratory)}>
                     Detail
                   </Button>
+                  {canViewDevices && (
+                    <Button variant="secondary" size="sm" icon={<Laptop className="h-3.5 w-3.5" />} onClick={() => onDevices(laboratory)}>
+                      Perangkat
+                    </Button>
+                  )}
                   {canUpdate && (
                     <>
                       <Button
@@ -190,6 +199,7 @@ export function LaboratoriesPage() {
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const canCreate = hasServerPermission(user, 'laboratories.create');
   const canUpdate = hasServerPermission(user, 'laboratories.update');
+  const canViewDevices = hasServerPermission(user, 'devices.view');
   const [state, setState] = useState<LaboratoryListState>({ status: 'loading' });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<LaboratoryDto | null>(null);
@@ -314,12 +324,14 @@ export function LaboratoriesPage() {
         state={state}
         canCreate={canCreate}
         canUpdate={canUpdate}
+        canViewDevices={canViewDevices}
         statusUpdatingId={statusUpdatingId}
         onRetry={() => void load()}
         onCreate={openCreate}
         onEdit={openEdit}
         onToggleStatus={(laboratory) => void toggleStatus(laboratory)}
         onDetail={(laboratory) => navigate(`/laboratories/${encodeURIComponent(laboratory.id)}`)}
+        onDevices={(laboratory) => navigate(`/devices?homeLaboratoryId=${encodeURIComponent(laboratory.id)}`)}
       />
       <FormDialog
         open={dialogOpen}
@@ -340,15 +352,17 @@ export function LaboratoriesPage() {
 
 interface LaboratoryDetailViewProps {
   state: LaboratoryDetailState;
+  canViewDevices: boolean;
   onRetry: () => void;
   onBack: () => void;
+  onDevices: (laboratory: LaboratoryDto) => void;
 }
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-export function LaboratoryDetailView({ state, onRetry, onBack }: LaboratoryDetailViewProps) {
+export function LaboratoryDetailView({ state, canViewDevices, onRetry, onBack, onDevices }: LaboratoryDetailViewProps) {
   if (state.status === 'loading') return <Card><LoadingState label="Memuat detail laboratorium..." /></Card>;
   if (state.status === 'not_found') {
     return <EmptyState title="Laboratorium tidak ditemukan" description="Data tidak tersedia pada konteks sekolah aktif." action={<Button onClick={onBack}>Kembali</Button>} />;
@@ -389,7 +403,8 @@ export function LaboratoryDetailView({ state, onRetry, onBack }: LaboratoryDetai
         <EmptyState
           icon={<ServerOff className="h-7 w-7" />}
           title="Domain operasional belum terintegrasi"
-          description="Denah, perangkat, aset, jadwal, jurnal, maintenance, dan aktivitas tetap berada pada domain lokal lama dan tidak digabungkan dengan ID Laboratory API."
+          description="Denah, aset, jadwal, jurnal, maintenance, dan aktivitas tetap berada pada domain lokal lama. Device canonical hanya terhubung melalui homeLaboratoryId."
+          action={canViewDevices ? <Button size="sm" onClick={() => onDevices(laboratory)}>Lihat Perangkat</Button> : undefined}
         />
       </Card>
     </div>
@@ -399,7 +414,9 @@ export function LaboratoryDetailView({ state, onRetry, onBack }: LaboratoryDetai
 export function LaboratoryDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
+  const canViewDevices = hasServerPermission(user, 'devices.view');
   const [state, setState] = useState<LaboratoryDetailState>({ status: 'loading' });
   const loadSequence = useRef(0);
 
@@ -429,7 +446,15 @@ export function LaboratoryDetailPage() {
     return () => { loadSequence.current += 1; };
   }, [load]);
 
-  return <LaboratoryDetailView state={state} onRetry={() => void load()} onBack={() => navigate('/laboratories')} />;
+  return (
+    <LaboratoryDetailView
+      state={state}
+      canViewDevices={canViewDevices}
+      onRetry={() => void load()}
+      onBack={() => navigate('/laboratories')}
+      onDevices={(laboratory) => navigate(`/devices?homeLaboratoryId=${encodeURIComponent(laboratory.id)}`)}
+    />
+  );
 }
 
 export function LaboratoryLayoutUnavailableView({ onBack }: { onBack: () => void }) {

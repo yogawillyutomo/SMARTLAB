@@ -40,12 +40,14 @@ function renderList(state: LaboratoryListState, permissions: string[] = []): str
       state={state}
       canCreate={hasServerPermission(currentUser, 'laboratories.create')}
       canUpdate={hasServerPermission(currentUser, 'laboratories.update')}
+      canViewDevices={hasServerPermission(currentUser, 'devices.view')}
       statusUpdatingId={null}
       onRetry={vi.fn()}
       onCreate={vi.fn()}
       onEdit={vi.fn()}
       onToggleStatus={vi.fn()}
       onDetail={vi.fn()}
+      onDevices={vi.fn()}
     />,
   );
 }
@@ -93,12 +95,22 @@ describe('Laboratory API list presentation', () => {
     expect(markup).not.toContain('Kepala Lab');
     expect(markup).not.toContain('Teknisi');
   });
+
+  it('offers only the safe Device filter boundary when exact devices.view is present', () => {
+    const hidden = renderList({ status: 'ready', laboratories: [laboratory] }, ['laboratories.view']);
+    expect(hidden).not.toContain('>Perangkat<');
+
+    const visible = renderList({ status: 'ready', laboratories: [laboratory] }, ['laboratories.view', 'devices.view']);
+    expect(visible).toContain('>Perangkat<');
+    expect(visible).toContain('Inventaris Device canonical tersedia melalui filter laboratorium asal.');
+    expect(visible).not.toContain('PC Online');
+  });
 });
 
 describe('Laboratory API detail and form presentation', () => {
   it('renders an explicit 404 state without consulting local data', () => {
     const markup = renderToStaticMarkup(
-      <LaboratoryDetailView state={{ status: 'not_found' }} onRetry={vi.fn()} onBack={vi.fn()} />,
+      <LaboratoryDetailView state={{ status: 'not_found' }} canViewDevices={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} />,
     );
     expect(markup).toContain('Laboratorium tidak ditemukan');
     expect(markup).toContain('konteks sekolah aktif');
@@ -106,7 +118,7 @@ describe('Laboratory API detail and form presentation', () => {
 
   it('renders canonical read-only metadata and marks local domains as not integrated', () => {
     const markup = renderToStaticMarkup(
-      <LaboratoryDetailView state={{ status: 'ready', laboratory }} onRetry={vi.fn()} onBack={vi.fn()} />,
+      <LaboratoryDetailView state={{ status: 'ready', laboratory }} canViewDevices={false} onRetry={vi.fn()} onBack={vi.fn()} onDevices={vi.fn()} />,
     );
     expect(markup).toContain(laboratory.schoolId);
     expect(markup).toContain('Dibuat');
