@@ -1,6 +1,8 @@
 # SmartLab Layout Domain Contract
 
-Status: Proposed for architecture review
+Status: Approved — Architecture Locked
+
+This contract is the canonical Layout v1 architecture baseline. Implementation may refine internal code organization but must not silently change locked domain semantics; any contradiction or material architecture change requires a new reviewed architecture decision or RFC.
 
 ## 1. Scope
 

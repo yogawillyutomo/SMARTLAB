@@ -1,6 +1,8 @@
 # Layout Domain Field Classification
 
-Status: Proposed companion to Layout Domain Contract RFC
+Status: Approved companion — Layout Architecture Locked
+
+This classification is part of the canonical Layout v1 architecture baseline. Implementation may refine internal code organization but must not silently change locked field ownership or semantics; any contradiction or material architecture change requires a new reviewed architecture decision or RFC.
 
 This document classifies the local AppDB `LaboratoryLayout`, `LayoutElement`, and legacy Device placement fields against the proposed canonical backend Layout domain. Local identifiers are not canonical backend ULIDs.
 
