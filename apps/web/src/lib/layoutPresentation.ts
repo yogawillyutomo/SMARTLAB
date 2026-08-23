@@ -84,8 +84,14 @@ export function layoutPresentationIssue(error: unknown): LayoutPresentationIssue
   if (error.status === 403 || error.code === 'FORBIDDEN') {
     return { ...fallback, message: 'Anda tidak memiliki izin untuk melakukan tindakan Layout ini.', retryable: false };
   }
-  if (error.status === 404 || error.code === 'LAYOUT_NOT_FOUND') {
+  if (error.code === 'LAYOUT_NOT_FOUND') {
     return { ...fallback, message: 'Layout tidak ditemukan pada konteks sekolah aktif.', retryable: false, notFound: true };
+  }
+  if (error.code === 'LABORATORY_NOT_FOUND') {
+    return { ...fallback, message: 'Laboratorium tidak ditemukan pada konteks sekolah aktif.', retryable: false, notFound: true };
+  }
+  if (error.status === 404) {
+    return { ...fallback, message: 'Data yang diminta tidak ditemukan pada konteks sekolah aktif.', retryable: false, notFound: true };
   }
   if (error.status === 412 || error.code === 'LAYOUT_VERSION_CONFLICT') {
     return {

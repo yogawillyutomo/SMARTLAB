@@ -20,6 +20,7 @@ import {
   updateStructuralElement,
   validateLayoutEditorState,
   type CanonicalLayoutEditorState,
+  type LayoutDeviceDisplayMetadata,
   type LayoutEditorResult,
 } from '@/domain/server-layout';
 import type { LayoutDto, UnplacedDeviceCandidateDto } from '@/services/layoutApi';
@@ -137,6 +138,68 @@ describe('canonical Layout editor state and serialization', () => {
     expect(next.devicePlacements[0]).not.toHaveProperty('hostname');
     expect(next.devicePlacements[0]).not.toHaveProperty('deviceCode');
     expect(JSON.stringify(serializeLayoutEditorState(next))).not.toContain('Acme');
+  });
+
+  it.each(['retired', 'decommissioned'] as const)(
+    'indexes %s canonical Device metadata for archived Layout presentation without changing placement state',
+    (lifecycleStatus) => {
+      const deviceId = ulid('D');
+      const placementId = ulid('A');
+      const archived = layoutEditorStateFromServer(serverLayout({
+        status: 'archived',
+        activatedAt: NOW,
+        archivedAt: NOW,
+        devicePlacements: [{
+          id: placementId,
+          deviceId,
+          role: null,
+          label: 'Perangkat historis',
+          row: 1,
+          column: 1,
+          rowSpan: 1,
+          columnSpan: 1,
+          rotation: 0,
+        }],
+      }));
+      const before = structuredClone(archived);
+      const device: LayoutDeviceDisplayMetadata = {
+        id: deviceId,
+        deviceCode: 'DEV-HISTORY',
+        deviceType: 'desktop_pc',
+        lifecycleStatus,
+        hostname: 'PC-HISTORY',
+        brand: null,
+        model: null,
+      };
+
+      const metadata = indexLayoutDeviceMetadata([device]);
+
+      expect(metadata[deviceId]).toEqual(device);
+      expect(archived).toEqual(before);
+      expect(archived.devicePlacements[0]).toMatchObject({ id: placementId, deviceId });
+      expect(archived.devicePlacements[0]).not.toHaveProperty('lifecycleStatus');
+    },
+  );
+
+  it('keeps full-lifecycle display metadata outside the serialized Layout PUT payload', () => {
+    const retired: LayoutDeviceDisplayMetadata = {
+      id: ulid('D'),
+      deviceCode: 'DEV-RETIRED',
+      deviceType: 'desktop_pc',
+      lifecycleStatus: 'retired',
+      hostname: null,
+      brand: null,
+      model: null,
+    };
+    const metadata = indexLayoutDeviceMetadata([retired]);
+    const editor = successful(addDevicePlacement(state(), candidate('D'), {
+      clientKey: 'pc-1', role: null, label: null,
+      row: 1, column: 1, rowSpan: 1, columnSpan: 1, rotation: 0,
+    }));
+
+    expect(metadata[retired.id].lifecycleStatus).toBe('retired');
+    expect(JSON.stringify(serializeLayoutEditorState(editor))).not.toContain('lifecycleStatus');
+    expect(JSON.stringify(serializeLayoutEditorState(editor))).not.toContain('DEV-RETIRED');
   });
 });
 

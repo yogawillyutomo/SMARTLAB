@@ -173,6 +173,9 @@ describe('Layout strict response parsing', () => {
       data: [{ ...candidate, lifecycleStatus: 'retired' }], meta: pageMeta(),
     })).toThrow(LayoutContractError);
     expect(() => parseUnplacedDeviceCollectionResponse({
+      data: [{ ...candidate, lifecycleStatus: 'decommissioned' }], meta: pageMeta(),
+    })).toThrow(LayoutContractError);
+    expect(() => parseUnplacedDeviceCollectionResponse({
       data: [{ ...candidate, qrPublicId: 'forbidden' }], meta: pageMeta(),
     })).toThrow(LayoutContractError);
   });

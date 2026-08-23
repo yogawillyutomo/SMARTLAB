@@ -44,10 +44,9 @@ describe('Layout exact server permission capabilities', () => {
 });
 
 describe('Layout error presentation', () => {
-  it('maps auth, permission, not-found, and all known operational conflicts', () => {
+  it('maps auth, permission, and all known operational conflicts', () => {
     expect(layoutPresentationIssue(apiError(401, 'UNAUTHENTICATED'))).toMatchObject({ authBoundary: true, retryable: false });
     expect(layoutPresentationIssue(apiError(403, 'FORBIDDEN'))).toMatchObject({ authBoundary: false, retryable: false });
-    expect(layoutPresentationIssue(apiError(404, 'LAYOUT_NOT_FOUND'))).toMatchObject({ notFound: true, retryable: false });
 
     for (const code of [
       'LAYOUT_DRAFT_ALREADY_EXISTS',
@@ -60,6 +59,24 @@ describe('Layout error presentation', () => {
     ]) {
       expect(layoutPresentationIssue(apiError(409, code))).toMatchObject({ retryable: false, versionConflict: false });
     }
+  });
+
+  it('classifies Layout, Laboratory, and unknown 404 domains without leaking existence', () => {
+    expect(layoutPresentationIssue(apiError(404, 'LAYOUT_NOT_FOUND'))).toMatchObject({
+      notFound: true,
+      retryable: false,
+      message: 'Layout tidak ditemukan pada konteks sekolah aktif.',
+    });
+    expect(layoutPresentationIssue(apiError(404, 'LABORATORY_NOT_FOUND'))).toMatchObject({
+      notFound: true,
+      retryable: false,
+      message: 'Laboratorium tidak ditemukan pada konteks sekolah aktif.',
+    });
+    expect(layoutPresentationIssue(apiError(404, 'UNKNOWN_NOT_FOUND'))).toMatchObject({
+      notFound: true,
+      retryable: false,
+      message: 'Data yang diminta tidak ditemukan pada konteks sekolah aktif.',
+    });
   });
 
   it('requires explicit reload/reconciliation for 412 and never marks it retryable', () => {

@@ -6,9 +6,8 @@ import type {
   LayoutStatus,
   StructuralLayoutElementDto,
   StructuralLayoutElementType,
-  UnplacedDeviceCandidateDto,
 } from '@/services/layoutApi';
-import type { DeviceType } from '@/services/deviceApi';
+import type { DeviceLifecycleStatus, DeviceType } from '@/services/deviceApi';
 
 export type ExistingEditorChildIdentity = { id: string; clientKey?: never };
 export type UnsavedEditorChildIdentity = { id?: never; clientKey: string };
@@ -62,7 +61,7 @@ export interface LayoutDeviceDisplayMetadata {
   id: string;
   deviceCode: string;
   deviceType: DeviceType;
-  lifecycleStatus: UnplacedDeviceCandidateDto['lifecycleStatus'];
+  lifecycleStatus: DeviceLifecycleStatus;
   hostname: string | null;
   brand: string | null;
   model: string | null;

@@ -1,8 +1,9 @@
-import type { LayoutDto, ReplaceLayoutInput, UnplacedDeviceCandidateDto } from '@/services/layoutApi';
+import type { LayoutDto, ReplaceLayoutInput } from '@/services/layoutApi';
 import type {
   CanonicalEditorDevicePlacement,
   CanonicalEditorStructuralElement,
   CanonicalLayoutEditorState,
+  LayoutDeviceDisplayMetadata,
   LayoutDeviceMetadataById,
   LayoutEditorValidationIssue,
 } from './types';
@@ -45,8 +46,16 @@ export function replaceEditorStateWithServer(layout: LayoutDto): CanonicalLayout
   return layoutEditorStateFromServer(layout);
 }
 
-export function indexLayoutDeviceMetadata(candidates: readonly UnplacedDeviceCandidateDto[]): LayoutDeviceMetadataById {
-  return Object.fromEntries(candidates.map((candidate) => [candidate.id, { ...candidate }]));
+export function indexLayoutDeviceMetadata(devices: readonly LayoutDeviceDisplayMetadata[]): LayoutDeviceMetadataById {
+  return Object.fromEntries(devices.map((device) => [device.id, {
+    id: device.id,
+    deviceCode: device.deviceCode,
+    deviceType: device.deviceType,
+    lifecycleStatus: device.lifecycleStatus,
+    hostname: device.hostname,
+    brand: device.brand,
+    model: device.model,
+  }]));
 }
 
 export function serializeLayoutEditorState(state: CanonicalLayoutEditorState): ReplaceLayoutInput {
