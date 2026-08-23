@@ -32,11 +32,13 @@ export class ApiClientError extends Error {
 export interface ApiClient {
   ensureCsrfCookie: () => Promise<void>;
   get: <T>(path: string) => Promise<T>;
-  post: <T = void>(path: string, body?: unknown) => Promise<T>;
-  patch: <T = void>(path: string, body?: unknown, options?: ApiPatchOptions) => Promise<T>;
+  post: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => Promise<T>;
+  put: <T = void>(path: string, body: unknown, options?: ApiMutationOptions) => Promise<T>;
+  patch: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => Promise<T>;
+  delete: <T = void>(path: string, options?: ApiMutationOptions) => Promise<T>;
 }
 
-export interface ApiPatchOptions {
+export interface ApiMutationOptions {
   ifMatch?: string;
 }
 
@@ -178,10 +180,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
   async function request<T>(
     path: string,
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     body?: unknown,
     csrfRetry = true,
-    patchOptions?: ApiPatchOptions,
+    mutationOptions?: ApiMutationOptions,
   ): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' });
     const mutation = method !== 'GET';
@@ -190,8 +192,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       const token = readXsrfToken(readCookie());
       if (token) headers.set('X-XSRF-TOKEN', token);
     }
-    if (method === 'PATCH' && patchOptions?.ifMatch !== undefined) {
-      headers.set('If-Match', patchOptions.ifMatch);
+    if (mutationOptions?.ifMatch !== undefined) {
+      headers.set('If-Match', mutationOptions.ifMatch);
     }
 
     const response = await fetchResponse(buildApiUrl(apiOrigin, path), {
@@ -203,7 +205,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     if (mutation && response.status === 419 && csrfRetry) {
       await ensureCsrfCookie();
-      return request<T>(path, method, body, false, patchOptions);
+      return request<T>(path, method, body, false, mutationOptions);
     }
 
     return parseResponse<T>(response);
@@ -212,8 +214,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   return {
     ensureCsrfCookie,
     get: <T>(path: string) => request<T>(path, 'GET'),
-    post: <T = void>(path: string, body?: unknown) => request<T>(path, 'POST', body),
-    patch: <T = void>(path: string, body?: unknown, options?: ApiPatchOptions) => request<T>(path, 'PATCH', body, true, options),
+    post: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => request<T>(path, 'POST', body, true, options),
+    put: <T = void>(path: string, body: unknown, options?: ApiMutationOptions) => request<T>(path, 'PUT', body, true, options),
+    patch: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => request<T>(path, 'PATCH', body, true, options),
+    delete: <T = void>(path: string, options?: ApiMutationOptions) => request<T>(path, 'DELETE', undefined, true, options),
   };
 }
 

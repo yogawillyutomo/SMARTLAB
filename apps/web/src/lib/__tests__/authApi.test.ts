@@ -35,7 +35,9 @@ describe('authentication gateway', () => {
         order.push('me');
         return await get(path) as T;
       },
+      put: vi.fn(async () => { throw new Error('PUT is not used by the authentication gateway.'); }) as ApiClient['put'],
       patch: vi.fn(async () => { throw new Error('PATCH is not used by the authentication gateway.'); }) as ApiClient['patch'],
+      delete: vi.fn(async () => { throw new Error('DELETE is not used by the authentication gateway.'); }) as ApiClient['delete'],
     };
     const gateway = createAuthGateway(client);
 

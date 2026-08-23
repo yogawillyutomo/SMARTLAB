@@ -28,7 +28,9 @@ function clientWith(overrides: Partial<ApiClient> = {}): ApiClient {
     ensureCsrfCookie: vi.fn(async () => undefined),
     get: vi.fn(async () => ({ data: [laboratory] })) as ApiClient['get'],
     post: vi.fn(async () => ({ data: laboratory })) as ApiClient['post'],
+    put: vi.fn(async () => ({ data: laboratory })) as ApiClient['put'],
     patch: vi.fn(async () => ({ data: laboratory })) as ApiClient['patch'],
+    delete: vi.fn(async () => undefined) as ApiClient['delete'],
     ...overrides,
   };
 }

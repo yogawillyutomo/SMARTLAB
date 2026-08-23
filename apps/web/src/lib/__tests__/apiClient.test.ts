@@ -137,6 +137,36 @@ describe('API transport contracts', () => {
     expect(headers.get('X-XSRF-TOKEN')).toBe('csrf-token');
   });
 
+  it('sends PUT, bodyless activation POST, and DELETE with exact shared mutation options', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input;
+      void _init;
+      return new Response(null, { status: 204 });
+    });
+    const client = createApiClient({
+      fetchImpl: fetchMock as typeof fetch,
+      readCookie: () => 'XSRF-TOKEN=layout-csrf',
+    });
+
+    await client.put('/layouts/01LAYOUT', { name: 'Draft' }, { ifMatch: '"4"' });
+    await client.post('/layouts/01LAYOUT/activate', undefined, { ifMatch: '"5"' });
+    await client.delete('/layouts/01LAYOUT', { ifMatch: '"6"' });
+
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['PUT', 'POST', 'DELETE']);
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ name: 'Draft' }));
+    expect(fetchMock.mock.calls[1][1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls[2][1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls.map(([, init]) => new Headers(init?.headers).get('If-Match')))
+      .toEqual(['"4"', '"5"', '"6"']);
+    fetchMock.mock.calls.forEach(([, init]) => {
+      const headers = new Headers(init?.headers);
+      expect(init?.credentials).toBe('include');
+      expect(headers.get('Accept')).toBe('application/json');
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(headers.get('X-XSRF-TOKEN')).toBe('layout-csrf');
+    });
+  });
+
   it('parses stable API errors and Retry-After metadata', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       message: 'Too many login attempts. Please try again later.',
@@ -222,6 +252,35 @@ describe('API transport contracts', () => {
     expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('X-XSRF-TOKEN')).toBe('fresh');
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('If-Match')).toBe('"7"');
     expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('If-Match')).toBe('"7"');
+  });
+
+  it.each([
+    ['POST', (client: ReturnType<typeof createApiClient>) => client.post('/layouts/01LAYOUT/activate', undefined, { ifMatch: '"8"' })],
+    ['PUT', (client: ReturnType<typeof createApiClient>) => client.put('/layouts/01LAYOUT', { name: 'Draft' }, { ifMatch: '"8"' })],
+    ['DELETE', (client: ReturnType<typeof createApiClient>) => client.delete('/layouts/01LAYOUT', { ifMatch: '"8"' })],
+  ])('refreshes CSRF and retries a %s Layout mutation once while preserving If-Match', async (method, invoke) => {
+    let cookie = 'XSRF-TOKEN=old';
+    let mutationCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      if (String(input).endsWith('/sanctum/csrf-cookie')) {
+        cookie = 'XSRF-TOKEN=fresh';
+        return new Response(null, { status: 204 });
+      }
+      mutationCalls += 1;
+      return mutationCalls === 1
+        ? jsonResponse({ message: 'CSRF token mismatch.', code: 'CSRF_TOKEN_MISMATCH' }, 419)
+        : new Response(null, { status: 204 });
+    });
+    const client = createApiClient({ fetchImpl: fetchMock as typeof fetch, readCookie: () => cookie });
+
+    await expect(invoke(client)).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual([method, 'GET', method]);
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('If-Match')).toBe('"8"');
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('If-Match')).toBe('"8"');
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('X-XSRF-TOKEN')).toBe('fresh');
   });
 
   it('never turns a network failure into success', async () => {
