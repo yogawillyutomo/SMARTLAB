@@ -3,9 +3,11 @@
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
+use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
+use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -33,5 +35,20 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:laboratories.view');
         Route::patch('laboratories/{laboratoryId}', [LaboratoryController::class, 'update'])
             ->middleware('permission:laboratories.update');
+
+        Route::get('laboratories/{laboratoryId}/layouts', [LayoutController::class, 'index'])
+            ->middleware('permission:layouts.view');
+        Route::post('laboratories/{laboratoryId}/layouts', [LayoutController::class, 'store'])
+            ->middleware('permission:layouts.create');
+        Route::get('layouts/{layoutId}', [LayoutController::class, 'show'])
+            ->middleware('permission:layouts.view');
+        Route::put('layouts/{layoutId}', [LayoutController::class, 'update'])
+            ->middleware(['permission:layouts.update', RequireLayoutVersionPrecondition::class]);
+        Route::post('layouts/{layoutId}/activate', [LayoutController::class, 'activate'])
+            ->middleware(['permission:layouts.update', RequireLayoutVersionPrecondition::class]);
+        Route::delete('layouts/{layoutId}', [LayoutController::class, 'destroy'])
+            ->middleware(['permission:layouts.delete', RequireLayoutVersionPrecondition::class]);
+        Route::get('layouts/{layoutId}/unplaced-devices', [LayoutController::class, 'unplacedDevices'])
+            ->middleware(['permission:layouts.view', 'permission:devices.view']);
     });
 });

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.4.0
-  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, and Device endpoints.
+  version: 0.5.0
+  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, and Layout endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -356,6 +356,203 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/PreconditionRequired'
+  /laboratories/{laboratoryId}/layouts:
+    parameters:
+      - name: laboratoryId
+        in: path
+        required: true
+        description: Laboratory ULID resolved inside the current School.
+        schema: { type: string, format: ulid }
+    get:
+      operationId: listLaboratoryLayouts
+      summary: List Layout summaries for one Laboratory
+      description: Requires `layouts.view`. Results are tenant-scoped and ordered by createdAt descending, then Layout ULID ascending.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/LayoutStatus' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Current-School Layout summary page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LayoutSummaryCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LaboratoryNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      operationId: createLaboratoryLayoutDraft
+      summary: Create the Laboratory's sole draft Layout
+      description: Requires `layouts.create`. When an active Layout exists, the server clones its complete aggregate with new root and child ULIDs and accepts only an optional name override. Otherwise name, rows, and columns are required and an empty sparse draft is created.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLayoutRequest' }
+      responses:
+        '201':
+          description: Draft Layout created
+          headers:
+            ETag: { $ref: '#/components/headers/LayoutETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LayoutResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LaboratoryNotFound' }
+        '409': { $ref: '#/components/responses/LayoutConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /layouts/{layoutId}:
+    parameters:
+      - name: layoutId
+        in: path
+        required: true
+        description: Layout ULID resolved inside the current School.
+        schema: { type: string, format: ulid }
+    get:
+      operationId: getLayout
+      summary: Read a canonical full Layout aggregate
+      description: Requires `layouts.view`. Draft, active, and archived Layouts are readable. Child collections are deterministically ordered by row, column, then child ULID.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Canonical Layout aggregate
+          headers:
+            ETag: { $ref: '#/components/headers/LayoutETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LayoutResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LayoutNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+    put:
+      operationId: replaceLayoutDraft
+      summary: Atomically replace the complete mutable draft aggregate
+      description: Requires `layouts.update` and exactly one strong quoted positive-integer If-Match value. Active and archived Layouts are immutable. Canonically equivalent normalized input is an effective no-op that preserves version, ETag, updatedAt, and history. A syntactically valid but stale version returns 412; missing or malformed input returns 428.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/LayoutIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceLayoutRequest' }
+      responses:
+        '200':
+          description: Canonical saved or unchanged draft Layout
+          headers:
+            ETag: { $ref: '#/components/headers/LayoutETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LayoutResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LayoutNotFound' }
+        '409': { $ref: '#/components/responses/LayoutConflict' }
+        '412': { $ref: '#/components/responses/LayoutVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/LayoutPreconditionRequired' }
+    delete:
+      operationId: deleteLayoutDraft
+      summary: Delete a draft Layout and its children
+      description: Requires `layouts.delete` and exact If-Match. Draft cleanup remains allowed when the Laboratory is inactive; active and archived Layouts cannot be deleted. Internal audit history survives with snapshot identifiers.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/LayoutIfMatch'
+      responses:
+        '204': { description: Draft Layout deleted }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LayoutNotFound' }
+        '409': { $ref: '#/components/responses/LayoutConflict' }
+        '412': { $ref: '#/components/responses/LayoutVersionConflict' }
+        '428': { $ref: '#/components/responses/LayoutPreconditionRequired' }
+  /layouts/{layoutId}/activate:
+    parameters:
+      - name: layoutId
+        in: path
+        required: true
+        schema: { type: string, format: ulid }
+    post:
+      operationId: activateLayoutDraft
+      summary: Activate a draft and atomically archive its predecessor
+      description: Requires `layouts.update` and exact If-Match. The request body must be empty. The complete aggregate and current Device eligibility are revalidated under locks; the new active Layout and predecessor each increment version exactly once with one effective timestamp.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/LayoutIfMatch'
+      responses:
+        '200':
+          description: Newly active Layout
+          headers:
+            ETag: { $ref: '#/components/headers/LayoutETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LayoutResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LayoutNotFound' }
+        '409': { $ref: '#/components/responses/LayoutConflict' }
+        '412': { $ref: '#/components/responses/LayoutVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/LayoutPreconditionRequired' }
+  /layouts/{layoutId}/unplaced-devices:
+    parameters:
+      - name: layoutId
+        in: path
+        required: true
+        schema: { type: string, format: ulid }
+    get:
+      operationId: listUnplacedLayoutDevices
+      summary: List eligible Devices unplaced relative to this Layout
+      description: Requires both `layouts.view` and `devices.view`. Only draft or active Layouts are accepted. The server selects current-School, matching-home, in-service or spare Devices absent from this specific Layout.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: search
+          in: query
+          description: Literal case-insensitive substring search over deviceCode, hostname, serialNumber, brand, and model only.
+          schema: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: Unplaced Device candidate page ordered by deviceCode then Device ULID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnplacedDeviceCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/LayoutNotFound' }
+        '409': { $ref: '#/components/responses/LayoutConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
 components:
   securitySchemes:
     sanctumSession:
@@ -368,6 +565,15 @@ components:
       scheme: bearer
       bearerFormat: Sanctum
       description: Sanctum personal access token for mobile or API token clients.
+  parameters:
+    LayoutIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exactly one strong quoted positive integer equal to the Layout version, for example `"1"`. Missing, weak, wildcard, unquoted, multiple, whitespace-padded, zero, negative, and malformed values return 428. A valid but stale value returns 412.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
   responses:
     Unauthenticated:
       description: Authentication is required
@@ -399,6 +605,43 @@ components:
           example:
             message: Device not found.
             code: DEVICE_NOT_FOUND
+    LayoutNotFound:
+      description: No Layout exists in the current School with this identifier
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: Layout not found.
+            code: LAYOUT_NOT_FOUND
+    LayoutConflict:
+      description: The Layout operation violates lifecycle, Laboratory, Device-placement, or geometry invariants
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            draftExists: { value: { message: A draft Layout already exists for this Laboratory., code: LAYOUT_DRAFT_ALREADY_EXISTS } }
+            status: { value: { message: The requested operation is valid only for a draft Layout., code: LAYOUT_STATUS_CONFLICT } }
+            inactive: { value: { message: The Laboratory must be active for this Layout operation., code: LAYOUT_LABORATORY_INACTIVE } }
+            duplicateDevice: { value: { message: A Device may be placed only once in a Layout., code: LAYOUT_DEVICE_ALREADY_PLACED } }
+            homeMismatch: { value: { message: The Device home Laboratory does not match this Layout., code: LAYOUT_DEVICE_HOME_MISMATCH } }
+            ineligibleDevice: { value: { message: The Device lifecycle is not eligible for Layout placement., code: LAYOUT_DEVICE_NOT_ELIGIBLE } }
+            occupied: { value: { message: Two Layout footprints occupy the same position., code: LAYOUT_POSITION_OCCUPIED } }
+    LayoutPreconditionRequired:
+      description: A Layout mutation is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: A valid If-Match Layout version is required.
+            code: PRECONDITION_REQUIRED
+    LayoutVersionConflict:
+      description: The supplied syntactically valid Layout version is stale
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: Layout has changed since it was loaded.
+            code: LAYOUT_VERSION_CONFLICT
     PreconditionRequired:
       description: PATCH is missing an exact strong Device version precondition
       content:
@@ -470,6 +713,12 @@ components:
             code: TOO_MANY_LOGIN_ATTEMPTS
   headers:
     DeviceETag:
+      description: Strong entity tag whose quoted positive integer exactly matches `data.version`.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+      example: '"1"'
+    LayoutETag:
       description: Strong entity tag whose quoted positive integer exactly matches `data.version`.
       schema:
         type: string
@@ -998,6 +1247,215 @@ components:
           - type: number
           - type: boolean
           - type: 'null'
+    LayoutStatus:
+      type: string
+      enum: [draft, active, archived]
+    StructuralLayoutElementType:
+      type: string
+      enum: [teacher_desk, door, window, wall, aisle, label]
+    DevicePlacementRole:
+      type: [string, 'null']
+      enum: [student_station, teacher_station, null]
+    LayoutRotation:
+      type: integer
+      enum: [0, 90, 180, 270]
+    LayoutPaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+    LayoutSummaryCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LayoutSummary' }
+        meta: { $ref: '#/components/schemas/LayoutPaginationMeta' }
+    LayoutResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Layout' }
+    LayoutSummary:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, laboratoryId, name, templateKey, rows, columns, status, version, activatedAt, archivedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        laboratoryId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        templateKey:
+          type: [string, 'null']
+          maxLength: 100
+          description: Frontend template provenance only; not a backend geometry mode.
+        rows: { type: integer, minimum: 1, maximum: 50 }
+        columns: { type: integer, minimum: 1, maximum: 50 }
+        status: { $ref: '#/components/schemas/LayoutStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        activatedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        archivedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Layout:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, laboratoryId, name, templateKey, rows, columns, status, version, structuralElements, devicePlacements, activatedAt, archivedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        laboratoryId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        templateKey: { type: [string, 'null'], maxLength: 100 }
+        rows: { type: integer, minimum: 1, maximum: 50 }
+        columns: { type: integer, minimum: 1, maximum: 50 }
+        status: { $ref: '#/components/schemas/LayoutStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        structuralElements:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/StructuralLayoutElement' }
+        devicePlacements:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/DevicePlacement' }
+        activatedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        archivedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    StructuralLayoutElement:
+      type: object
+      additionalProperties: false
+      required: [id, type, label, row, column, rowSpan, columnSpan, rotation]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        type: { $ref: '#/components/schemas/StructuralLayoutElementType' }
+        label: { type: [string, 'null'], maxLength: 60 }
+        row: { type: integer, minimum: 1 }
+        column: { type: integer, minimum: 1 }
+        rowSpan: { type: integer, minimum: 1 }
+        columnSpan: { type: integer, minimum: 1 }
+        rotation: { $ref: '#/components/schemas/LayoutRotation' }
+    StructuralLayoutElementInput:
+      type: object
+      additionalProperties: false
+      required: [type, row, column, rowSpan, columnSpan, rotation]
+      properties:
+        id:
+          type: string
+          format: ulid
+          description: Existing child ID belonging to this exact draft. New children omit this property; explicit null is invalid.
+        type: { $ref: '#/components/schemas/StructuralLayoutElementType' }
+        label:
+          type: [string, 'null']
+          maxLength: 60
+          description: Required nonblank text for type label, forbidden/nonblank-null for aisle, optional for other structural types.
+        row: { type: integer, minimum: 1 }
+        column: { type: integer, minimum: 1 }
+        rowSpan: { type: integer, minimum: 1 }
+        columnSpan: { type: integer, minimum: 1 }
+        rotation: { $ref: '#/components/schemas/LayoutRotation' }
+    DevicePlacement:
+      type: object
+      additionalProperties: false
+      required: [id, deviceId, role, label, row, column, rowSpan, columnSpan, rotation]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        deviceId: { type: string, format: ulid }
+        role: { $ref: '#/components/schemas/DevicePlacementRole' }
+        label: { type: [string, 'null'], maxLength: 60 }
+        row: { type: integer, minimum: 1 }
+        column: { type: integer, minimum: 1 }
+        rowSpan: { type: integer, minimum: 1 }
+        columnSpan: { type: integer, minimum: 1 }
+        rotation: { $ref: '#/components/schemas/LayoutRotation' }
+    DevicePlacementInput:
+      type: object
+      additionalProperties: false
+      required: [deviceId, row, column, rowSpan, columnSpan, rotation]
+      properties:
+        id:
+          type: string
+          format: ulid
+          description: Existing child ID belonging to this exact draft. New children omit this property; explicit null is invalid.
+        deviceId: { type: string, format: ulid }
+        role: { $ref: '#/components/schemas/DevicePlacementRole' }
+        label: { type: [string, 'null'], maxLength: 60 }
+        row: { type: integer, minimum: 1 }
+        column: { type: integer, minimum: 1 }
+        rowSpan: { type: integer, minimum: 1 }
+        columnSpan: { type: integer, minimum: 1 }
+        rotation: { $ref: '#/components/schemas/LayoutRotation' }
+    CreateLayoutRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Required when there is no active Layout; optional override when cloning.
+        templateKey:
+          type: [string, 'null']
+          maxLength: 100
+          description: Optional only when there is no active Layout; rejected for clone creation.
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Required only when there is no active Layout; rejected for clone creation.
+        columns:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Required only when there is no active Layout; rejected for clone creation.
+    ReplaceLayoutRequest:
+      type: object
+      additionalProperties: false
+      required: [name, templateKey, rows, columns, structuralElements, devicePlacements]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        templateKey: { type: [string, 'null'], maxLength: 100 }
+        rows: { type: integer, minimum: 1, maximum: 50 }
+        columns: { type: integer, minimum: 1, maximum: 50 }
+        structuralElements:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/StructuralLayoutElementInput' }
+        devicePlacements:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/DevicePlacementInput' }
+    UnplacedDeviceCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, deviceCode, deviceType, lifecycleStatus, hostname, brand, model]
+      properties:
+        id: { type: string, format: ulid }
+        deviceCode: { type: string, minLength: 3, maxLength: 32 }
+        deviceType: { $ref: '#/components/schemas/DeviceType' }
+        lifecycleStatus:
+          type: string
+          enum: [in_service, spare]
+        hostname: { type: [string, 'null'], maxLength: 255 }
+        brand: { type: [string, 'null'], maxLength: 255 }
+        model: { type: [string, 'null'], maxLength: 255 }
+    UnplacedDeviceCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UnplacedDeviceCandidate' }
+        meta: { $ref: '#/components/schemas/LayoutPaginationMeta' }
     ApiError:
       type: object
       required: [message, code]
@@ -1006,7 +1464,7 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID]
+          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
     ValidationError:
       type: object
       required: [message, code, errors]

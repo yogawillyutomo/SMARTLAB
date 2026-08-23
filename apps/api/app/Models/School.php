@@ -35,4 +35,9 @@ class School extends Model
     {
         return $this->hasMany(Device::class);
     }
+
+    public function layouts(): HasMany
+    {
+        return $this->hasMany(Layout::class);
+    }
 }
