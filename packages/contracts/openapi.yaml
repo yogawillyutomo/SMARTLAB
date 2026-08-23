@@ -314,7 +314,7 @@ paths:
     patch:
       operationId: updateDevice
       summary: Update mutable Device v1 fields with optimistic concurrency
-      description: Requires the exact `devices.update` permission and a strong If-Match value equal to the current Device version. Technical profile is atomically replaced, home Laboratory permits initial assignment only, and generic lifecycle updates permit only in_service and spare.
+      description: Requires the exact `devices.update` permission and a strong If-Match value equal to the current Device version, including for an effective no-op. Technical profile is atomically replaced, home Laboratory permits initial assignment only, and generic lifecycle updates permit only in_service and spare. An effective mutation increments version once and emits a new ETag; an effective no-op returns 200 with the existing version, ETag, updatedAt, and no history event.
       security:
         - sanctumSession: []
         - sanctumBearer: []
@@ -334,7 +334,7 @@ paths:
               $ref: '#/components/schemas/UpdateDeviceRequest'
       responses:
         '200':
-          description: Device updated; version incremented exactly once
+          description: Canonical Device after PATCH. An effective mutation increments version exactly once; an effective no-op preserves version and ETag. Both require a matching If-Match precondition.
           headers:
             ETag:
               $ref: '#/components/headers/DeviceETag'

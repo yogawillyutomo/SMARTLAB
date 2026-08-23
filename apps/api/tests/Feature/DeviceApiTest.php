@@ -829,10 +829,126 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('data.homeLaboratoryId', $lab->id)
             ->assertJsonPath('data.version', 2);
 
+        $device->refresh()->updateQuietly(['updated_at' => now()->subHour()]);
+        $unchangedUpdatedAt = $device->refresh()->updated_at->toISOString();
+        $eventCount = DeviceChangeEvent::query()->count();
+
         $this->patchJson('/api/v1/devices/'.$device->id, ['homeLaboratoryId' => $lab->id], ['If-Match' => '"2"'])
             ->assertOk()
-            ->assertHeader('ETag', '"3"')
-            ->assertJsonPath('data.homeLaboratoryId', $lab->id);
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.homeLaboratoryId', $lab->id)
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.updatedAt', $unchangedUpdatedAt);
+
+        $device->refresh();
+        $this->assertSame(2, $device->version);
+        $this->assertSame($unchangedUpdatedAt, $device->updated_at->toISOString());
+        $this->assertSame($eventCount, DeviceChangeEvent::query()->count());
+    }
+
+    public function test_same_lifecycle_metadata_and_null_values_are_effective_noops(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['devices.update']);
+        $device = Device::factory()->for($school)->create([
+            'lifecycle_status' => 'in_service',
+            'brand' => 'Dell',
+            'model' => null,
+            'updated_at' => now()->subDay(),
+        ]);
+        $updatedAt = $device->updated_at->toISOString();
+
+        foreach ([
+            ['lifecycleStatus' => 'in_service'],
+            ['brand' => 'Dell'],
+            ['model' => null],
+        ] as $payload) {
+            $this->patchJson('/api/v1/devices/'.$device->id, $payload, ['If-Match' => '"1"'])
+                ->assertOk()
+                ->assertHeader('ETag', '"1"')
+                ->assertJsonPath('data.version', 1)
+                ->assertJsonPath('data.updatedAt', $updatedAt);
+        }
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'version' => 1]);
+        $this->assertSame($updatedAt, $device->refresh()->updated_at->toISOString());
+        $this->assertDatabaseCount('device_change_events', 0);
+    }
+
+    public function test_reordered_identical_technical_profile_is_noop_but_list_order_remains_semantic(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['devices.update']);
+        $device = Device::factory()->for($school)->create([
+            'technical_profile' => ['processor' => 'CPU', 'ramGB' => 16],
+            'updated_at' => now()->subDay(),
+        ]);
+        $updatedAt = $device->updated_at->toISOString();
+
+        $this->patchJson('/api/v1/devices/'.$device->id, [
+            'technicalProfile' => ['ramGB' => 16, 'processor' => 'CPU'],
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"1"')
+            ->assertJsonPath('data.version', 1)
+            ->assertJsonPath('data.updatedAt', $updatedAt);
+
+        $this->assertSame(['processor' => 'CPU', 'ramGB' => 16], $device->refresh()->technical_profile);
+        $this->assertDatabaseCount('device_change_events', 0);
+
+        $accessPoint = Device::factory()->for($school)->create([
+            'device_type' => 'access_point',
+            'technical_profile' => ['bands' => ['2.4GHz', '5GHz']],
+        ]);
+        $this->patchJson('/api/v1/devices/'.$accessPoint->id, [
+            'technicalProfile' => ['bands' => ['5GHz', '2.4GHz']],
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.version', 2);
+        $this->assertDatabaseCount('device_change_events', 1);
+    }
+
+    public function test_mixed_patch_mutates_once_and_history_contains_only_effective_changes(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['devices.update']);
+        $device = Device::factory()->for($school)->create(['brand' => 'Dell', 'model' => 'Old']);
+
+        $this->patchJson('/api/v1/devices/'.$device->id, [
+            'brand' => 'Dell',
+            'model' => 'New',
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.brand', 'Dell')
+            ->assertJsonPath('data.model', 'New');
+
+        $event = DeviceChangeEvent::query()->sole();
+        $this->assertSame(['model'], $event->changed_fields);
+        $this->assertSame(['model'], array_keys($event->changes));
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'version' => 2, 'model' => 'New']);
+    }
+
+    public function test_stale_noop_still_fails_optimistic_concurrency_without_history(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['devices.update']);
+        $device = Device::factory()->for($school)->create([
+            'brand' => 'Dell',
+            'version' => 2,
+            'updated_at' => now()->subDay(),
+        ]);
+        $updatedAt = $device->updated_at->toISOString();
+
+        $this->patchJson('/api/v1/devices/'.$device->id, ['brand' => 'Dell'], ['If-Match' => '"1"'])
+            ->assertStatus(412)
+            ->assertExactJson([
+                'message' => 'Device has changed since it was loaded.',
+                'code' => 'DEVICE_VERSION_CONFLICT',
+            ]);
+
+        $device->refresh();
+        $this->assertSame(2, $device->version);
+        $this->assertSame($updatedAt, $device->updated_at->toISOString());
+        $this->assertDatabaseCount('device_change_events', 0);
     }
 
     public function test_initial_home_assignment_rejects_inactive_unknown_and_cross_tenant_labs_identically(): void

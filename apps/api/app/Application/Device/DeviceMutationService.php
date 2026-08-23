@@ -135,13 +135,19 @@ class DeviceMutationService
                 }
                 $before = $device->getAttribute($attribute);
                 $after = $data[$field];
-                if ($before !== $after) {
-                    $changedFields[] = $field;
-                    $changes[$field] = $field === 'technicalProfile'
-                        ? ['beforeHash' => $this->profileHash($before), 'afterHash' => $this->profileHash($after)]
-                        : ['before' => $before, 'after' => $after];
+                if ($this->effectiveValuesEqual($field, $before, $after)) {
+                    continue;
                 }
+
+                $changedFields[] = $field;
+                $changes[$field] = $field === 'technicalProfile'
+                    ? ['beforeHash' => $this->profileHash($before), 'afterHash' => $this->profileHash($after)]
+                    : ['before' => $before, 'after' => $after];
                 $device->setAttribute($attribute, $after);
+            }
+
+            if ($changedFields === []) {
+                return $device;
             }
 
             $device->version++;
@@ -237,6 +243,30 @@ class DeviceMutationService
     private function profileHash(mixed $profile): string
     {
         return hash('sha256', json_encode($profile, JSON_THROW_ON_ERROR));
+    }
+
+    private function effectiveValuesEqual(string $field, mixed $before, mixed $after): bool
+    {
+        if ($field !== 'technicalProfile') {
+            return $before === $after;
+        }
+
+        return $this->canonicalizeJsonValue($before) === $this->canonicalizeJsonValue($after);
+    }
+
+    private function canonicalizeJsonValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map($this->canonicalizeJsonValue(...), $value);
+        }
+
+        ksort($value, SORT_STRING);
+
+        return array_map($this->canonicalizeJsonValue(...), $value);
     }
 
     private function generateQrPublicId(): string
