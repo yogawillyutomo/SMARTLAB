@@ -191,6 +191,11 @@ export function MonitoringPage() {
         }
       />
 
+      <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>Monitoring operasional masih menggunakan data lokal dan belum terhubung ke inventaris perangkat server.</p>
+      </div>
+
       {/* Lab selector + summary */}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         <Card>

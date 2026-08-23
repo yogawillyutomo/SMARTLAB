@@ -20,6 +20,7 @@ import {
   ScrollText,
   Settings,
   FlaskConical,
+  Laptop,
   type LucideIcon,
 } from 'lucide-react';
 import { hasServerPermission } from '@/lib/authIdentity';
@@ -30,7 +31,8 @@ export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
-  module: ModuleKey;
+  module?: ModuleKey;
+  serverPermission?: string;
   badgeKey?: 'pending_incidents' | 'pending_bookings' | 'overdue_loans' | 'overdue_maintenance';
 }
 
@@ -44,7 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Operasional',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' },
-      { to: '/laboratories', label: 'Laboratorium', icon: FlaskConical, module: 'laboratories' },
+      { to: '/laboratories', label: 'Laboratorium', icon: FlaskConical, module: 'laboratories', serverPermission: 'laboratories.view' },
       { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules' },
       { to: '/bookings', label: 'Reservasi Lab', icon: CalendarClock, module: 'bookings', badgeKey: 'pending_bookings' },
       { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions' },
@@ -53,6 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Aset dan Pemeliharaan',
     items: [
+      { to: '/devices', label: 'Perangkat', icon: Laptop, serverPermission: 'devices.view' },
       { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring' },
       { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets' },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock' },
@@ -104,6 +107,16 @@ export function canViewNavigationModule(
     : canView(permissions, user.role, module);
 }
 
+export function canViewNavigationItem(
+  permissions: PermissionMatrix,
+  user: AuthenticatedUser | null,
+  item: NavItem,
+): boolean {
+  if (!user) return false;
+  if (item.serverPermission) return hasServerPermission(user, item.serverPermission);
+  return item.module ? canView(permissions, user.role, item.module) : false;
+}
+
 export function getVisibleNavGroupsForUser(
   permissions: PermissionMatrix,
   user: AuthenticatedUser | null,
@@ -111,7 +124,7 @@ export function getVisibleNavGroupsForUser(
   if (!user) return [];
   return getNavGroupsForPermissions(permissions, user.role).map((group) => ({
     ...group,
-    items: group.items.filter((item) => canViewNavigationModule(permissions, user, item.module)),
+    items: group.items.filter((item) => canViewNavigationItem(permissions, user, item)),
   }));
 }
 

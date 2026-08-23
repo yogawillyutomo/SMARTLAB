@@ -33,7 +33,11 @@ export interface ApiClient {
   ensureCsrfCookie: () => Promise<void>;
   get: <T>(path: string) => Promise<T>;
   post: <T = void>(path: string, body?: unknown) => Promise<T>;
-  patch: <T = void>(path: string, body?: unknown) => Promise<T>;
+  patch: <T = void>(path: string, body?: unknown, options?: ApiPatchOptions) => Promise<T>;
+}
+
+export interface ApiPatchOptions {
+  ifMatch?: string;
 }
 
 interface ApiClientOptions {
@@ -172,13 +176,22 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     await parseResponse<void>(response);
   }
 
-  async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown, csrfRetry = true): Promise<T> {
+  async function request<T>(
+    path: string,
+    method: 'GET' | 'POST' | 'PATCH',
+    body?: unknown,
+    csrfRetry = true,
+    patchOptions?: ApiPatchOptions,
+  ): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' });
     const mutation = method !== 'GET';
     if (mutation) {
       headers.set('Content-Type', 'application/json');
       const token = readXsrfToken(readCookie());
       if (token) headers.set('X-XSRF-TOKEN', token);
+    }
+    if (method === 'PATCH' && patchOptions?.ifMatch !== undefined) {
+      headers.set('If-Match', patchOptions.ifMatch);
     }
 
     const response = await fetchResponse(buildApiUrl(apiOrigin, path), {
@@ -190,7 +203,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     if (mutation && response.status === 419 && csrfRetry) {
       await ensureCsrfCookie();
-      return request<T>(path, method, body, false);
+      return request<T>(path, method, body, false, patchOptions);
     }
 
     return parseResponse<T>(response);
@@ -200,7 +213,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     ensureCsrfCookie,
     get: <T>(path: string) => request<T>(path, 'GET'),
     post: <T = void>(path: string, body?: unknown) => request<T>(path, 'POST', body),
-    patch: <T = void>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
+    patch: <T = void>(path: string, body?: unknown, options?: ApiPatchOptions) => request<T>(path, 'PATCH', body, true, options),
   };
 }
 

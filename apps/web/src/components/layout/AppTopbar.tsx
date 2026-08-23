@@ -403,7 +403,7 @@ export function AppTopbar() {
                 ref={searchInputRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari laboratorium, PC, aset, jurnal, incident, pengguna..."
+                placeholder="Cari halaman, PC lokal, aset, jurnal, incident, pengguna..."
                 className="flex-1 bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted"
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setSearchOpen(false);
@@ -454,6 +454,7 @@ function buildCrumbs(path: string): { label: string; to?: string }[] {
   const labelMap: Record<string, string> = {
     dashboard: 'Dashboard',
     laboratories: 'Laboratorium',
+    devices: 'Perangkat',
     schedules: 'Jadwal Reguler',
     bookings: 'Reservasi Lab',
     sessions: 'Pelaksanaan Lab',

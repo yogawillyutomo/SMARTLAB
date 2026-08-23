@@ -114,6 +114,27 @@ describe('API transport contracts', () => {
     expect(headers.get('Accept')).toBe('application/json');
     expect(headers.get('Content-Type')).toBe('application/json');
     expect(headers.get('X-XSRF-TOKEN')).toBe('patch=token');
+    expect(headers.get('If-Match')).toBeNull();
+  });
+
+  it('adds only the narrow PATCH If-Match option without changing standard mutation headers', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input;
+      void _init;
+      return new Response(null, { status: 204 });
+    });
+    const client = createApiClient({
+      fetchImpl: fetchMock as typeof fetch,
+      readCookie: () => 'XSRF-TOKEN=csrf-token',
+    });
+
+    await client.patch('/devices/01DEVICE', { hostname: 'PC-01' }, { ifMatch: '"3"' });
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get('If-Match')).toBe('"3"');
+    expect(headers.get('Accept')).toBe('application/json');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-XSRF-TOKEN')).toBe('csrf-token');
   });
 
   it('parses stable API errors and Retry-After metadata', async () => {
@@ -191,7 +212,7 @@ describe('API transport contracts', () => {
     });
     const client = createApiClient({ fetchImpl: fetchMock as typeof fetch, readCookie: () => cookie });
 
-    await expect(client.patch('/laboratories/01LAB', { name: 'Updated' })).rejects.toMatchObject({
+    await expect(client.patch('/devices/01DEVICE', { name: 'Updated' }, { ifMatch: '"7"' })).rejects.toMatchObject({
       status: 419,
       code: 'CSRF_TOKEN_MISMATCH',
     });
@@ -199,6 +220,8 @@ describe('API transport contracts', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['PATCH', 'GET', 'PATCH']);
     expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('X-XSRF-TOKEN')).toBe('fresh');
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('If-Match')).toBe('"7"');
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('If-Match')).toBe('"7"');
   });
 
   it('never turns a network failure into success', async () => {

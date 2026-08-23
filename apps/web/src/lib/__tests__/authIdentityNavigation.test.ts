@@ -117,4 +117,32 @@ describe('dynamic navigation topology with server-authoritative Laboratory acces
       expect(navigation.filter(({ module }) => module === 'laboratories')).toHaveLength(1);
     }
   });
+
+  it('does not grant canonical Device navigation from legacy monitoring permission', () => {
+    const permissions = createDefaultPermissionMatrix();
+    permissions['Admin Lab'].monitoring = ['view'];
+    const currentUser = navigationUser([]);
+
+    for (const navigation of [
+      getVisibleNavGroupsForUser(permissions, currentUser).flatMap((group) => group.items),
+      getVisibleNavItemsForUser(permissions, currentUser),
+    ]) {
+      expect(navigation.some(({ to }) => to === '/monitoring')).toBe(true);
+      expect(navigation.some(({ to }) => to === '/devices')).toBe(false);
+    }
+  });
+
+  it('shows canonical Device navigation only from exact devices.view permission', () => {
+    const permissions = createDefaultPermissionMatrix();
+    permissions['Admin Lab'].monitoring = [];
+    const currentUser = navigationUser(['devices.view']);
+
+    for (const navigation of [
+      getVisibleNavGroupsForUser(permissions, currentUser).flatMap((group) => group.items),
+      getVisibleNavItemsForUser(permissions, currentUser),
+    ]) {
+      expect(navigation.filter(({ to }) => to === '/devices')).toHaveLength(1);
+      expect(navigation.some(({ to }) => to === '/monitoring')).toBe(false);
+    }
+  });
 });
