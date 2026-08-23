@@ -6,7 +6,9 @@ import {
   DeviceListView,
   type DeviceListState,
 } from '@/pages/DeviceApiPages';
-import { deviceFormFromDto, loadLatestDeviceAfterConflict } from '@/lib/devicePresentation';
+import { ApiClientError } from '@/lib/apiClient';
+import { loadDeviceCollectionForSearchParams, runDeviceListMutation } from '@/lib/deviceCollection';
+import { deviceFormFromDto, devicePresentationIssue, loadLatestDeviceAfterConflict } from '@/lib/devicePresentation';
 import type { DeviceDto } from '@/services/deviceApi';
 import type { LaboratoryDto } from '@/services/laboratoryApi';
 
@@ -91,6 +93,114 @@ describe('Device API list presentation', () => {
     for (const forbidden of ['CPU Usage', 'RAM Usage', 'temperature', 'IP Address', 'MAC Address', 'Online', 'Offline']) {
       expect(markup).not.toContain(forbidden);
     }
+  });
+
+  it('refreshes the lifecycle-filtered server page after an edit instead of retaining the returned Device locally', async () => {
+    const spareDevice = { ...device, lifecycleStatus: 'spare' as const, version: 5 };
+    const update = vi.fn(async (...args: [string, number, object]) => {
+      expect(args).toEqual([device.id, device.version, { lifecycleStatus: 'spare' }]);
+      return spareDevice;
+    });
+    const list = vi.fn(async () => ({ data: [], meta: { page: 1, perPage: 25, total: 0, lastPage: 1 } }));
+
+    const outcome = await runDeviceListMutation(
+      () => update(device.id, device.version, { lifecycleStatus: 'spare' }),
+      () => loadDeviceCollectionForSearchParams({ list }, new URLSearchParams('lifecycleStatus=in_service')),
+    );
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(list).toHaveBeenCalledWith({ page: 1, perPage: 25, lifecycleStatus: 'in_service' });
+    expect(outcome.result).toEqual(spareDevice);
+    expect(outcome.refresh).toEqual({
+      status: 'ready',
+      page: { data: [], meta: { page: 1, perPage: 25, total: 0, lastPage: 1 } },
+    });
+  });
+
+  it('refreshes the exact search query after searchable metadata changes without local substring matching', async () => {
+    const renamedDevice = { ...device, hostname: 'EDGE-01', version: 5 };
+    const update = vi.fn(async (...args: [string, number, object]) => {
+      expect(args).toEqual([device.id, device.version, { hostname: 'EDGE-01' }]);
+      return renamedDevice;
+    });
+    const list = vi.fn(async () => ({ data: [], meta: { page: 1, perPage: 25, total: 0, lastPage: 1 } }));
+
+    const outcome = await runDeviceListMutation(
+      () => update(device.id, device.version, { hostname: 'EDGE-01' }),
+      () => loadDeviceCollectionForSearchParams({ list }, new URLSearchParams('search=router')),
+    );
+
+    expect(list).toHaveBeenCalledWith({ page: 1, perPage: 25, search: 'router' });
+    expect(outcome.refresh.status).toBe('ready');
+    if (outcome.refresh.status === 'ready') expect(outcome.refresh.page.data).toEqual([]);
+  });
+
+  it('refreshes the collection after 412 recovery without issuing a second PATCH or injecting the latest Device', async () => {
+    const latest = { ...device, lifecycleStatus: 'spare' as const, version: 5 };
+    const update = vi.fn(async () => {
+      throw new ApiClientError('stale', { kind: 'api', status: 412, code: 'DEVICE_VERSION_CONFLICT' });
+    });
+    const show = vi.fn(async () => latest);
+    const list = vi.fn(async () => ({ data: [], meta: { page: 1, perPage: 25, total: 0, lastPage: 1 } }));
+
+    let conflictMessage = '';
+    try {
+      await update();
+    } catch (error) {
+      const issue = devicePresentationIssue(error);
+      expect(issue.versionConflict).toBe(true);
+      conflictMessage = issue.message;
+    }
+    const recovery = await runDeviceListMutation(
+      () => loadLatestDeviceAfterConflict({ show }, device.id),
+      () => loadDeviceCollectionForSearchParams({ list }, new URLSearchParams('lifecycleStatus=in_service')),
+    );
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(conflictMessage).toContain('Data terbaru sudah dimuat');
+    expect(show).toHaveBeenCalledOnce();
+    expect(list).toHaveBeenCalledWith({ page: 1, perPage: 25, lifecycleStatus: 'in_service' });
+    expect(recovery.result).toEqual(latest);
+    expect(recovery.refresh.status).toBe('ready');
+    if (recovery.refresh.status === 'ready') expect(recovery.refresh.page.data).toEqual([]);
+  });
+
+  it('canonicalizes an out-of-range page to lastPage and fetches it once without a redirect loop', async () => {
+    const list = vi.fn()
+      .mockResolvedValueOnce({ data: [], meta: { page: 3, perPage: 25, total: 50, lastPage: 2 } })
+      .mockResolvedValueOnce({ data: [device], meta: { page: 2, perPage: 25, total: 50, lastPage: 2 } });
+
+    const first = await loadDeviceCollectionForSearchParams(
+      { list },
+      new URLSearchParams('page=3&lifecycleStatus=in_service'),
+    );
+    expect(first.status).toBe('redirect');
+    if (first.status !== 'redirect') throw new Error('Expected page reconciliation redirect.');
+    expect(first.searchParams.toString()).toBe('page=2&lifecycleStatus=in_service');
+
+    const second = await loadDeviceCollectionForSearchParams({ list }, first.searchParams);
+    expect(second.status).toBe('ready');
+    expect(list).toHaveBeenNthCalledWith(1, { page: 3, perPage: 25, lifecycleStatus: 'in_service' });
+    expect(list).toHaveBeenNthCalledWith(2, { page: 2, perPage: 25, lifecycleStatus: 'in_service' });
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the canonical collection after a normal metadata edit that remains in the query', async () => {
+    const updated = { ...device, brand: 'Updated Brand', version: 5 };
+    const update = vi.fn(async (...args: [string, number, object]) => {
+      expect(args).toEqual([device.id, device.version, { brand: 'Updated Brand' }]);
+      return updated;
+    });
+    const list = vi.fn(async () => ({ data: [updated], meta: { page: 1, perPage: 25, total: 1, lastPage: 1 } }));
+
+    const outcome = await runDeviceListMutation(
+      () => update(device.id, device.version, { brand: 'Updated Brand' }),
+      () => loadDeviceCollectionForSearchParams({ list }, new URLSearchParams('deviceType=router')),
+    );
+
+    expect(list).toHaveBeenCalledWith({ page: 1, perPage: 25, deviceType: 'router' });
+    expect(outcome.refresh.status).toBe('ready');
+    if (outcome.refresh.status === 'ready') expect(outcome.refresh.page.data).toEqual([updated]);
   });
 });
 

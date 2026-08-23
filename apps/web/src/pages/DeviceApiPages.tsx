@@ -21,7 +21,6 @@ import {
   deviceTechnicalProfileRows,
   emptyDeviceForm,
   loadLatestDeviceAfterConflict,
-  sortDevices,
   validateDeviceForm,
   type DeviceFormErrors,
   type DeviceFormValues,
@@ -29,13 +28,19 @@ import {
   type DeviceProfileFieldDefinition,
 } from '@/lib/devicePresentation';
 import {
+  deviceFilterValuesFromSearchParams,
+  deviceListSearchParams,
+  loadDeviceCollectionForSearchParams,
+  runDeviceListMutation,
+  type DeviceFilterValues,
+} from '@/lib/deviceCollection';
+import {
   DEVICE_LIFECYCLE_STATUSES,
   DEVICE_TYPES,
   PRINTER_TECHNOLOGIES,
   deviceGateway,
   type DeviceDto,
   type DeviceLifecycleStatus,
-  type DeviceListFilters,
   type DevicePage,
   type DeviceType,
 } from '@/services/deviceApi';
@@ -53,13 +58,6 @@ export type DeviceDetailState =
   | { status: 'error'; issue: DevicePresentationIssue }
   | { status: 'not_found' }
   | { status: 'ready'; device: DeviceDto };
-
-export interface DeviceFilterValues {
-  search: string;
-  deviceType: '' | DeviceType;
-  lifecycleStatus: '' | DeviceLifecycleStatus;
-  homeLaboratoryId: string;
-}
 
 function lifecycleTone(status: DeviceLifecycleStatus): 'success' | 'info' | 'muted' | 'danger' {
   if (status === 'in_service') return 'success';
@@ -445,31 +443,6 @@ function DeviceProfileField({ definition, value, disabled, onChange }: {
   );
 }
 
-function filtersFromSearchParams(searchParams: URLSearchParams): DeviceListFilters {
-  const filters: DeviceListFilters = { perPage: 25 };
-  const page = Number(searchParams.get('page') ?? '1');
-  filters.page = Number.isSafeInteger(page) && page > 0 ? page : 1;
-  const homeLaboratoryId = searchParams.get('homeLaboratoryId');
-  const deviceType = searchParams.get('deviceType');
-  const lifecycleStatus = searchParams.get('lifecycleStatus');
-  const search = searchParams.get('search')?.trim();
-  if (homeLaboratoryId) filters.homeLaboratoryId = homeLaboratoryId;
-  if (deviceType && (DEVICE_TYPES as readonly string[]).includes(deviceType)) filters.deviceType = deviceType as DeviceType;
-  if (lifecycleStatus && (DEVICE_LIFECYCLE_STATUSES as readonly string[]).includes(lifecycleStatus)) filters.lifecycleStatus = lifecycleStatus as DeviceLifecycleStatus;
-  if (search) filters.search = search.slice(0, 100);
-  return filters;
-}
-
-function filterValuesFromSearchParams(searchParams: URLSearchParams): DeviceFilterValues {
-  const filters = filtersFromSearchParams(searchParams);
-  return {
-    search: filters.search ?? '',
-    deviceType: filters.deviceType ?? '',
-    lifecycleStatus: filters.lifecycleStatus ?? '',
-    homeLaboratoryId: filters.homeLaboratoryId ?? '',
-  };
-}
-
 export function DevicesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -480,7 +453,7 @@ export function DevicesPage() {
   const canViewLaboratories = hasServerPermission(user, 'laboratories.view');
   const [state, setState] = useState<DeviceListState>({ status: 'loading' });
   const [laboratories, setLaboratories] = useState<LaboratoryDto[]>([]);
-  const [filters, setFilters] = useState<DeviceFilterValues>(() => filterValuesFromSearchParams(searchParams));
+  const [filters, setFilters] = useState<DeviceFilterValues>(() => deviceFilterValuesFromSearchParams(searchParams));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DeviceDto | null>(null);
   const [form, setForm] = useState<DeviceFormValues>(emptyDeviceForm);
@@ -493,19 +466,24 @@ export function DevicesPage() {
     await bootstrapSession({ force: true });
   }, [bootstrapSession]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showLoading = true) => {
     const sequence = ++loadSequence.current;
-    setState({ status: 'loading' });
+    if (showLoading) setState({ status: 'loading' });
     try {
-      const page = await deviceGateway.list(filtersFromSearchParams(searchParams));
-      if (sequence === loadSequence.current) setState({ status: 'ready', page: { ...page, data: sortDevices(page.data) } });
+      const result = await loadDeviceCollectionForSearchParams(deviceGateway, searchParams);
+      if (sequence !== loadSequence.current) return;
+      if (result.status === 'redirect') {
+        setSearchParams(result.searchParams, { replace: true });
+        return;
+      }
+      setState({ status: 'ready', page: result.page });
     } catch (error) {
       if (sequence !== loadSequence.current) return;
       const issue = devicePresentationIssue(error);
       if (issue.authBoundary) await recoverAuthBoundary();
       else setState({ status: 'error', issue });
     }
-  }, [recoverAuthBoundary, searchParams]);
+  }, [recoverAuthBoundary, searchParams, setSearchParams]);
 
   useEffect(() => {
     void load();
@@ -513,7 +491,7 @@ export function DevicesPage() {
   }, [load]);
 
   useEffect(() => {
-    setFilters(filterValuesFromSearchParams(searchParams));
+    setFilters(deviceFilterValuesFromSearchParams(searchParams));
   }, [searchParams]);
 
   useEffect(() => {
@@ -529,13 +507,7 @@ export function DevicesPage() {
   }, [canViewLaboratories]);
 
   function applyFilters(next: DeviceFilterValues, page = 1) {
-    const parameters = new URLSearchParams();
-    if (page > 1) parameters.set('page', String(page));
-    if (next.search.trim()) parameters.set('search', next.search.trim());
-    if (next.deviceType) parameters.set('deviceType', next.deviceType);
-    if (next.lifecycleStatus) parameters.set('lifecycleStatus', next.lifecycleStatus);
-    if (next.homeLaboratoryId) parameters.set('homeLaboratoryId', next.homeLaboratoryId);
-    setSearchParams(parameters);
+    setSearchParams(deviceListSearchParams(next, page));
   }
 
   function openCreate() {
@@ -554,12 +526,6 @@ export function DevicesPage() {
 
   function closeDialog() {
     if (!submissionActive.current) setDialogOpen(false);
-  }
-
-  function mergeDevice(device: DeviceDto) {
-    setState((current) => current.status === 'ready'
-      ? { ...current, page: { ...current.page, data: sortDevices([...current.page.data.filter(({ id }) => id !== device.id), device]) } }
-      : current);
   }
 
   async function saveDevice() {
@@ -582,11 +548,12 @@ export function DevicesPage() {
     setSubmitting(true);
     setFormErrors({});
     try {
-      const saved = editing
-        ? await deviceGateway.update(editing.id, editing.version, changes ?? {})
-        : await deviceGateway.create(createDeviceInputFromForm(validated.value));
-      if (editing) mergeDevice(saved);
-      else await load();
+      await runDeviceListMutation(
+        editing
+          ? () => deviceGateway.update(editing.id, editing.version, changes ?? {})
+          : () => deviceGateway.create(createDeviceInputFromForm(validated.value)),
+        () => load(false),
+      );
       setDialogOpen(false);
       toast(editing ? 'Perangkat diperbarui' : 'Perangkat ditambahkan', 'success');
     } catch (error) {
@@ -595,8 +562,10 @@ export function DevicesPage() {
         await recoverAuthBoundary();
       } else if (issue.versionConflict && editing) {
         try {
-          const latest = await loadLatestDeviceAfterConflict(deviceGateway, editing.id);
-          mergeDevice(latest);
+          const { result: latest } = await runDeviceListMutation(
+            () => loadLatestDeviceAfterConflict(deviceGateway, editing.id),
+            () => load(false),
+          );
           setEditing(latest);
           setForm(deviceFormFromDto(latest));
           setFormErrors({ request: issue.message });
@@ -628,7 +597,7 @@ export function DevicesPage() {
         onCreate={openCreate}
         onDetail={(device) => navigate(`/devices/${encodeURIComponent(device.id)}`)}
         onEdit={openEdit}
-        onPageChange={(page) => applyFilters(filterValuesFromSearchParams(searchParams), page)}
+        onPageChange={(page) => applyFilters(deviceFilterValuesFromSearchParams(searchParams), page)}
       />
       <FormDialog
         open={dialogOpen}
