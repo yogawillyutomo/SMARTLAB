@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiClientError } from '@/lib/apiClient';
-import { layoutCapabilities, layoutPresentationIssue } from '@/lib/layoutPresentation';
+import { layoutCapabilities, layoutPresentationIssue, layoutReadPresentationIssue } from '@/lib/layoutPresentation';
 import { LayoutContractError } from '@/services/layoutApi';
 import type { AuthenticatedUser } from '@/types';
 
@@ -96,6 +96,42 @@ describe('Layout error presentation', () => {
     });
     expect(layoutPresentationIssue(new ApiClientError('bad response', { kind: 'invalid_response' }))).toMatchObject({
       retryable: false, contractFailure: true,
+    });
+  });
+
+  it('classifies read outages as safely retryable without weakening strict contract failures', () => {
+    expect(layoutReadPresentationIssue(new ApiClientError('offline', { kind: 'network' }))).toMatchObject({
+      retryable: true,
+      contractFailure: false,
+      message: 'Layanan Layout tidak dapat dijangkau. Periksa koneksi lalu coba lagi.',
+    });
+
+    for (const status of [500, 502, 503]) {
+      expect(layoutReadPresentationIssue(new ApiClientError('proxy outage', { kind: 'invalid_response', status }))).toMatchObject({
+        retryable: true,
+        contractFailure: false,
+        message: 'Server Layout sedang tidak dapat dijangkau atau memberikan respons sementara yang tidak dapat diproses. Silakan coba lagi.',
+      });
+      expect(layoutReadPresentationIssue(apiError(status, 'SERVER_ERROR'))).toMatchObject({
+        retryable: true,
+        contractFailure: false,
+      });
+    }
+
+    expect(layoutReadPresentationIssue(new ApiClientError('malformed success', { kind: 'invalid_response', status: 200 }))).toMatchObject({
+      retryable: false,
+      contractFailure: true,
+    });
+    expect(layoutReadPresentationIssue(new ApiClientError('missing status', { kind: 'invalid_response' }))).toMatchObject({
+      retryable: false,
+      contractFailure: true,
+    });
+  });
+
+  it('keeps malformed mutation responses non-retryable and never replayable', () => {
+    expect(layoutPresentationIssue(new ApiClientError('ambiguous mutation response', { kind: 'invalid_response', status: 500 }))).toMatchObject({
+      retryable: false,
+      contractFailure: true,
     });
   });
 

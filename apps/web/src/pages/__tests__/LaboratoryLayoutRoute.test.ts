@@ -30,4 +30,9 @@ describe('production canonical Laboratory Layout route boundary', () => {
     expect(pageSource).toContain("await reconcileWorkspace('delete', scope, archivePage)");
     expect(pageSource).not.toContain("reconcileWorkspace('activate', scope, 1).then(() => activateDraft");
   });
+
+  it('keeps workspace GET outages on the explicit retry path', () => {
+    expect(pageSource).toContain("issueFor(error, 'read')");
+    expect(pageSource).toContain('onRetry={pageState.issue.retryable ? () => void loadWorkspace() : undefined}');
+  });
 });

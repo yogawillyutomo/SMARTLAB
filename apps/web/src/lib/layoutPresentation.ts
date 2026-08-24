@@ -22,6 +22,8 @@ export interface LayoutPresentationIssue {
   fieldErrors: Record<string, string>;
 }
 
+export type LayoutPresentationOperation = 'read' | 'mutation';
+
 export function layoutCapabilities(user: AuthenticatedUser | null): LayoutCapabilities {
   const view = hasServerPermission(user, 'layouts.view');
   return {
@@ -64,7 +66,11 @@ const LAYOUT_CONFLICT_MESSAGES: Record<string, string> = {
   LAYOUT_POSITION_OCCUPIED: 'Satu atau lebih footprint bertabrakan pada grid Layout.',
 };
 
-export function layoutPresentationIssue(error: unknown): LayoutPresentationIssue {
+export function layoutPresentationIssue(
+  error: unknown,
+  options: { operation?: LayoutPresentationOperation } = {},
+): LayoutPresentationIssue {
+  const operation = options.operation ?? 'mutation';
   const fallback = baseIssue();
   if (error instanceof LayoutContractError) {
     return {
@@ -125,6 +131,12 @@ export function layoutPresentationIssue(error: unknown): LayoutPresentationIssue
     return { ...fallback, message: 'Konfigurasi API Layout tidak valid.', retryable: false, contractFailure: true };
   }
   if (error.kind === 'invalid_response') {
+    if (operation === 'read' && error.status !== undefined && error.status >= 500) {
+      return {
+        ...fallback,
+        message: 'Server Layout sedang tidak dapat dijangkau atau memberikan respons sementara yang tidak dapat diproses. Silakan coba lagi.',
+      };
+    }
     return {
       ...fallback,
       message: 'Server mengembalikan respons Layout yang tidak valid.',
@@ -139,4 +151,8 @@ export function layoutPresentationIssue(error: unknown): LayoutPresentationIssue
     return { ...fallback, message: 'Server Layout sedang bermasalah. Silakan coba lagi.' };
   }
   return fallback;
+}
+
+export function layoutReadPresentationIssue(error: unknown): LayoutPresentationIssue {
+  return layoutPresentationIssue(error, { operation: 'read' });
 }

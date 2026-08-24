@@ -42,7 +42,7 @@ import {
   type LayoutWorkspaceData,
   type LayoutRouteScopeToken,
 } from '@/lib/layoutPage';
-import { layoutCapabilities, layoutPresentationIssue, type LayoutPresentationIssue } from '@/lib/layoutPresentation';
+import { layoutCapabilities, layoutPresentationIssue, layoutReadPresentationIssue, type LayoutPresentationIssue } from '@/lib/layoutPresentation';
 import { laboratoryGateway } from '@/services/laboratoryApi';
 import { LayoutContractError, layoutGateway, type LayoutDto, type UnplacedDeviceCandidateDto, type UnplacedDevicePage } from '@/services/layoutApi';
 import { deviceGateway } from '@/services/deviceApi';
@@ -62,8 +62,8 @@ type UnplacedState =
   | { status: 'error'; data: []; meta: null; message: string }
   | { status: 'ready'; data: UnplacedDeviceCandidateDto[]; meta: UnplacedDevicePage['meta'] };
 
-function issueFor(error: unknown): LayoutPresentationIssue {
-  return layoutPageContractIssue(error) ?? layoutPresentationIssue(error);
+function issueFor(error: unknown, operation: 'read' | 'mutation' = 'mutation'): LayoutPresentationIssue {
+  return layoutPageContractIssue(error) ?? (operation === 'read' ? layoutReadPresentationIssue(error) : layoutPresentationIssue(error));
 }
 
 function statusLabel(status: LayoutDto['status']): string {
@@ -181,7 +181,7 @@ export default function LaboratoryLayoutApiPage() {
       return true;
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return false;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return false;
@@ -256,7 +256,7 @@ export default function LaboratoryLayoutApiPage() {
       setMetadataById((current) => ({ ...current, ...indexLayoutDeviceMetadata(response.data) }));
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== unplacedGeneration.current) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
@@ -394,7 +394,7 @@ export default function LaboratoryLayoutApiPage() {
       toast('Draft dimuat ulang dari server.', 'info');
     } catch (error) {
       if (!routeScope.current.isCurrent(scope)) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
@@ -427,7 +427,7 @@ export default function LaboratoryLayoutApiPage() {
       setActionIssue(null);
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== loadGeneration.current) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
@@ -529,7 +529,7 @@ export default function LaboratoryLayoutApiPage() {
       setArchiveDetail(canonical);
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== archiveGeneration.current) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
@@ -556,7 +556,7 @@ export default function LaboratoryLayoutApiPage() {
         : current);
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== archiveListGeneration.current) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
@@ -590,7 +590,7 @@ export default function LaboratoryLayoutApiPage() {
       setMetadataById((current) => ({ ...current, [deviceId]: metadata }));
     } catch (error) {
       if (!routeScope.current.isCurrent(scope) || generation !== metadataGeneration.current) return;
-      const issue = issueFor(error);
+      const issue = issueFor(error, 'read');
       if (issue.authBoundary) {
         await recoverAuth();
         if (!routeScope.current.isCurrent(scope)) return;
