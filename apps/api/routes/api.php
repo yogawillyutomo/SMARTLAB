@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
@@ -26,6 +27,10 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:devices.view');
         Route::patch('devices/{deviceId}', [DeviceController::class, 'update'])
             ->middleware(['permission:devices.update', RequireDeviceVersionPrecondition::class]);
+        Route::post('devices/{deviceId}/transfers', [DeviceTransferController::class, 'store'])
+            ->middleware(['permission:device-transfers.create', RequireDeviceVersionPrecondition::class]);
+        Route::get('devices/{deviceId}/transfers', [DeviceTransferController::class, 'index'])
+            ->middleware('permission:device-transfers.view');
 
         Route::get('laboratories', [LaboratoryController::class, 'index'])
             ->middleware('permission:laboratories.view');

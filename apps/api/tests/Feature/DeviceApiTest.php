@@ -1189,13 +1189,13 @@ class DeviceApiTest extends TestCase
         $school->forceDelete();
     }
 
-    public function test_exactly_four_device_routes_exist_with_exact_permission_middleware_and_no_delete(): void
+    public function test_device_routes_have_exact_permission_middleware_and_no_delete(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/devices'))
             ->values();
 
-        $this->assertCount(4, $routes);
+        $this->assertCount(6, $routes);
         $actual = $routes->map(fn ($route): array => [
             'methods' => $route->methods(),
             'uri' => $route->uri(),
@@ -1210,6 +1210,10 @@ class DeviceApiTest extends TestCase
         $this->assertContains('permission:devices.view', $actual[2]['middleware']);
         $this->assertSame('api/v1/devices/{deviceId}', $actual[3]['uri']);
         $this->assertContains('permission:devices.update', $actual[3]['middleware']);
+        $this->assertSame('api/v1/devices/{deviceId}/transfers', $actual[4]['uri']);
+        $this->assertContains('permission:device-transfers.create', $actual[4]['middleware']);
+        $this->assertSame('api/v1/devices/{deviceId}/transfers', $actual[5]['uri']);
+        $this->assertContains('permission:device-transfers.view', $actual[5]['middleware']);
 
         [, $school] = $this->authenticateWithPermissions(['devices.update']);
         $device = Device::factory()->for($school)->create();

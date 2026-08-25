@@ -36,6 +36,11 @@ class Device extends Model
         return $this->hasMany(DeviceChangeEvent::class);
     }
 
+    public function transfers(): HasMany
+    {
+        return $this->hasMany(DeviceTransfer::class);
+    }
+
     public function layoutPlacements(): HasMany
     {
         return $this->hasMany(LayoutDevicePlacement::class);

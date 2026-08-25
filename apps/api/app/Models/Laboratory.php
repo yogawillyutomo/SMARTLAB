@@ -38,6 +38,16 @@ class Laboratory extends Model
         return $this->hasMany(Layout::class);
     }
 
+    public function outgoingTransfers(): HasMany
+    {
+        return $this->hasMany(DeviceTransfer::class, 'source_laboratory_id');
+    }
+
+    public function incomingTransfers(): HasMany
+    {
+        return $this->hasMany(DeviceTransfer::class, 'destination_laboratory_id');
+    }
+
     /**
      * Get the attributes that should be cast.
      *
