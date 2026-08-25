@@ -143,18 +143,18 @@ Indexes lead with tenant: `(school_id, device_id_snapshot, created_at, id)`, plu
 
 Device `version` is the only aggregate concurrency token. Transfer does not add a second Device aggregate version. Every command requires the same strong quoted `If-Match: "<version>"` convention used by Device PATCH; missing or malformed values return `PRECONDITION_REQUIRED`, and a stale value returns `DEVICE_VERSION_CONFLICT` (412).
 
-Because the source is derived from Device state while the repository-wide lock order remains Laboratory -> Layout -> Device, implementation uses two phases:
+Because the source is derived from Device state while the repository-wide lock order remains Laboratory -> Layout -> Device, implementation uses a two-phase algorithm. The pre-read is routing information only and never establishes a final source conflict:
 
-1. Perform a tenant-scoped read of Device ID, current `homeLaboratoryId`, and a version candidate. This is a routing candidate, not final authority.
-2. If the candidate home is null, fail with `TRANSFER_SOURCE_UNASSIGNED`.
-3. Resolve the destination inside the current School.
-4. Lock source and destination Laboratories in ascending ULID order.
-5. Lock the source active Layout and current source draft in deterministic Layout-ID order.
-6. Lock the Device row.
-7. Revalidate School ownership, `If-Match`, current home against the candidate source, destination activity, lifecycle, active placement, draft reference, and future custody blockers.
-8. Increment Device `version` once, insert history and the transfer event, and commit.
+1. Perform a tenant-scoped read of Device ID and candidate `homeLaboratoryId`; an optional version read is diagnostic only.
+2. If the candidate home is non-null, resolve the destination and lock candidate source plus destination Laboratories in ascending ULID order, then lock the candidate source active Layout and current draft in deterministic Layout-ID order.
+3. If the candidate home is null, resolve the destination, lock the destination Laboratory only, and do not invent a source Laboratory or Layout lock.
+4. Lock the Device row.
+5. Validate, in this exact order: Device still exists in the tenant; Device `version` equals parsed `If-Match`; current `homeLaboratoryId` is non-null or return `TRANSFER_SOURCE_UNASSIGNED`; destination differs from current source; destination is active; lifecycle is eligible; active placement is absent; current source draft reference is absent; future custody blockers are absent.
+6. Increment Device `version` once, insert history and the transfer event, and commit.
 
-If Device state changed during the pre-read window, the Device version check is authoritative. A stale request returns 412; after a deliberate reload, a request uses the newly current server-derived source. This algorithm introduces no second source token and aligns with existing Layout locking.
+If Device state changed during the pre-read window, the Device version check is authoritative and runs before source eligibility. A candidate-null read followed by a newly assigned home therefore returns 412 for a stale If-Match, not a source-assignment error. This algorithm introduces no second source token and aligns with existing Layout locking.
+
+For a syntactically valid `If-Match`, the stable error precedence is: tenant existence -> Device version -> source assignment -> same destination -> destination eligibility -> lifecycle -> active placement -> draft reference -> future temporary custody. Missing or malformed `If-Match` remains a 428 before application mutation logic.
 
 ## 10. No-op and ambiguous-outcome policy
 
@@ -191,7 +191,7 @@ Request body:
 }
 ```
 
-Only `destinationLaboratoryId` and optional bounded `reason` are accepted. `schoolId`, `sourceLaboratoryId`, `deviceId`, status, actor, timestamps, Device metadata, Layout IDs, placement coordinates, and unknown fields are rejected.
+Only `destinationLaboratoryId` and optional bounded `reason` are accepted. `reason` may be omitted or null; after trimming, blank becomes null; values over 500 characters return `422 VALIDATION_FAILED`. `schoolId`, `sourceLaboratoryId`, `deviceId`, status, actor, timestamps, Device metadata, Layout IDs, placement coordinates, and unknown fields are rejected.
 
 Successful POST returns HTTP 201 with the established `{ "data": ... }` envelope, `ETag: "<deviceVersionAfter>"`, and a Transfer DTO. GET returns HTTP 200 with the established paginated collection metadata and the same DTO shape. No Transfer detail endpoint or destination-placement endpoint is needed.
 
@@ -314,6 +314,10 @@ The Device home update, version increment, Transfer insert, and audit event must
 | 34 | Caller has view but not devices.view/laboratories.view | History allowed through dedicated permission only |
 | 35 | Cross-tenant active membership context | Operation fails before record lookup |
 | 36 | History pagination with identical timestamps | Stable `createdAt DESC, id DESC` order |
+| 37 | Client read version 3/home LAB-A; concurrent mutation makes version 4/home null; request uses `If-Match: "3"` | 412 `DEVICE_VERSION_CONFLICT`, not `TRANSFER_SOURCE_UNASSIGNED` |
+| 38 | Pre-read sees null; another valid operation assigns home and increments version before Device lock | Stale `If-Match` returns 412; no Transfer execution |
+| 39 | Device home remains null and version matches `If-Match` | 409 `TRANSFER_SOURCE_UNASSIGNED`; no history, event, or version bump |
+| 40 | Reason omitted/null, blank after trim, or longer than 500 characters | Omitted/null/blank persist as null; over-limit returns 422 |
 
 ## 19. Implementation sequencing gate
 

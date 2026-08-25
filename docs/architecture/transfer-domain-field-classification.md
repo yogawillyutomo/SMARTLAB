@@ -10,19 +10,19 @@ This companion classifies the proposed executed `device_transfers` record. It is
 | `school_id` | B: tenant/security | yes | no | active SchoolMembership | live FK, restrict School deletion |
 | `device_id` | B: relationship | nullable live join | no | Device domain | null-on-delete; never history authority |
 | `device_id_snapshot` | A: historical identity | yes | no | Transfer transaction | immutable ULID |
-| `device_code_snapshot` | E: display snapshot | yes | no | Device at execution | immutable bounded string |
+| `device_code_snapshot` | E: display snapshot | yes | no | Device at execution | immutable string, max 32 characters |
 | `source_laboratory_id` | B: relationship | nullable live join | no | source Device home at execution | null-on-delete |
 | `destination_laboratory_id` | B: relationship | nullable live join | no | validated destination | null-on-delete |
 | `source_laboratory_id_snapshot` | A: historical identity | yes | no | source Laboratory at execution | immutable ULID |
 | `destination_laboratory_id_snapshot` | A: historical identity | yes | no | destination Laboratory at execution | immutable ULID |
-| `source_laboratory_code_snapshot` | E: display snapshot | yes | no | source Laboratory at execution | immutable bounded string |
-| `destination_laboratory_code_snapshot` | E: display snapshot | yes | no | destination Laboratory at execution | immutable bounded string |
-| `source_laboratory_name_snapshot` | E: display snapshot | yes | no | source Laboratory at execution | immutable bounded string |
-| `destination_laboratory_name_snapshot` | E: display snapshot | yes | no | destination Laboratory at execution | immutable bounded string |
+| `source_laboratory_code_snapshot` | E: display snapshot | yes | no | source Laboratory at execution | immutable string, max 50 characters |
+| `destination_laboratory_code_snapshot` | E: display snapshot | yes | no | destination Laboratory at execution | immutable string, max 50 characters |
+| `source_laboratory_name_snapshot` | E: display snapshot | yes | no | source Laboratory at execution | immutable string, max 255 characters |
+| `destination_laboratory_name_snapshot` | E: display snapshot | yes | no | destination Laboratory at execution | immutable string, max 255 characters |
 | `actor_user_id` | B: relationship | nullable live join | no | authenticated actor | null-on-delete |
 | `actor_user_id_snapshot` | A: historical identity | yes | no | authenticated actor | immutable ULID |
-| `actor_name_snapshot` | E: display snapshot | yes | no | actor at execution | immutable bounded string |
-| `reason` | E: operator explanation | no | no | authenticated request | immutable, bounded, redacted from secrets |
+| `actor_name_snapshot` | E: display snapshot | yes | no | actor at execution | immutable string, max 255 characters |
+| `reason` | E: operator explanation | no | no | authenticated request | trimmed; blank-to-null; max 500 characters |
 | `device_version_before` | C: concurrency evidence | yes | no | locked Device row | immutable integer |
 | `device_version_after` | C: concurrency evidence | yes | no | committed Device row | immutable integer |
 | `created_at` | D: event time | yes | no | server clock | immutable timestamp |
@@ -33,6 +33,8 @@ This companion classifies the proposed executed `device_transfers` record. It is
 - The source Laboratory is not a request field. A tenant-scoped pre-read uses the Device's current `homeLaboratoryId` as a candidate, then the locked Device row and `If-Match` version establish final authority. A null home returns `TRANSFER_SOURCE_UNASSIGNED`.
 - Live foreign keys are optional convenience joins only. Snapshot fields are authoritative for historical reconstruction.
 - `reason` is an explanation, not an approval, workflow status, incident, or maintenance note. It must be length-limited and must not contain secrets or unrestricted personal data.
+- `reason` may be omitted or null; trimming occurs before persistence, blank becomes null, and values over 500 characters fail with `VALIDATION_FAILED`.
+- Snapshot bounds mirror canonical source capacities: Device code 32, Laboratory code 50, Laboratory name 255, and actor name 255 characters. Values are validated and never silently truncated.
 - Device `version` remains the single source for stale-state protection; Transfer has no competing aggregate version.
 - No field authorizes a destination Layout placement. “Unplaced after Transfer” means no placement was created; the Layout unplaced-candidate endpoint remains a narrower projection that excludes retired Devices.
 
