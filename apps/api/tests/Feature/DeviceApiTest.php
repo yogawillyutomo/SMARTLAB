@@ -829,6 +829,11 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('data.homeLaboratoryId', $lab->id)
             ->assertJsonPath('data.version', 2);
 
+        $this->assertDatabaseHas('device_change_events', [
+            'device_id' => $device->id,
+            'event_type' => 'device.home_assigned',
+        ]);
+
         $device->refresh()->updateQuietly(['updated_at' => now()->subHour()]);
         $unchangedUpdatedAt = $device->refresh()->updated_at->toISOString();
         $eventCount = DeviceChangeEvent::query()->count();
@@ -971,6 +976,29 @@ class DeviceApiTest extends TestCase
             );
             $this->assertDatabaseHas('devices', ['id' => $device->id, 'home_laboratory_id' => null, 'version' => 1]);
         }
+    }
+
+    public function test_stale_initial_home_assignment_wins_over_invalid_laboratory_validation(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['devices.update']);
+        $inactive = Laboratory::factory()->for($school)->create(['status' => 'inactive']);
+        $device = Device::factory()->for($school)->create([
+            'home_laboratory_id' => null,
+            'version' => 2,
+        ]);
+
+        $this->patchJson('/api/v1/devices/'.$device->id, [
+            'homeLaboratoryId' => $inactive->id,
+        ], ['If-Match' => '"1"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'DEVICE_VERSION_CONFLICT');
+
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'home_laboratory_id' => null,
+            'version' => 2,
+        ]);
+        $this->assertDatabaseCount('device_change_events', 0);
     }
 
     public function test_established_home_cannot_be_reassigned_or_cleared_through_generic_patch(): void

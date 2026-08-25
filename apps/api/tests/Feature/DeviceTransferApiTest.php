@@ -290,6 +290,36 @@ class DeviceTransferApiTest extends TestCase
         $this->assertDatabaseCount('device_change_events', 1);
     }
 
+    public function test_candidate_null_transfer_and_initial_assignment_have_deterministic_serialized_outcomes(): void
+    {
+        $this->authenticate(['device-transfers.create', 'devices.update']);
+        $school = School::query()->latest('created_at')->firstOrFail();
+        $destination = Laboratory::factory()->for($school)->create();
+        $assignmentLab = Laboratory::factory()->for($school)->create();
+        $device = Device::factory()->for($school)->create(['home_laboratory_id' => null]);
+
+        // This exercises the candidate-null Transfer lock path without pretending to be a parallel test.
+        $this->postJson('/api/v1/devices/'.$device->id.'/transfers', [
+            'destinationLaboratoryId' => $destination->id,
+        ], ['If-Match' => '"1"'])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'TRANSFER_SOURCE_UNASSIGNED');
+
+        $this->patchJson('/api/v1/devices/'.$device->id, [
+            'homeLaboratoryId' => $assignmentLab->id,
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"');
+
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'home_laboratory_id' => $assignmentLab->id,
+            'version' => 2,
+        ]);
+        $this->assertDatabaseCount('device_transfers', 0);
+        $this->assertDatabaseCount('device_change_events', 1);
+    }
+
     public function test_seeded_roles_receive_only_the_locked_transfer_permissions(): void
     {
         $this->seed([RoleSeeder::class, PermissionSeeder::class, RolePermissionSeeder::class]);
