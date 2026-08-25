@@ -43,15 +43,15 @@ The client never supplies `schoolId`, source Laboratory, actor, Device ownership
 
 ## 3. Eligibility rules
 
-A transfer from LAB-A to LAB-B is valid only when all of the following hold in one transaction:
+A transfer is valid only when all of the following hold in one transaction. The source is never a client input; it is the Device's current server-derived home Laboratory.
 
 1. The Device belongs to the current School.
-2. `Device.homeLaboratoryId` is non-null and equals LAB-A.
-3. LAB-A and LAB-B belong to the current School.
-4. LAB-A and LAB-B are different Laboratories.
-5. LAB-B is active and eligible to receive new custody.
-6. No active Layout of LAB-A contains the Device.
-7. The current draft of LAB-A does not reference the Device.
+2. `Device.homeLaboratoryId` is non-null; otherwise return `TRANSFER_SOURCE_UNASSIGNED` (409).
+3. The destination belongs to the current School.
+4. The destination differs from the current server-derived source.
+5. The destination is active and eligible to receive new custody.
+6. No active Layout of the current source Laboratory contains the Device.
+7. The current draft of the current source Laboratory does not reference the Device.
 8. The Device lifecycle is transferable under section 7.
 9. No active Loan or Maintenance custody exists once those domains are implemented; v1 fails closed at that integration boundary.
 10. The required Device version precondition is current.
@@ -78,7 +78,7 @@ The archived predecessor continues to contain the historical placement. Transfer
 
 If a current LAB-A draft exists but does not reference D, it does not block Transfer. The draft rule is Device-specific because blocking every draft would turn an unrelated unsaved edit into an operational custody lock and would contradict the Layout contract's sparse, draft-only mutation boundary. If the current draft references D, Transfer fails with `TRANSFER_DRAFT_REFERENCE_EXISTS`; the operator must remove the placement or delete the draft as appropriate.
 
-No destination draft or active Layout is created or modified by Transfer. LAB-B's unplaced-device projection will include D after the home change, subject to the existing `layouts.view`/`devices.view` projection permissions.
+No destination draft or active Layout is created or modified by Transfer. “Unplaced after Transfer” means only that no destination placement was created. An `in_service` or `spare` Device may appear in LAB-B's narrower unplaced-device candidate projection when all existing Layout eligibility rules pass; a `retired` Device remains unplaced but is excluded by that projection's locked lifecycle filter.
 
 ## 5. Laboratory status policy
 
@@ -133,35 +133,34 @@ Proposed `device_transfers` fields:
 | `actor_user_id_snapshot` / `actor_name_snapshot` | Required identity snapshots |
 | `reason` | Nullable bounded operator explanation; no free-form workflow state |
 | `device_version_before` / `device_version_after` | Required optimistic-concurrency evidence |
-| `idempotency_key_hash` | Required per-tenant/actor retry key fingerprint |
-| `request_fingerprint_hash` | Required destination/reason request fingerprint |
 | `created_at` | Immutable execution time; no `updated_at` |
 
 Live references are useful for authorized joins while records exist, but snapshots are the historical authority. Laboratory renames, actor deletion, Device decommissioning, and any future controlled cleanup must not rewrite history. There is no cascade that deletes a transfer record.
 
-The unique key `(school_id, actor_user_id_snapshot, idempotency_key_hash)` supports safe replay. Indexes lead with tenant: `(school_id, device_id_snapshot, created_at, id)`, source and destination snapshot indexes, and the idempotency unique index.
+Indexes lead with tenant: `(school_id, device_id_snapshot, created_at, id)`, plus source and destination snapshot indexes. V1 deliberately adds no general idempotency infrastructure.
 
 ## 9. Transaction and concurrency strategy
 
 Device `version` is the only aggregate concurrency token. Transfer does not add a second Device aggregate version. Every command requires the same strong quoted `If-Match: "<version>"` convention used by Device PATCH; missing or malformed values return `PRECONDITION_REQUIRED`, and a stale value returns `DEVICE_VERSION_CONFLICT` (412).
 
-The transaction uses this deterministic lock order:
+Because the source is derived from Device state while the repository-wide lock order remains Laboratory -> Layout -> Device, implementation uses two phases:
 
-1. Resolve and lock the source and destination Laboratory rows in ascending ULID order.
-2. Resolve and lock the source active Layout and current source draft rows in ascending Layout ULID order.
-3. Resolve and lock the Device row by current School and Device ULID.
-4. Re-check source home equality, destination status, lifecycle, active placement, draft reference, and future custody blockers.
-5. Increment Device `version` exactly once, insert `device_transfers`, insert the Device transfer change event, and commit.
+1. Perform a tenant-scoped read of Device ID, current `homeLaboratoryId`, and a version candidate. This is a routing candidate, not final authority.
+2. If the candidate home is null, fail with `TRANSFER_SOURCE_UNASSIGNED`.
+3. Resolve the destination inside the current School.
+4. Lock source and destination Laboratories in ascending ULID order.
+5. Lock the source active Layout and current source draft in deterministic Layout-ID order.
+6. Lock the Device row.
+7. Revalidate School ownership, `If-Match`, current home against the candidate source, destination activity, lifecycle, active placement, draft reference, and future custody blockers.
+8. Increment Device `version` once, insert history and the transfer event, and commit.
 
-This ordering aligns with the existing Layout mutation path's Laboratory/Layout/Device locking and avoids a Transfer-vs-Layout deadlock caused by taking Device first. If a future Loan or Maintenance aggregate is introduced, its lock must be added to the repository-wide documented order before implementation.
+If Device state changed during the pre-read window, the Device version check is authoritative. A stale request returns 412; after a deliberate reload, a request uses the newly current server-derived source. This algorithm introduces no second source token and aligns with existing Layout locking.
 
-Concurrent transfers from the same source serialize on the source Laboratory and Device. The first committed command wins; a second command with a stale `If-Match` receives 412, and a current-version command that no longer matches LAB-A receives `TRANSFER_SOURCE_MISMATCH`. No partial Device/history write is possible.
+## 10. No-op and ambiguous-outcome policy
 
-## 10. Idempotency and no-op policy
+`A -> A` is invalid with `TRANSFER_SAME_LABORATORY`; it is never a history row and never a Device version increment. V1 has no retry-token or general idempotency framework. Mutations must not be automatically replayed after an ambiguous response.
 
-`A -> A` is invalid with `TRANSFER_SAME_LABORATORY`; it is never a history row and never a Device version increment. Repeating an already completed A -> B command without the original response must not create a second history row.
-
-Because Transfer is irreversible, v1 requires an opaque `Idempotency-Key` header (1-128 characters). A repeated key with the same request fingerprint returns the original committed Transfer DTO and Device ETag without mutation. Reuse of a key with a different destination/reason returns `IDEMPOTENCY_KEY_REUSED` (409). A rejected command writes neither a transfer row nor a Device audit event.
+If a successful POST response is lost, the client must GET the canonical Device and GET its Transfer history to reconcile whether the command committed. If the client manually repeats the exact old POST with the stale `If-Match`, it receives `DEVICE_VERSION_CONFLICT` (412) and no duplicate history row. A caller that intentionally loads the current Device version then submits a new command follows the normal current-state rules.
 
 ## 11. Exact permissions
 
@@ -170,7 +169,7 @@ The locked Device contract's exact future module is `device-transfers`. V1 uses 
 - `device-transfers.create`: execute an immediate permanent transfer;
 - `device-transfers.view`: read Transfer history.
 
-`device-transfers.approve` remains reserved for a later requested/approved workflow and is not required by the executed v1 command. `devices.manage`, `devices.update`, `layouts.manage`, role names, and Super Admin fallbacks are not Transfer authority. Transfer does not require `devices.update` or `laboratories.update`; it is a dedicated custody mutation.
+`devices.manage`, `devices.update`, `layouts.manage`, role names, and Super Admin fallbacks are not Transfer authority. Transfer does not require `devices.update` or `laboratories.update`; it is a dedicated custody mutation.
 
 History access is authorized by `device-transfers.view` alone within the active School. It does not silently require `devices.view` or `laboratories.view`; the dedicated permission is the explicit authority to see Transfer snapshots. Unknown and cross-tenant Device IDs still return the same `DEVICE_NOT_FOUND` result. A client that needs live Device or Laboratory detail must separately hold those domain permissions and call those APIs.
 
@@ -180,7 +179,7 @@ No duplicate root collection is needed for v1.
 
 | Method and path | Permission | Result |
 | --- | --- | --- |
-| `POST /api/v1/devices/{deviceId}/transfers` | `device-transfers.create` | Execute one atomic transfer; requires `If-Match` and `Idempotency-Key` |
+| `POST /api/v1/devices/{deviceId}/transfers` | `device-transfers.create` | Execute one atomic transfer; requires `If-Match` |
 | `GET /api/v1/devices/{deviceId}/transfers?page=&perPage=` | `device-transfers.view` | Deterministic paginated immutable history, newest first |
 
 Request body:
@@ -226,15 +225,13 @@ Transfer-specific errors:
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 404 | `DEVICE_NOT_FOUND` | Device missing or outside current School |
-| 404 | `TRANSFER_NOT_FOUND` | Requested history record is missing or outside current School (reserved if a future member route is added) |
 | 404 | `LABORATORY_NOT_FOUND` | Destination missing or outside current School, without existence disclosure |
-| 409 | `TRANSFER_SOURCE_MISMATCH` | Device has no home Laboratory or no longer belongs to the requested source implied by current state |
+| 409 | `TRANSFER_SOURCE_UNASSIGNED` | Device has no established home Laboratory and cannot use Transfer v1 |
 | 409 | `TRANSFER_SAME_LABORATORY` | Destination equals current source |
 | 409 | `TRANSFER_ACTIVE_PLACEMENT_EXISTS` | Active source Layout still references the Device |
 | 409 | `TRANSFER_DRAFT_REFERENCE_EXISTS` | Current source draft references the Device |
 | 409 | `TRANSFER_DESTINATION_INELIGIBLE` | Destination is known but inactive or otherwise not receivable |
 | 409 | `TRANSFER_DEVICE_NOT_ELIGIBLE` | Device is decommissioned or blocked by a future custody/lifecycle rule |
-| 409 | `IDEMPOTENCY_KEY_REUSED` | Same key was submitted with a different request fingerprint |
 | 412 | `DEVICE_VERSION_CONFLICT` | `If-Match` is stale |
 | 428 | `PRECONDITION_REQUIRED` | `If-Match` is missing or malformed |
 | 422 | `VALIDATION_FAILED` | Malformed ULID, body, reason, pagination, or unknown field |
@@ -245,7 +242,7 @@ Rejected/no-op attempts never create a Transfer history row or a material Device
 
 The immutable `device_transfers` row is the domain history. The same transaction also writes one `DeviceChangeEvent` with event type `device.transferred`, changed field `homeLaboratoryId`, Transfer ID, source/destination snapshots, actor snapshot, and Device version evidence. It must not copy technical profiles, telemetry, Asset data, or Layout geometry.
 
-The combination of Transfer history and Device events reconstructs Device, source Laboratory, destination Laboratory, actor, time, and reason. Rejected validation, stale preconditions, same-Laboratory submissions, and idempotent replay of an existing success write no new event.
+The combination of Transfer history and Device events reconstructs Device, source Laboratory, destination Laboratory, actor, time, and reason. Rejected validation, stale preconditions, same-Laboratory submissions, and ambiguous-response reconciliation write no new event.
 
 ## 16. Current-location and future-domain boundaries
 
@@ -267,7 +264,7 @@ PostgreSQL is canonical; portable SQLite tests must exercise equivalent constrai
 
 Required database protections:
 
-- tenant-leading indexes and a unique idempotency key index;
+- tenant-leading indexes for Device history and source/destination reporting;
 - immutable timestamps (application policy and no update path);
 - bounded snapshot strings and bounded reason;
 - foreign keys with null-on-delete for optional live history joins and restrict-on-delete for School;
@@ -287,35 +284,36 @@ The Device home update, version increment, Transfer insert, and audit event must
 | 4 | Current source draft omits Device | Transfer allowed when other rules pass |
 | 5 | Only archived Layout references Device | Transfer allowed; archive unchanged |
 | 6 | Destination Layout exists | No destination placement or Layout mutation |
-| 7 | Device appears in LAB-B unplaced projection | Device is eligible for unplaced query after commit |
+| 7 | In-service Device appears in LAB-B candidate projection | Device is eligible for unplaced query after commit |
 | 8 | Cross-school Device ID | 404 `DEVICE_NOT_FOUND`; no leak |
 | 9 | Cross-school destination ID | 404 `LABORATORY_NOT_FOUND`; no leak |
 | 10 | Unknown Device ID | Same 404 as cross-school Device |
 | 11 | Unknown destination ID | Same 404 as cross-school destination |
 | 12 | Source equals destination | 409 `TRANSFER_SAME_LABORATORY`; no row/version |
-| 13 | Device home is null | 409 `TRANSFER_SOURCE_MISMATCH` |
-| 14 | Device home is LAB-C, command targets LAB-B | 409 `TRANSFER_SOURCE_MISMATCH` |
+| 13 | Device home is null | 409 `TRANSFER_SOURCE_UNASSIGNED`; use initial-assignment workflow |
+| 14 | Current home is LAB-C, destination is LAB-B, current version supplied | Valid C -> B Transfer when other rules pass |
 | 15 | Stale Device `If-Match` | 412; no row/version |
 | 16 | Missing/malformed `If-Match` | 428; no row/version |
-| 17 | Two concurrent A -> B transfers | One success; loser 412 or source mismatch; one row |
-| 18 | A -> B and A -> C concurrently | One success; loser cannot overwrite home |
-| 19 | Inactive source -> active destination | Allowed for custodial cleanup |
-| 20 | Active source -> inactive destination | 409 `TRANSFER_DESTINATION_INELIGIBLE` |
-| 21 | Inactive source -> inactive destination | Same destination rejection |
-| 22 | `in_service` Device | Transfer allowed |
-| 23 | `spare` Device | Transfer allowed; remains spare and unplaced |
-| 24 | `retired` Device | Transfer allowed; remains retired and unplaced |
-| 25 | `decommissioned` Device | 409 `TRANSFER_DEVICE_NOT_ELIGIBLE` |
-| 26 | Active future Loan custody | Fail closed as Device operation blocked |
-| 27 | Active future Maintenance custody | Fail closed as Device operation blocked |
-| 28 | Repeated same idempotency key after lost response | Original DTO replayed; one row/version |
-| 29 | Same idempotency key with changed destination/reason | 409 `IDEMPOTENCY_KEY_REUSED` |
-| 30 | Rejected transfer | No Transfer row and no material audit event |
-| 31 | Actor or Laboratory renamed/deleted later | Snapshot history remains reconstructable |
-| 32 | Caller has create but not devices.update | Transfer allowed; no wildcard coupling |
-| 33 | Caller has view but not devices.view/laboratories.view | History allowed through dedicated permission only |
-| 34 | Cross-tenant active membership context | Operation fails before record lookup |
-| 35 | History pagination with identical timestamps | Stable `createdAt DESC, id DESC` order |
+| 17 | Two concurrent A -> B transfers with the same initial version | One success; loser 412; one row |
+| 18 | Home changes during the pre-read window | Stale `If-Match` is authoritative; 412; no row |
+| 19 | Caller reloads after a committed change and submits a new current-state transfer | Newly derived source is used; normal rules apply |
+| 20 | Inactive source -> active destination | Allowed for custodial cleanup |
+| 21 | Active source -> inactive destination | 409 `TRANSFER_DESTINATION_INELIGIBLE` |
+| 22 | Inactive source -> inactive destination | Same destination rejection |
+| 23 | `in_service` Device | Transfer allowed |
+| 24 | `spare` Device | Transfer allowed; remains spare and may be a candidate |
+| 25 | `retired` A -> B | 201; remains retired, home becomes B, no placement, absent from unplaced candidates |
+| 26 | `decommissioned` Device | 409 `TRANSFER_DEVICE_NOT_ELIGIBLE` |
+| 27 | Active future Loan custody | Fail closed as Device operation blocked |
+| 28 | Active future Maintenance custody | Fail closed as Device operation blocked |
+| 29 | Successful POST response is lost | GET canonical Device and history reconcile outcome; no automatic POST replay |
+| 30 | Manual repeat of old POST after committed Transfer | 412 stale version; one Transfer row only |
+| 31 | Rejected transfer | No Transfer row, audit event, or version bump |
+| 32 | Actor or Laboratory renamed/deleted later | Snapshot history remains reconstructable |
+| 33 | Caller has create but not devices.update | Transfer allowed; no wildcard coupling |
+| 34 | Caller has view but not devices.view/laboratories.view | History allowed through dedicated permission only |
+| 35 | Cross-tenant active membership context | Operation fails before record lookup |
+| 36 | History pagination with identical timestamps | Stable `createdAt DESC, id DESC` order |
 
 ## 19. Implementation sequencing gate
 

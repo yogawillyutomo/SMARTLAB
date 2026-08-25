@@ -25,18 +25,16 @@ This companion classifies the proposed executed `device_transfers` record. It is
 | `reason` | E: operator explanation | no | no | authenticated request | immutable, bounded, redacted from secrets |
 | `device_version_before` | C: concurrency evidence | yes | no | locked Device row | immutable integer |
 | `device_version_after` | C: concurrency evidence | yes | no | committed Device row | immutable integer |
-| `idempotency_key_hash` | C: retry safety | yes | no | request header hash | unique per School/actor |
-| `request_fingerprint_hash` | C: retry safety | yes | no | canonical request hash | detects unsafe key reuse |
 | `created_at` | D: event time | yes | no | server clock | immutable timestamp |
 
 ## Classification boundaries
 
-- No client-supplied `schoolId`, source ID, actor ID, status, approval state, Layout ID, placement, Asset ID, current location, Loan destination, Maintenance state, or telemetry field is accepted.
+- No client-supplied `schoolId`, source ID, actor ID, status, approval state, Layout ID, placement, Asset ID, current location, Loan destination, Maintenance state, telemetry field, or retry token is accepted.
+- The source Laboratory is not a request field. A tenant-scoped pre-read uses the Device's current `homeLaboratoryId` as a candidate, then the locked Device row and `If-Match` version establish final authority. A null home returns `TRANSFER_SOURCE_UNASSIGNED`.
 - Live foreign keys are optional convenience joins only. Snapshot fields are authoritative for historical reconstruction.
 - `reason` is an explanation, not an approval, workflow status, incident, or maintenance note. It must be length-limited and must not contain secrets or unrestricted personal data.
-- The idempotency hashes are operational safety fields, not business identity and not user-visible DTO fields.
 - Device `version` remains the single source for stale-state protection; Transfer has no competing aggregate version.
-- No field authorizes a destination Layout placement. Unplaced status follows from the Layout projection after `homeLaboratoryId` changes.
+- No field authorizes a destination Layout placement. “Unplaced after Transfer” means no placement was created; the Layout unplaced-candidate endpoint remains a narrower projection that excludes retired Devices.
 
 ## Cross-domain mapping
 
