@@ -93,6 +93,15 @@ class DeviceMutationService
         array $data,
     ): Device {
         return DB::transaction(function () use ($context, $deviceId, $expectedVersion, $data): Device {
+            $candidateLaboratory = null;
+            if (array_key_exists('homeLaboratoryId', $data) && $data['homeLaboratoryId'] !== null) {
+                $candidateLaboratory = Laboratory::query()
+                    ->where('school_id', $context->membership->school_id)
+                    ->whereKey((string) $data['homeLaboratoryId'])
+                    ->lockForUpdate()
+                    ->first(['id', 'status']);
+            }
+
             $device = Device::query()
                 ->where('school_id', $context->membership->school_id)
                 ->whereKey($deviceId)
@@ -120,7 +129,7 @@ class DeviceMutationService
             }
 
             if (array_key_exists('homeLaboratoryId', $data)) {
-                $this->assertHomeChangeAllowed($device, $context, $data['homeLaboratoryId']);
+                $this->assertHomeChangeAllowed($device, $data['homeLaboratoryId'], $candidateLaboratory);
             }
 
             if (array_key_exists('technicalProfile', $data)) {
@@ -165,7 +174,7 @@ class DeviceMutationService
         });
     }
 
-    private function assertHomeChangeAllowed(Device $device, CurrentMembershipContext $context, mixed $requestedHome): void
+    private function assertHomeChangeAllowed(Device $device, mixed $requestedHome, ?Laboratory $candidateLaboratory): void
     {
         if ($device->home_laboratory_id !== null) {
             if ($requestedHome === $device->home_laboratory_id) {
@@ -183,7 +192,11 @@ class DeviceMutationService
             return;
         }
 
-        $this->assertActiveHomeLaboratory($context->membership->school_id, (string) $requestedHome);
+        if ($candidateLaboratory === null || $candidateLaboratory->status !== 'active') {
+            throw ValidationException::withMessages([
+                'homeLaboratoryId' => ['The selected home laboratory is invalid.'],
+            ]);
+        }
     }
 
     private function assertActiveHomeLaboratory(string $schoolId, string $laboratoryId): void

@@ -29,6 +29,10 @@ class PermissionSeeder extends Seeder
             'export' => 'Ekspor Perangkat',
             'manage' => 'Kelola Perangkat',
         ],
+        'device-transfers' => [
+            'create' => 'Pindahkan Perangkat Antar Laboratorium',
+            'view' => 'Lihat Riwayat Pemindahan Perangkat',
+        ],
         'layouts' => [
             'view' => 'Lihat Tata Letak',
             'create' => 'Buat Tata Letak',

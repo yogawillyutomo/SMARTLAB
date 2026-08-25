@@ -12,4 +12,6 @@ final class DeviceCatalog
     public const LIFECYCLE_STATUSES = ['in_service', 'spare', 'retired', 'decommissioned'];
 
     public const MUTABLE_LIFECYCLE_STATUSES = ['in_service', 'spare'];
+
+    public const TRANSFER_ELIGIBLE_LIFECYCLE_STATUSES = ['in_service', 'spare', 'retired'];
 }
