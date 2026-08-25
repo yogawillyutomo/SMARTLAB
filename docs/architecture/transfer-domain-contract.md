@@ -1,6 +1,6 @@
 # Transfer Domain Contract RFC
 
-Status: Proposed for architecture review
+Status: Approved — Architecture Locked
 
 Scope: Transfer v1 architecture and implementation sequencing only. This document does not implement a model, migration, route, controller, OpenAPI change, frontend, Loan, Maintenance, Asset, or Layout change.
 

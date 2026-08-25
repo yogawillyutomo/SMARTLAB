@@ -1,6 +1,6 @@
 # Transfer Domain Field Classification
 
-Status: Proposed companion to Transfer Domain Contract RFC
+Status: Approved — Architecture Locked
 
 This companion classifies the proposed executed `device_transfers` record. It is architecture-only; it does not add a table or change an existing schema.
 
