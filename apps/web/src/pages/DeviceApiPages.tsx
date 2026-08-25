@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Cpu, Eye, Laptop, Pencil, Plus, Search, ServerOff } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, ChevronLeft, ChevronRight, Cpu, Eye, Laptop, Pencil, Plus, Search, ServerOff } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { FormDialog } from '@/components/forms/FormDialog';
 import { Badge } from '@/components/ui/Badge';
@@ -28,6 +28,14 @@ import {
   type DeviceProfileFieldDefinition,
 } from '@/lib/devicePresentation';
 import {
+  deviceTransferPresentationIssue,
+  matchesTransferReconciliation,
+  normalizeTransferReason,
+  validateTransferForm,
+  type DeviceTransferPresentationIssue,
+  type TransferReconciliationSnapshot,
+} from '@/lib/deviceTransferPresentation';
+import {
   deviceFilterValuesFromSearchParams,
   deviceListSearchParams,
   loadDeviceCollectionForSearchParams,
@@ -45,6 +53,11 @@ import {
   type DeviceType,
 } from '@/services/deviceApi';
 import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
+import {
+  deviceTransferGateway,
+  type DeviceTransferDto,
+  type DeviceTransferPage,
+} from '@/services/deviceTransferApi';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';
 
@@ -58,6 +71,17 @@ export type DeviceDetailState =
   | { status: 'error'; issue: DevicePresentationIssue }
   | { status: 'not_found' }
   | { status: 'ready'; device: DeviceDto };
+
+type TransferHistoryState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'ready'; page: DeviceTransferPage }
+  | { status: 'empty'; page: DeviceTransferPage }
+  | { status: 'error'; issue: DeviceTransferPresentationIssue };
+
+interface TransferFormValues {
+  destinationLaboratoryId: string;
+  reason: string;
+}
 
 function lifecycleTone(status: DeviceLifecycleStatus): 'success' | 'info' | 'muted' | 'danger' {
   if (status === 'in_service') return 'success';
@@ -627,12 +651,37 @@ interface DeviceDetailViewProps {
   state: DeviceDetailState;
   laboratoryLabel?: string;
   canUpdate: boolean;
+  canViewLaboratories?: boolean;
+  canCreateTransfer?: boolean;
+  canViewTransferHistory?: boolean;
+  transferHistory?: TransferHistoryState;
+  transferRecoveryMessage?: string;
+  onOpenTransfer?: (device: DeviceDto) => void;
+  onRetryTransferHistory?: () => void;
+  onTransferPageChange?: (page: number) => void;
+  onRetryReconciliation?: () => void;
   onRetry: () => void;
   onBack: () => void;
   onEdit: (device: DeviceDto) => void;
 }
 
-export function DeviceDetailView({ state, laboratoryLabel, canUpdate, onRetry, onBack, onEdit }: DeviceDetailViewProps) {
+export function DeviceDetailView({
+  state,
+  laboratoryLabel,
+  canUpdate,
+  canViewLaboratories = false,
+  canCreateTransfer = false,
+  canViewTransferHistory = false,
+  transferHistory = { status: 'idle' },
+  transferRecoveryMessage,
+  onOpenTransfer,
+  onRetryTransferHistory,
+  onTransferPageChange,
+  onRetryReconciliation,
+  onRetry,
+  onBack,
+  onEdit,
+}: DeviceDetailViewProps) {
   if (state.status === 'loading') return <Card><LoadingState label="Memuat detail perangkat..." /></Card>;
   if (state.status === 'not_found') {
     return <EmptyState title="Perangkat tidak ditemukan" description="Data tidak tersedia pada konteks sekolah aktif." action={<Button onClick={onBack}>Kembali</Button>} />;
@@ -664,6 +713,19 @@ export function DeviceDetailView({ state, laboratoryLabel, canUpdate, onRetry, o
       <DetailSection title="Kustodi">
         <DetailValue label="Laboratorium asal" value={laboratoryLabel ?? device.homeLaboratoryId ?? 'Belum ditetapkan'} breakAll />
         <p className="sm:col-span-2 text-xs text-ink-muted">Laboratorium asal adalah kustodi normal, bukan lokasi fisik saat ini.</p>
+        {device.homeLaboratoryId === null ? (
+          <p className="sm:col-span-2 text-xs text-ink-muted">Penetapan awal laboratorium dilakukan melalui edit Device biasa.</p>
+        ) : device.lifecycleStatus === 'decommissioned' ? (
+          <p className="sm:col-span-2 text-xs text-ink-muted">Device dinonaktifkan permanen sehingga tidak dapat dipindahkan.</p>
+        ) : canCreateTransfer && !canViewLaboratories ? (
+          <p className="sm:col-span-2 text-xs text-ink-muted">Laboratorium tujuan belum dapat ditemukan karena izin laboratories.view diperlukan.</p>
+        ) : canCreateTransfer && onOpenTransfer ? (
+          <div className="sm:col-span-2">
+            <Button size="sm" variant="outline" icon={<ArrowRightLeft className="h-4 w-4" />} onClick={() => onOpenTransfer(device)}>
+              Pindahkan Laboratorium
+            </Button>
+          </div>
+        ) : null}
       </DetailSection>
       <DetailSection title="Metadata">
         <DetailValue label="Serial number" value={device.serialNumber ?? 'Tidak tersedia'} />
@@ -684,13 +746,87 @@ export function DeviceDetailView({ state, laboratoryLabel, canUpdate, onRetry, o
         <DetailValue label="Dibuat" value={formatDateTime(device.createdAt)} />
         <DetailValue label="Diperbarui" value={formatDateTime(device.updatedAt)} />
       </DetailSection>
+      {canViewTransferHistory && (
+        <TransferHistorySection
+          state={transferHistory}
+          onRetry={onRetryTransferHistory}
+          onPageChange={onTransferPageChange}
+        />
+      )}
+      {transferRecoveryMessage && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink-secondary">{transferRecoveryMessage}</p>
+            {onRetryReconciliation && <Button size="sm" variant="outline" onClick={onRetryReconciliation}>Muat ulang data</Button>}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <EmptyState
           icon={<ServerOff className="h-7 w-7" />}
           title="Domain terkait tetap terpisah"
-          description="Aset, Layout, Monitoring, telemetry, QR scan/print, Loan, dan Transfer belum dihubungkan ke Device API ini."
+          description="Aset, Layout, Monitoring, telemetry, QR scan/print, dan Loan tetap berada pada domain terpisah."
         />
       </Card>
+    </div>
+  );
+}
+
+function TransferHistorySection({
+  state,
+  onRetry,
+  onPageChange,
+}: {
+  state: TransferHistoryState;
+  onRetry?: () => void;
+  onPageChange?: (page: number) => void;
+}) {
+  return (
+    <Card>
+      <CardContent>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ink-primary">Riwayat Transfer</h2>
+          {state.status === 'ready' || state.status === 'empty' ? (
+            <span className="text-xs text-ink-muted">{state.page.meta.total} catatan</span>
+          ) : null}
+        </div>
+        {state.status === 'loading' || state.status === 'idle' ? <LoadingState label="Memuat riwayat Transfer..." /> : null}
+        {state.status === 'error' ? <ErrorState message={state.issue.message} onRetry={state.issue.retryable ? onRetry : undefined} /> : null}
+        {state.status === 'empty' ? <EmptyState title="Belum ada riwayat Transfer" description="Perubahan laboratorium asal akan tercatat di sini." /> : null}
+        {state.status === 'ready' && (
+          <div className="space-y-3">
+            {state.page.data.map((transfer) => <TransferHistoryCard key={transfer.id} transfer={transfer} />)}
+            <TransferPagination meta={state.page.meta} onPageChange={onPageChange} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TransferHistoryCard({ transfer }: { transfer: DeviceTransferDto }) {
+  return (
+    <div className="rounded-xl border border-base-700 bg-base-800/50 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-ink-primary">{transfer.sourceLaboratory.code} · {transfer.sourceLaboratory.name} <span className="text-ink-muted">→</span> {transfer.destinationLaboratory.code} · {transfer.destinationLaboratory.name}</p>
+        <span className="text-xs text-ink-muted">{formatDateTime(transfer.createdAt)}</span>
+      </div>
+      <div className="mt-2 grid gap-1 text-xs text-ink-muted sm:grid-cols-3">
+        <span>Versi {transfer.deviceVersionBefore} → {transfer.deviceVersionAfter}</span>
+        <span>Aktor: {transfer.actor.name}</span>
+        <span>Alasan: {transfer.reason ?? 'Tidak ada alasan'}</span>
+      </div>
+    </div>
+  );
+}
+
+function TransferPagination({ meta, onPageChange }: { meta: DeviceTransferPage['meta']; onPageChange?: (page: number) => void }) {
+  if (meta.lastPage <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 pt-2">
+      <Button size="sm" variant="ghost" disabled={meta.page <= 1} aria-label="Halaman Transfer sebelumnya" onClick={() => onPageChange?.(meta.page - 1)} icon={<ChevronLeft className="h-4 w-4" />} />
+      <span className="text-xs text-ink-muted">Halaman {meta.page} dari {meta.lastPage}</span>
+      <Button size="sm" variant="ghost" disabled={meta.page >= meta.lastPage} aria-label="Halaman Transfer berikutnya" onClick={() => onPageChange?.(meta.page + 1)} icon={<ChevronRight className="h-4 w-4" />} />
     </div>
   );
 }
@@ -721,14 +857,25 @@ export function DeviceDetailPage() {
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const canUpdate = hasServerPermission(user, 'devices.update');
   const canViewLaboratories = hasServerPermission(user, 'laboratories.view');
+  const canCreateTransfer = hasServerPermission(user, 'device-transfers.create');
+  const canViewTransferHistory = hasServerPermission(user, 'device-transfers.view');
   const [state, setState] = useState<DeviceDetailState>({ status: 'loading' });
   const [laboratories, setLaboratories] = useState<LaboratoryDto[]>([]);
+  const [transferHistory, setTransferHistory] = useState<TransferHistoryState>({ status: 'idle' });
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferForm, setTransferForm] = useState<TransferFormValues>({ destinationLaboratoryId: '', reason: '' });
+  const [transferErrors, setTransferErrors] = useState<Partial<Record<'destinationLaboratoryId' | 'reason' | 'request', string>>>({});
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferRecoveryMessage, setTransferRecoveryMessage] = useState<string | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<DeviceFormValues>(emptyDeviceForm);
   const [formErrors, setFormErrors] = useState<DeviceFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const submissionActive = useRef(false);
+  const transferSubmissionActive = useRef(false);
   const loadSequence = useRef(0);
+  const historySequence = useRef(0);
+  const transferRouteSequence = useRef(0);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -754,11 +901,42 @@ export function DeviceDetailPage() {
   }, [load]);
 
   useEffect(() => {
+    transferRouteSequence.current += 1;
+    setTransferDialogOpen(false);
+    setTransferRecoveryMessage(undefined);
+  }, [id]);
+
+  useEffect(() => {
     if (!canViewLaboratories) return;
     let active = true;
     void laboratoryGateway.list().then((items) => { if (active) setLaboratories(items); }).catch(() => undefined);
     return () => { active = false; };
   }, [canViewLaboratories]);
+
+  const loadTransferHistory = useCallback(async (page = 1) => {
+    if (!id || !canViewTransferHistory) return;
+    const sequence = ++historySequence.current;
+    setTransferHistory({ status: 'loading' });
+    try {
+      const result = await deviceTransferGateway.history(id, { page, perPage: 10 });
+      if (sequence !== historySequence.current) return;
+      setTransferHistory(result.data.length === 0 ? { status: 'empty', page: result } : { status: 'ready', page: result });
+    } catch (error) {
+      if (sequence !== historySequence.current) return;
+      const issue = deviceTransferPresentationIssue(error, 'history');
+      if (issue.authBoundary) await bootstrapSession({ force: true });
+      else setTransferHistory({ status: 'error', issue });
+    }
+  }, [bootstrapSession, canViewTransferHistory, id]);
+
+  useEffect(() => {
+    if (!canViewTransferHistory) {
+      setTransferHistory({ status: 'idle' });
+      return;
+    }
+    void loadTransferHistory(1);
+    return () => { historySequence.current += 1; };
+  }, [canViewTransferHistory, id, loadTransferHistory]);
 
   const currentDevice = state.status === 'ready' ? state.device : null;
   const currentLaboratory = useMemo(
@@ -770,6 +948,108 @@ export function DeviceDetailPage() {
     setForm(deviceFormFromDto(device));
     setFormErrors({});
     setDialogOpen(true);
+  }
+
+  const destinationOptions = useMemo(
+    () => laboratories.filter((laboratory) => laboratory.status === 'active' && laboratory.id !== currentDevice?.homeLaboratoryId),
+    [currentDevice?.homeLaboratoryId, laboratories],
+  );
+
+  function openTransfer(device: DeviceDto) {
+    if (!canCreateTransfer || !device.homeLaboratoryId || device.lifecycleStatus === 'decommissioned') return;
+    setTransferForm({ destinationLaboratoryId: '', reason: '' });
+    setTransferErrors({});
+    setTransferRecoveryMessage(undefined);
+    setTransferDialogOpen(true);
+  }
+
+  async function reconcileTransfer(snapshot?: TransferReconciliationSnapshot): Promise<'confirmed' | 'reloaded' | 'failed'> {
+    if (!id) return 'failed';
+    const routeSequence = transferRouteSequence.current;
+    try {
+      const latest = await deviceGateway.show(id);
+      if (routeSequence !== transferRouteSequence.current) return 'failed';
+      setState({ status: 'ready', device: latest });
+      if (canViewTransferHistory) {
+        let history: DeviceTransferPage;
+        try {
+          history = await deviceTransferGateway.history(id, { page: 1, perPage: 10 });
+        } catch (historyError) {
+          const historyIssue = deviceTransferPresentationIssue(historyError, 'history');
+          if (historyIssue.authBoundary) await bootstrapSession({ force: true });
+          else setTransferHistory({ status: 'error', issue: historyIssue });
+          return 'failed';
+        }
+        if (routeSequence !== transferRouteSequence.current) return 'failed';
+        setTransferHistory(history.data.length === 0 ? { status: 'empty', page: history } : { status: 'ready', page: history });
+        if (snapshot && history.data.some((transfer) => matchesTransferReconciliation(transfer, snapshot))) return 'confirmed';
+      }
+      if (snapshot && latest.id === snapshot.deviceId && latest.homeLaboratoryId === snapshot.destinationLaboratoryId
+        && latest.version === snapshot.submittedVersion + 1) return 'confirmed';
+      return snapshot ? 'reloaded' : 'confirmed';
+    } catch (error) {
+      const issue = deviceTransferPresentationIssue(error, 'history');
+      if (issue.authBoundary) await bootstrapSession({ force: true });
+      return 'failed';
+    }
+  }
+
+  async function saveTransfer() {
+    if (!currentDevice || !currentDevice.homeLaboratoryId || transferSubmissionActive.current) return;
+    transferSubmissionActive.current = true;
+    const fieldErrors = validateTransferForm(transferForm.destinationLaboratoryId, transferForm.reason);
+    if (transferForm.destinationLaboratoryId === currentDevice.homeLaboratoryId) fieldErrors.destinationLaboratoryId = 'Laboratorium tujuan harus berbeda dari laboratorium asal.';
+    if (Object.keys(fieldErrors).length > 0) {
+      setTransferErrors(fieldErrors);
+      transferSubmissionActive.current = false;
+      return;
+    }
+    const snapshot: TransferReconciliationSnapshot = {
+      deviceId: currentDevice.id,
+      submittedVersion: currentDevice.version,
+      sourceLaboratoryId: currentDevice.homeLaboratoryId,
+      destinationLaboratoryId: transferForm.destinationLaboratoryId,
+      reason: normalizeTransferReason(transferForm.reason),
+    };
+    setTransferSubmitting(true);
+    setTransferErrors({});
+    setTransferRecoveryMessage(undefined);
+    try {
+      await deviceTransferGateway.create(currentDevice.id, currentDevice.version, {
+        destinationLaboratoryId: snapshot.destinationLaboratoryId,
+        reason: snapshot.reason,
+      });
+      const reconciliation = await reconcileTransfer();
+      if (reconciliation === 'failed') {
+        setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+      } else {
+        setTransferDialogOpen(false);
+        toast('Laboratorium asal perangkat diperbarui', 'success');
+      }
+    } catch (error) {
+      const issue = deviceTransferPresentationIssue(error, 'mutation');
+      if (issue.authBoundary) {
+        await bootstrapSession({ force: true });
+      } else if (issue.versionConflict) {
+        await reconcileTransfer();
+        setTransferErrors({ request: issue.message });
+      } else if (issue.ambiguous) {
+        const reconciliation = await reconcileTransfer(snapshot);
+        if (reconciliation === 'confirmed') {
+          setTransferDialogOpen(false);
+          toast('Laboratorium asal perangkat diperbarui', 'success');
+        } else if (reconciliation === 'failed') {
+          setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+        } else {
+          setTransferErrors({ request: 'Respons Transfer tidak dapat dipastikan. Periksa data terbaru sebelum mengirim ulang.' });
+        }
+      } else {
+        setTransferErrors({ ...issue.fieldErrors, request: issue.fieldErrors.request ?? issue.message });
+      }
+    } finally {
+      setTransferSubmitting(false);
+      transferSubmissionActive.current = false;
+    }
   }
 
   async function saveDevice() {
@@ -824,6 +1104,15 @@ export function DeviceDetailPage() {
         state={state}
         laboratoryLabel={currentLaboratory}
         canUpdate={canUpdate}
+        canCreateTransfer={canCreateTransfer}
+        canViewLaboratories={canViewLaboratories}
+        canViewTransferHistory={canViewTransferHistory}
+        transferHistory={transferHistory}
+        transferRecoveryMessage={transferRecoveryMessage}
+        onOpenTransfer={openTransfer}
+        onRetryTransferHistory={() => void loadTransferHistory(transferHistory.status === 'ready' || transferHistory.status === 'empty' ? transferHistory.page.meta.page : 1)}
+        onTransferPageChange={(page) => void loadTransferHistory(page)}
+        onRetryReconciliation={() => { setTransferRecoveryMessage(undefined); void reconcileTransfer(); }}
         onRetry={() => void load()}
         onBack={() => navigate('/devices')}
         onEdit={openEdit}
@@ -847,6 +1136,42 @@ export function DeviceDetailPage() {
           disabled={submitting}
           onChange={(next) => { setForm(next); setFormErrors({}); }}
         />
+      </FormDialog>
+      <FormDialog
+        open={transferDialogOpen}
+        onClose={() => { if (!transferSubmissionActive.current) setTransferDialogOpen(false); }}
+        title={currentDevice ? `Pindahkan ${currentDevice.deviceCode}` : 'Pindahkan Laboratorium'}
+        description="Laboratorium asal adalah sumber read-only; hanya laboratorium tujuan dan alasan yang dapat dikirim."
+        onSubmit={() => void saveTransfer()}
+        submitLabel="Pindahkan"
+        loading={transferSubmitting}
+        submitDisabled={transferSubmitting || destinationOptions.length === 0}
+        size="md"
+      >
+        <div className="space-y-4">
+          <Input label="Laboratorium asal" value={currentLaboratory ?? currentDevice?.homeLaboratoryId ?? 'Belum ditetapkan'} disabled />
+          <Select
+            label="Laboratorium tujuan"
+            required
+            value={transferForm.destinationLaboratoryId}
+            error={transferErrors.destinationLaboratoryId}
+            placeholder={canViewLaboratories ? 'Pilih laboratorium aktif' : 'Izin laboratories.view diperlukan'}
+            options={destinationOptions.map((laboratory) => ({ value: laboratory.id, label: `${laboratory.code} · ${laboratory.name}` }))}
+            disabled={transferSubmitting || !canViewLaboratories}
+            onChange={(event) => { setTransferForm({ ...transferForm, destinationLaboratoryId: event.target.value }); setTransferErrors({}); }}
+          />
+          {!canViewLaboratories && <p className="text-xs text-ink-muted">Daftar tujuan tidak tersedia karena Anda tidak memiliki izin melihat Laboratory.</p>}
+          {canViewLaboratories && destinationOptions.length === 0 && <p className="text-xs text-ink-muted">Tidak ada laboratorium aktif lain yang tersedia sebagai tujuan.</p>}
+          <Textarea
+            label="Alasan (opsional)"
+            name="transferReason"
+            maxLength={500}
+            value={transferForm.reason}
+            error={transferErrors.reason}
+            onChange={(event) => { setTransferForm({ ...transferForm, reason: event.target.value }); setTransferErrors({}); }}
+          />
+          {transferErrors.request && <p className="text-sm text-danger">{transferErrors.request}</p>}
+        </div>
       </FormDialog>
     </>
   );

@@ -375,7 +375,7 @@ export function devicePresentationIssue(error: unknown): DevicePresentationIssue
     };
   }
   if (error.code === 'DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED') {
-    return { ...fallback, message: 'Perubahan laboratorium asal memerlukan alur Transfer yang belum tersedia.', retryable: false };
+    return { ...fallback, message: 'Perubahan laboratorium asal harus dilakukan melalui alur Transfer.', retryable: false };
   }
   if (error.code === 'DEVICE_LIFECYCLE_TRANSITION_INVALID') {
     return { ...fallback, message: 'Perubahan lifecycle perangkat tidak diizinkan melalui edit biasa.', retryable: false };

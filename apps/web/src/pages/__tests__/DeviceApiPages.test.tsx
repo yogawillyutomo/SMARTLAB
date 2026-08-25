@@ -258,4 +258,50 @@ describe('Device API detail and edit boundaries', () => {
     expect(markup).toContain('Lifecycle terminal tidak dapat diaktifkan kembali');
     expect(markup).not.toContain('value="spare"');
   });
+
+  it('shows the Transfer action only from exact permission inputs and renders snapshot history states', () => {
+    const onOpenTransfer = vi.fn();
+    const history = {
+      status: 'ready' as const,
+      page: {
+        data: [{
+          id: '01m0r8nsw938c2zcv44zyge824',
+          deviceId: device.id,
+          deviceCode: device.deviceCode,
+          sourceLaboratory: { id: '01m0r8nsw938c2zcv44zyge821', code: 'LAB-A', name: 'Source Lab' },
+          destinationLaboratory: { id: '01m0r8nsw938c2zcv44zyge822', code: 'LAB-B', name: 'Destination Lab' },
+          reason: 'Move',
+          actor: { id: '01m0r8nsw938c2zcv44zyge823', name: 'Operator' },
+          deviceVersionBefore: 3,
+          deviceVersionAfter: 4,
+          createdAt: '2026-08-24T01:00:00.000Z',
+        }],
+        meta: { page: 1, perPage: 10, total: 1, lastPage: 1 },
+      },
+    };
+    const withPermission = renderToStaticMarkup(
+      <DeviceDetailView
+        state={{ status: 'ready', device }}
+        laboratoryLabel="LAB-RPL-1 · Laboratorium RPL 1"
+        canUpdate={false}
+        canCreateTransfer
+        canViewLaboratories
+        canViewTransferHistory
+        transferHistory={history}
+        onOpenTransfer={onOpenTransfer}
+        onRetry={vi.fn()}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+    expect(withPermission).toContain('Pindahkan Laboratorium');
+    expect(withPermission).toContain('LAB-A · Source Lab');
+    expect(withPermission).toContain('LAB-B · Destination Lab');
+
+    const withoutPermission = renderToStaticMarkup(
+      <DeviceDetailView state={{ status: 'ready', device }} canUpdate={false} canCreateTransfer={false} canViewTransferHistory={false} onRetry={vi.fn()} onBack={vi.fn()} onEdit={vi.fn()} />,
+    );
+    expect(withoutPermission).not.toContain('Pindahkan Laboratorium');
+    expect(withoutPermission).not.toContain('Transfer belum dihubungkan');
+  });
 });
