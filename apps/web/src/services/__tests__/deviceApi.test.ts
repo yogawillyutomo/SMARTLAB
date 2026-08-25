@@ -57,6 +57,16 @@ describe('Device response parser', () => {
     expect(parseDeviceResponse({ data: device() })).toEqual(device());
   });
 
+  it('accepts and preserves lowercase Laravel Device and ownership ULIDs', () => {
+    const canonical = device({
+      id: '01m0r8nsw938c2zcv44zyge820',
+      schoolId: '01m0r8nsw938c2zcv44zyge821',
+      homeLaboratoryId: '01m0r8nsw938c2zcv44zyge822',
+    });
+
+    expect(parseDeviceResponse({ data: canonical })).toEqual(canonical);
+  });
+
   it.each(DEVICE_TYPES)('accepts the canonical %s discriminator with its empty profile', (deviceType) => {
     expect(parseDeviceResponse({ data: device({ deviceType, technicalProfile: {} }) }).deviceType).toBe(deviceType);
   });

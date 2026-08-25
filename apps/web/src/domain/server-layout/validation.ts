@@ -4,6 +4,7 @@ import {
   STRUCTURAL_LAYOUT_ELEMENT_TYPES,
   type DevicePlacementRole,
 } from '@/services/layoutApi';
+import { isUlid } from '@/lib/ulid';
 import type { DeviceType } from '@/services/deviceApi';
 import type {
   CanonicalEditorDevicePlacement,
@@ -13,8 +14,6 @@ import type {
   LayoutEditorValidationIssue,
   LayoutEditorValidationResult,
 } from './types';
-
-const ULID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
 type EditorFootprint = Pick<CanonicalEditorStructuralElement, 'row' | 'column' | 'rowSpan' | 'columnSpan'>;
 type EditorChild = CanonicalEditorStructuralElement | CanonicalEditorDevicePlacement;
@@ -56,7 +55,7 @@ function validateIdentity(child: EditorChild, issues: LayoutEditorValidationIssu
   const hasServerId = typeof id === 'string';
   const hasClientKey = typeof clientKey === 'string';
   if (hasServerId === hasClientKey
-    || (hasServerId && !ULID_PATTERN.test(id))
+    || (hasServerId && !isUlid(id))
     || (hasClientKey && clientKey.trim() === '')) {
     issues.push({ code: 'invalid_state', message: 'Identitas child Layout tidak valid.' });
     return null;
@@ -77,7 +76,7 @@ function validOptionalLabel(label: string | null): boolean {
 
 export function validateLayoutEditorState(state: CanonicalLayoutEditorState): LayoutEditorValidationResult {
   const issues: LayoutEditorValidationIssue[] = [];
-  if (!ULID_PATTERN.test(state.id) || !ULID_PATTERN.test(state.schoolId) || !ULID_PATTERN.test(state.laboratoryId)
+  if (!isUlid(state.id) || !isUlid(state.schoolId) || !isUlid(state.laboratoryId)
     || !Number.isSafeInteger(state.version) || state.version < 1) {
     issues.push({ code: 'invalid_state', message: 'Identitas atau versi Layout tidak valid.' });
   }
@@ -154,7 +153,7 @@ export function validateLayoutEditorState(state: CanonicalLayoutEditorState): La
         childKey: key,
       });
     }
-    if (!ULID_PATTERN.test(placement.deviceId)) {
+    if (!isUlid(placement.deviceId)) {
       issues.push({ code: 'invalid_state', message: 'ID Device placement tidak valid.', childKey: key });
     } else if (deviceIds.has(placement.deviceId)) {
       issues.push({ code: 'duplicate_device', message: 'Device hanya boleh muncul sekali dalam Layout.', childKey: key });

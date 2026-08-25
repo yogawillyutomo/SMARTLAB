@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { layoutEditorStateFromServer, serializeLayoutEditorState } from '@/domain/server-layout';
 import type { ApiClient } from '@/lib/apiClient';
 import {
   LayoutContractError,
@@ -20,6 +21,8 @@ import {
 } from '@/services/layoutApi';
 
 const ulid = (suffix: string) => `01ARZ3NDEKTSV4RRFFQ69G5FA${suffix}`;
+const LARAVEL_ULID = '01m0r8nsw938c2zcv44zyge820';
+const laravelUlid = (suffix: string) => `${LARAVEL_ULID.slice(0, -1)}${suffix}`;
 const NOW = '2026-08-23T10:00:00.000Z';
 const LATER = '2026-08-23T11:00:00.000Z';
 
@@ -103,6 +106,33 @@ describe('Layout strict response parsing', () => {
     const parsed = parseLayoutResponse({ data: layout({ structuralElements, devicePlacements }) });
     expect(parsed.structuralElements.map((element) => element.type)).toEqual(structuralTypes);
     expect(parsed.devicePlacements.map((placement) => placement.role)).toEqual(['student_station', 'teacher_station', null]);
+  });
+
+  it('accepts and preserves lowercase Laravel ULIDs across the complete Layout aggregate', () => {
+    const canonical = layout({
+      id: laravelUlid('0'),
+      schoolId: laravelUlid('1'),
+      laboratoryId: laravelUlid('2'),
+      structuralElements: [{
+        id: laravelUlid('3'), type: 'wall', label: null, row: 1, column: 1,
+        rowSpan: 1, columnSpan: 1, rotation: 0,
+      }],
+      devicePlacements: [{
+        id: laravelUlid('4'), deviceId: laravelUlid('5'), role: 'student_station', label: 'PC-01',
+        row: 2, column: 1, rowSpan: 1, columnSpan: 1, rotation: 0,
+      }],
+    });
+
+    expect(parseLayoutResponse({ data: canonical })).toEqual(canonical);
+    expect(parseUnplacedDeviceCollectionResponse({
+      data: [{ ...candidate, id: laravelUlid('6') }],
+      meta: pageMeta(),
+    }).data[0].id).toBe(laravelUlid('6'));
+  });
+
+  it('accepts mixed-case Layout ULIDs while preserving their exact text', () => {
+    const mixedCaseId = '01m0R8nsW938c2Zcv44zYge820';
+    expect(parseLayoutResponse({ data: layout({ id: mixedCaseId }) }).id).toBe(mixedCaseId);
   });
 
   it.each([
@@ -247,6 +277,29 @@ describe('Layout paths, payloads, and If-Match', () => {
     expect(JSON.stringify(payload)).not.toContain('schoolId');
   });
 
+  it('round-trips lowercase server child and Device identities through editor state into full PUT', () => {
+    const canonical = parseLayoutResponse({ data: layout({
+      id: laravelUlid('0'),
+      schoolId: laravelUlid('1'),
+      laboratoryId: laravelUlid('2'),
+      structuralElements: [{
+        id: laravelUlid('3'), type: 'wall', label: null, row: 1, column: 1,
+        rowSpan: 1, columnSpan: 1, rotation: 0,
+      }],
+      devicePlacements: [{
+        id: laravelUlid('4'), deviceId: laravelUlid('5'), role: null, label: null,
+        row: 2, column: 1, rowSpan: 1, columnSpan: 1, rotation: 0,
+      }],
+    }) });
+
+    const editorState = layoutEditorStateFromServer(canonical);
+    const payload = buildReplaceLayoutPayload(serializeLayoutEditorState(editorState));
+
+    expect(payload.structuralElements[0].id).toBe(laravelUlid('3'));
+    expect(payload.devicePlacements[0].id).toBe(laravelUlid('4'));
+    expect(payload.devicePlacements[0].deviceId).toBe(laravelUlid('5'));
+  });
+
   it('never accepts null as a child id and builds If-Match only from positive integer versions', () => {
     const invalid = {
       name: 'Draft', templateKey: null, rows: 2, columns: 2, structuralElements: [{
@@ -272,6 +325,23 @@ describe('Layout paths, payloads, and If-Match', () => {
 });
 
 describe('Layout gateway', () => {
+  it('accepts the lowercase canonical draft returned after a committed create mutation', async () => {
+    const canonical = layout({
+      id: LARAVEL_ULID,
+      schoolId: laravelUlid('1'),
+      laboratoryId: laravelUlid('2'),
+      status: 'draft',
+      version: 1,
+    });
+    const post = vi.fn(async () => ({ data: canonical }));
+    const gateway = createLayoutGateway(clientWith({ post: post as ApiClient['post'] }));
+
+    await expect(gateway.createDraft(canonical.laboratoryId, {
+      mode: 'empty', name: canonical.name, rows: canonical.rows, columns: canonical.columns,
+    })).resolves.toEqual(canonical);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it('uses all seven exact endpoints, mutation versions, and server-authoritative responses', async () => {
     const canonical = layout();
     const summary = { ...canonical };
