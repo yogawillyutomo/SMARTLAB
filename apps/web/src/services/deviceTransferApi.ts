@@ -186,6 +186,7 @@ export function createDeviceTransferGateway(client: ApiClient): DeviceTransferGa
       return parseDeviceTransferResponse(response);
     },
     async history(deviceId, filters) {
+      if (!isUlid(deviceId)) throw new DeviceTransferContractError('ID Device tidak valid.');
       const response = await client.get<unknown>(`${transferPath(deviceId)}${pagination(filters)}`);
       return parseDeviceTransferCollectionResponse(response);
     },

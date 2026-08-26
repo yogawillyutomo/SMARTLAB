@@ -1,5 +1,7 @@
 import { ApiClientError } from '@/lib/apiClient';
 import { DeviceTransferContractError, isTransferNetworkAmbiguity, type DeviceTransferDto } from '@/services/deviceTransferApi';
+import type { DeviceDto, DeviceGateway } from '@/services/deviceApi';
+import type { DeviceTransferGateway, DeviceTransferPage } from '@/services/deviceTransferApi';
 
 export type TransferFormField = 'destinationLaboratoryId' | 'reason' | 'request';
 
@@ -33,6 +35,64 @@ export interface TransferReconciliationSnapshot {
   sourceLaboratoryId: string;
   destinationLaboratoryId: string;
   reason: string | null;
+}
+
+export type TransferHistoryEvidence =
+  | { status: 'available'; page: DeviceTransferPage }
+  | { status: 'unavailable'; issue: DeviceTransferPresentationIssue };
+
+export type TransferReconciliationResult =
+  | { status: 'confirmed'; device: DeviceDto; history?: TransferHistoryEvidence; knownSuccess: boolean }
+  | { status: 'unconfirmed'; device: DeviceDto; history?: TransferHistoryEvidence }
+  | { status: 'concurrent_change'; device: DeviceDto; history?: TransferHistoryEvidence }
+  | { status: 'unavailable' }
+  | { status: 'stale_route' };
+
+interface ReconcileTransferOptions {
+  deviceId: string;
+  snapshot?: TransferReconciliationSnapshot;
+  knownSuccess?: boolean;
+  canViewHistory: boolean;
+  deviceGateway: Pick<DeviceGateway, 'show'>;
+  transferGateway: Pick<DeviceTransferGateway, 'history'>;
+  isCurrent: () => boolean;
+}
+
+function classifyTransferEvidence(device: DeviceDto, snapshot: TransferReconciliationSnapshot | undefined, history: TransferHistoryEvidence | undefined, knownSuccess: boolean): TransferReconciliationResult['status'] {
+  if (knownSuccess) return 'confirmed';
+  if (!snapshot) return 'unconfirmed';
+  if (history?.status === 'available' && history.page.data.some((item) => matchesTransferReconciliation(item, snapshot))) return 'confirmed';
+  if (device.version === snapshot.submittedVersion + 1 && device.homeLaboratoryId === snapshot.destinationLaboratoryId) return 'confirmed';
+  if (device.version === snapshot.submittedVersion && device.homeLaboratoryId === snapshot.sourceLaboratoryId
+    && !(history?.status === 'available' && history.page.data.some((item) => matchesTransferReconciliation(item, snapshot)))) return 'unconfirmed';
+  return 'concurrent_change';
+}
+
+export async function reconcileDeviceTransfer(options: ReconcileTransferOptions): Promise<TransferReconciliationResult> {
+  if (!options.isCurrent()) return { status: 'stale_route' };
+  let device: DeviceDto;
+  try {
+    device = await options.deviceGateway.show(options.deviceId);
+  } catch {
+    return options.isCurrent() ? { status: 'unavailable' } : { status: 'stale_route' };
+  }
+  if (!options.isCurrent()) return { status: 'stale_route' };
+
+  let history: TransferHistoryEvidence | undefined;
+  if (options.canViewHistory) {
+    try {
+      const page = await options.transferGateway.history(options.deviceId, { page: 1, perPage: 10 });
+      if (!options.isCurrent()) return { status: 'stale_route' };
+      history = { status: 'available', page };
+    } catch (error) {
+      if (!options.isCurrent()) return { status: 'stale_route' };
+      history = { status: 'unavailable', issue: deviceTransferPresentationIssue(error, 'history') };
+    }
+  }
+  if (!options.isCurrent()) return { status: 'stale_route' };
+  const status = classifyTransferEvidence(device, options.snapshot, history, options.knownSuccess === true);
+  if (status === 'confirmed') return { status, device, history, knownSuccess: options.knownSuccess === true };
+  return { status, device, history };
 }
 
 export function matchesTransferReconciliation(transfer: DeviceTransferDto, snapshot: TransferReconciliationSnapshot): boolean {
@@ -98,6 +158,9 @@ export function deviceTransferPresentationIssue(error: unknown, context: 'mutati
       : { ...fallback, message: 'Respons Transfer belum dapat dipastikan. Memeriksa data kanonik...', retryable: false, ambiguous: true };
   }
   if (error.kind === 'network') return { ...fallback, message: 'Layanan Transfer tidak dapat dijangkau. Periksa koneksi lalu coba lagi.', retryable: context === 'history' };
-  if (error.kind === 'invalid_response') return { ...fallback, message: 'Server mengembalikan respons Transfer yang tidak valid.', retryable: false };
+  if (error.kind === 'invalid_response') {
+    const ambiguous = context === 'mutation' && error.status !== undefined && error.status >= 200 && error.status < 300;
+    return { ...fallback, message: ambiguous ? 'Respons Transfer belum dapat dipastikan. Memeriksa data kanonik...' : 'Server mengembalikan respons Transfer yang tidak valid.', retryable: false, ambiguous };
+  }
   return fallback;
 }

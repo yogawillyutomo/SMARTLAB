@@ -82,4 +82,10 @@ describe('Device Transfer gateway boundary', () => {
     await createDeviceTransferGateway(api).create(deviceId, 3, { destinationLaboratoryId: destinationId, reason: '   ' });
     expect(api.post).toHaveBeenCalledWith(`/devices/${deviceId}/transfers`, { destinationLaboratoryId: destinationId, reason: null }, { ifMatch: '"3"' });
   });
+
+  it('fails closed on malformed history Device IDs before issuing GET', async () => {
+    const api = client();
+    await expect(createDeviceTransferGateway(api).history('not-a-ulid')).rejects.toThrow(DeviceTransferContractError);
+    expect(api.get).not.toHaveBeenCalled();
+  });
 });

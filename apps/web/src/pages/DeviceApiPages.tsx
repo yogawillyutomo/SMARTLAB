@@ -29,10 +29,11 @@ import {
 } from '@/lib/devicePresentation';
 import {
   deviceTransferPresentationIssue,
-  matchesTransferReconciliation,
   normalizeTransferReason,
+  reconcileDeviceTransfer,
   validateTransferForm,
   type DeviceTransferPresentationIssue,
+  type TransferReconciliationResult,
   type TransferReconciliationSnapshot,
 } from '@/lib/deviceTransferPresentation';
 import {
@@ -903,7 +904,10 @@ export function DeviceDetailPage() {
   useEffect(() => {
     transferRouteSequence.current += 1;
     setTransferDialogOpen(false);
+    setTransferSubmitting(false);
+    setTransferErrors({});
     setTransferRecoveryMessage(undefined);
+    transferSubmissionActive.current = false;
   }, [id]);
 
   useEffect(() => {
@@ -963,40 +967,41 @@ export function DeviceDetailPage() {
     setTransferDialogOpen(true);
   }
 
-  async function reconcileTransfer(snapshot?: TransferReconciliationSnapshot): Promise<'confirmed' | 'reloaded' | 'failed'> {
-    if (!id) return 'failed';
-    const routeSequence = transferRouteSequence.current;
-    try {
-      const latest = await deviceGateway.show(id);
-      if (routeSequence !== transferRouteSequence.current) return 'failed';
-      setState({ status: 'ready', device: latest });
-      if (canViewTransferHistory) {
-        let history: DeviceTransferPage;
-        try {
-          history = await deviceTransferGateway.history(id, { page: 1, perPage: 10 });
-        } catch (historyError) {
-          const historyIssue = deviceTransferPresentationIssue(historyError, 'history');
-          if (historyIssue.authBoundary) await bootstrapSession({ force: true });
-          else setTransferHistory({ status: 'error', issue: historyIssue });
-          return 'failed';
-        }
-        if (routeSequence !== transferRouteSequence.current) return 'failed';
-        setTransferHistory(history.data.length === 0 ? { status: 'empty', page: history } : { status: 'ready', page: history });
-        if (snapshot && history.data.some((transfer) => matchesTransferReconciliation(transfer, snapshot))) return 'confirmed';
+  async function reconcileTransfer(snapshot?: TransferReconciliationSnapshot, knownSuccess = false): Promise<TransferReconciliationResult> {
+    if (!id) return { status: 'stale_route' };
+    const scope = { id, sequence: transferRouteSequence.current };
+    const isCurrent = () => scope.id === id && scope.sequence === transferRouteSequence.current;
+    const result = await reconcileDeviceTransfer({
+      deviceId: scope.id,
+      snapshot,
+      knownSuccess,
+      canViewHistory: canViewTransferHistory,
+      deviceGateway,
+      transferGateway: deviceTransferGateway,
+      isCurrent,
+    });
+    if (result.status === 'stale_route' || !isCurrent()) return { status: 'stale_route' };
+    if (result.status === 'unavailable') return result;
+    if (isCurrent()) setState({ status: 'ready', device: result.device });
+    if (result.history?.status === 'available' && isCurrent()) {
+      const page = result.history.page;
+      setTransferHistory(page.data.length === 0 ? { status: 'empty', page } : { status: 'ready', page });
+    } else if (result.history?.status === 'unavailable') {
+      if (result.history.issue.authBoundary) {
+        await bootstrapSession({ force: true });
+        if (!isCurrent()) return { status: 'stale_route' };
+      } else if (isCurrent()) {
+        setTransferHistory({ status: 'error', issue: result.history.issue });
       }
-      if (snapshot && latest.id === snapshot.deviceId && latest.homeLaboratoryId === snapshot.destinationLaboratoryId
-        && latest.version === snapshot.submittedVersion + 1) return 'confirmed';
-      return snapshot ? 'reloaded' : 'confirmed';
-    } catch (error) {
-      const issue = deviceTransferPresentationIssue(error, 'history');
-      if (issue.authBoundary) await bootstrapSession({ force: true });
-      return 'failed';
     }
+    return isCurrent() ? result : { status: 'stale_route' };
   }
 
   async function saveTransfer() {
     if (!currentDevice || !currentDevice.homeLaboratoryId || transferSubmissionActive.current) return;
     transferSubmissionActive.current = true;
+    const scope = { id: currentDevice.id, sequence: transferRouteSequence.current };
+    const isCurrent = () => scope.id === id && scope.sequence === transferRouteSequence.current;
     const fieldErrors = validateTransferForm(transferForm.destinationLaboratoryId, transferForm.reason);
     if (transferForm.destinationLaboratoryId === currentDevice.homeLaboratoryId) fieldErrors.destinationLaboratoryId = 'Laboratorium tujuan harus berbeda dari laboratorium asal.';
     if (Object.keys(fieldErrors).length > 0) {
@@ -1019,37 +1024,54 @@ export function DeviceDetailPage() {
         destinationLaboratoryId: snapshot.destinationLaboratoryId,
         reason: snapshot.reason,
       });
-      const reconciliation = await reconcileTransfer();
-      if (reconciliation === 'failed') {
+      if (!isCurrent()) return;
+      const reconciliation = await reconcileTransfer(undefined, true);
+      if (!isCurrent() || reconciliation.status === 'stale_route') return;
+      if (reconciliation.status === 'unavailable') {
         setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
       } else {
         setTransferDialogOpen(false);
         toast('Laboratorium asal perangkat diperbarui', 'success');
       }
     } catch (error) {
+      if (!isCurrent()) return;
       const issue = deviceTransferPresentationIssue(error, 'mutation');
       if (issue.authBoundary) {
         await bootstrapSession({ force: true });
-      } else if (issue.versionConflict) {
-        await reconcileTransfer();
-        setTransferErrors({ request: issue.message });
       } else if (issue.ambiguous) {
         const reconciliation = await reconcileTransfer(snapshot);
-        if (reconciliation === 'confirmed') {
+        if (!isCurrent() || reconciliation.status === 'stale_route') return;
+        if (reconciliation.status === 'confirmed') {
           setTransferDialogOpen(false);
           toast('Laboratorium asal perangkat diperbarui', 'success');
-        } else if (reconciliation === 'failed') {
-          setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+        } else if (reconciliation.status === 'unavailable') {
+          setTransferErrors({ request: 'Hasil pemindahan belum dapat dipastikan. Muat ulang data kanonik sebelum mencoba lagi.' });
+        } else if (reconciliation.status === 'unconfirmed') {
+          setTransferErrors({ request: 'Pemindahan tidak terkonfirmasi. Periksa data terbaru sebelum mengirim perintah baru.' });
         } else {
-          setTransferErrors({ request: 'Respons Transfer tidak dapat dipastikan. Periksa data terbaru sebelum mengirim ulang.' });
+          setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
         }
+      } else if (issue.versionConflict) {
+        const reconciliation = await reconcileTransfer();
+        if (!isCurrent() || reconciliation.status === 'stale_route') return;
+        setTransferErrors({ request: issue.message });
       } else {
+        if (!isCurrent()) return;
         setTransferErrors({ ...issue.fieldErrors, request: issue.fieldErrors.request ?? issue.message });
       }
     } finally {
-      setTransferSubmitting(false);
+      if (isCurrent()) setTransferSubmitting(false);
       transferSubmissionActive.current = false;
     }
+  }
+
+  async function retryTransferReconciliation() {
+    const scope = { id, sequence: transferRouteSequence.current };
+    if (!scope.id) return;
+    setTransferRecoveryMessage(undefined);
+    const result = await reconcileTransfer(undefined, true);
+    if (scope.id !== id || scope.sequence !== transferRouteSequence.current || result.status === 'stale_route') return;
+    if (result.status === 'unavailable') setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
   }
 
   async function saveDevice() {
@@ -1112,7 +1134,7 @@ export function DeviceDetailPage() {
         onOpenTransfer={openTransfer}
         onRetryTransferHistory={() => void loadTransferHistory(transferHistory.status === 'ready' || transferHistory.status === 'empty' ? transferHistory.page.meta.page : 1)}
         onTransferPageChange={(page) => void loadTransferHistory(page)}
-        onRetryReconciliation={() => { setTransferRecoveryMessage(undefined); void reconcileTransfer(); }}
+        onRetryReconciliation={() => { void retryTransferReconciliation(); }}
         onRetry={() => void load()}
         onBack={() => navigate('/devices')}
         onEdit={openEdit}
