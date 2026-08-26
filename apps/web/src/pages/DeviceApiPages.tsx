@@ -29,6 +29,7 @@ import {
 } from '@/lib/devicePresentation';
 import {
   deviceTransferPresentationIssue,
+  executeTransferMutation,
   normalizeTransferReason,
   reconcileDeviceTransfer,
   validateTransferForm,
@@ -1020,44 +1021,33 @@ export function DeviceDetailPage() {
     setTransferErrors({});
     setTransferRecoveryMessage(undefined);
     try {
-      await deviceTransferGateway.create(currentDevice.id, currentDevice.version, {
-        destinationLaboratoryId: snapshot.destinationLaboratoryId,
-        reason: snapshot.reason,
+      const outcome = await executeTransferMutation({
+      deviceId: currentDevice.id,
+      expectedVersion: currentDevice.version,
+      input: { destinationLaboratoryId: snapshot.destinationLaboratoryId, reason: snapshot.reason },
+      snapshot,
+      create: deviceTransferGateway.create,
+      reconcile: reconcileTransfer,
+      isCurrent,
       });
-      if (!isCurrent()) return;
-      const reconciliation = await reconcileTransfer(undefined, true);
-      if (!isCurrent() || reconciliation.status === 'stale_route') return;
-      if (reconciliation.status === 'unavailable') {
-        setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
-      } else {
+      if (!isCurrent() || outcome.status === 'stale_route') return;
+      if (outcome.status === 'confirmed') {
+      if (outcome.reconciliation.status === 'unavailable') setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+      else {
         setTransferDialogOpen(false);
         toast('Laboratorium asal perangkat diperbarui', 'success');
       }
-    } catch (error) {
-      if (!isCurrent()) return;
-      const issue = deviceTransferPresentationIssue(error, 'mutation');
-      if (issue.authBoundary) {
-        await bootstrapSession({ force: true });
-      } else if (issue.ambiguous) {
-        const reconciliation = await reconcileTransfer(snapshot);
-        if (!isCurrent() || reconciliation.status === 'stale_route') return;
-        if (reconciliation.status === 'confirmed') {
-          setTransferDialogOpen(false);
-          toast('Laboratorium asal perangkat diperbarui', 'success');
-        } else if (reconciliation.status === 'unavailable') {
-          setTransferErrors({ request: 'Hasil pemindahan belum dapat dipastikan. Muat ulang data kanonik sebelum mencoba lagi.' });
-        } else if (reconciliation.status === 'unconfirmed') {
-          setTransferErrors({ request: 'Pemindahan tidak terkonfirmasi. Periksa data terbaru sebelum mengirim perintah baru.' });
-        } else {
-          setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
-        }
-      } else if (issue.versionConflict) {
-        const reconciliation = await reconcileTransfer();
-        if (!isCurrent() || reconciliation.status === 'stale_route') return;
-        setTransferErrors({ request: issue.message });
-      } else {
-        if (!isCurrent()) return;
-        setTransferErrors({ ...issue.fieldErrors, request: issue.fieldErrors.request ?? issue.message });
+    } else if (outcome.status === 'unavailable') {
+      if (outcome.knownSuccess) setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+      else setTransferErrors({ request: 'Hasil pemindahan belum dapat dipastikan. Muat ulang data kanonik sebelum mencoba lagi.' });
+      } else if (outcome.status === 'unconfirmed') {
+      setTransferErrors({ request: 'Pemindahan tidak terkonfirmasi. Periksa data terbaru sebelum mengirim perintah baru.' });
+      } else if (outcome.status === 'concurrent_change') {
+      setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
+      } else if (outcome.status === 'rejected') {
+        if (outcome.issue.authBoundary) await bootstrapSession({ force: true });
+        else if (outcome.issue.versionConflict) setTransferErrors({ request: outcome.issue.message });
+        else setTransferErrors({ ...outcome.issue.fieldErrors, request: outcome.issue.fieldErrors.request ?? outcome.issue.message });
       }
     } finally {
       if (isCurrent()) setTransferSubmitting(false);

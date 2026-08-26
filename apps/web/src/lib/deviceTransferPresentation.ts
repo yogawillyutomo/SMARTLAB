@@ -95,6 +95,46 @@ export async function reconcileDeviceTransfer(options: ReconcileTransferOptions)
   return { status, device, history };
 }
 
+export type TransferMutationResult =
+  | { status: 'confirmed'; reconciliation: TransferReconciliationResult }
+  | { status: 'unconfirmed' | 'concurrent_change' | 'stale_route'; reconciliation: TransferReconciliationResult }
+  | { status: 'unavailable'; reconciliation: TransferReconciliationResult; knownSuccess: boolean }
+  | { status: 'rejected'; issue: DeviceTransferPresentationIssue; reconciliation?: TransferReconciliationResult }
+  | { status: 'stale_route' };
+
+interface ExecuteTransferMutationOptions {
+  deviceId: string;
+  expectedVersion: number;
+  input: { destinationLaboratoryId: string; reason: string | null };
+  snapshot: TransferReconciliationSnapshot;
+  create: (deviceId: string, expectedVersion: number, input: { destinationLaboratoryId: string; reason: string | null }) => Promise<unknown>;
+  reconcile: (snapshot?: TransferReconciliationSnapshot, knownSuccess?: boolean) => Promise<TransferReconciliationResult>;
+  isCurrent: () => boolean;
+}
+
+export async function executeTransferMutation(options: ExecuteTransferMutationOptions): Promise<TransferMutationResult> {
+  if (!options.isCurrent()) return { status: 'stale_route' };
+  try {
+    await options.create(options.deviceId, options.expectedVersion, options.input);
+    if (!options.isCurrent()) return { status: 'stale_route' };
+    const reconciliation = await options.reconcile(undefined, true);
+    if (!options.isCurrent() || reconciliation.status === 'stale_route') return { status: 'stale_route' };
+    if (reconciliation.status === 'confirmed') return { status: 'confirmed', reconciliation };
+    if (reconciliation.status === 'unavailable') return { status: 'unavailable', reconciliation, knownSuccess: true };
+    return { status: reconciliation.status, reconciliation };
+  } catch (error) {
+    if (!options.isCurrent()) return { status: 'stale_route' };
+    const issue = deviceTransferPresentationIssue(error, 'mutation');
+    if (issue.authBoundary || (!issue.ambiguous && !issue.versionConflict)) return { status: 'rejected', issue };
+    const reconciliation = await options.reconcile(issue.ambiguous ? options.snapshot : undefined, false);
+    if (!options.isCurrent() || reconciliation.status === 'stale_route') return { status: 'stale_route' };
+    if (issue.versionConflict) return { status: 'rejected', issue, reconciliation };
+    if (reconciliation.status === 'confirmed') return { status: 'confirmed', reconciliation };
+    if (reconciliation.status === 'unavailable') return { status: 'unavailable', reconciliation, knownSuccess: false };
+    return { status: reconciliation.status, reconciliation };
+  }
+}
+
 export function matchesTransferReconciliation(transfer: DeviceTransferDto, snapshot: TransferReconciliationSnapshot): boolean {
   return transfer.deviceId === snapshot.deviceId
     && transfer.deviceVersionBefore === snapshot.submittedVersion

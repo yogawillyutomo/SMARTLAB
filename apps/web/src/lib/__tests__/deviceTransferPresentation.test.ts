@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiClientError } from '@/lib/apiClient';
 import {
   deviceTransferPresentationIssue,
+  executeTransferMutation,
   matchesTransferReconciliation,
   normalizeTransferReason,
   reconcileDeviceTransfer,
@@ -122,5 +123,65 @@ describe('Device Transfer presentation and reconciliation', () => {
     expect(result.history?.status).toBe('unavailable');
     expect(deviceTransferPresentationIssue(new ApiClientError('bad 201', { kind: 'invalid_response', status: 201 }))).toMatchObject({ ambiguous: true, retryable: false });
     expect(deviceTransferPresentationIssue(new ApiClientError('bad history', { kind: 'invalid_response', status: 200 }), 'history')).toMatchObject({ ambiguous: false, retryable: false });
+  });
+
+  it('orchestrates one POST followed by GET-only reconciliation for success, ambiguity, 412, and malformed 2xx', async () => {
+    const calls: string[] = [];
+    const create = async () => { calls.push('POST'); };
+    const confirmed = async (_snapshot?: unknown, knownSuccess?: boolean) => {
+      calls.push(knownSuccess ? 'GET-success' : 'GET-ambiguous');
+      return { status: 'confirmed' as const, device, knownSuccess: Boolean(knownSuccess) };
+    };
+    const success = await executeTransferMutation({ deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot, create, reconcile: confirmed, isCurrent: () => true });
+    expect(success.status).toBe('confirmed');
+    expect(calls).toEqual(['POST', 'GET-success']);
+
+    calls.length = 0;
+    const knownSuccessRecovery = await executeTransferMutation({
+      deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot,
+      create: async () => { calls.push('POST'); },
+      reconcile: async () => { calls.push('GET-recovery'); return { status: 'unavailable' as const }; }, isCurrent: () => true,
+    });
+    expect(knownSuccessRecovery).toMatchObject({ status: 'unavailable', knownSuccess: true });
+    expect(calls).toEqual(['POST', 'GET-recovery']);
+
+    calls.length = 0;
+    const unchanged = await executeTransferMutation({
+      deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot,
+      create: async () => { calls.push('POST'); throw new ApiClientError('offline', { kind: 'network' }); },
+      reconcile: async () => { calls.push('GET-ambiguous'); return { status: 'unconfirmed' as const, device }; }, isCurrent: () => true,
+    });
+    expect(unchanged.status).toBe('unconfirmed');
+    expect(calls).toEqual(['POST', 'GET-ambiguous']);
+
+    calls.length = 0;
+    const stale412 = await executeTransferMutation({
+      deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot,
+      create: async () => { calls.push('POST'); throw new ApiClientError('stale', { kind: 'api', status: 412, code: 'DEVICE_VERSION_CONFLICT' }); },
+      reconcile: async () => { calls.push('GET-412'); return { status: 'concurrent_change' as const, device }; }, isCurrent: () => true,
+    });
+    expect(stale412.status).toBe('rejected');
+    expect(calls).toEqual(['POST', 'GET-412']);
+
+    calls.length = 0;
+    const malformed = await executeTransferMutation({
+      deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot,
+      create: async () => { calls.push('POST'); throw new ApiClientError('bad 201', { kind: 'invalid_response', status: 201 }); },
+      reconcile: async () => { calls.push('GET-malformed'); return { status: 'unavailable' as const }; }, isCurrent: () => true,
+    });
+    expect(malformed.status).toBe('unavailable');
+    expect(calls).toEqual(['POST', 'GET-malformed']);
+  });
+
+  it('stops late mutation completion after route scope changes and never runs a second POST', async () => {
+    let current = true;
+    let posts = 0;
+    const result = await executeTransferMutation({
+      deviceId: device.id, expectedVersion: 3, input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' }, snapshot,
+      create: async () => { posts += 1; current = false; },
+      reconcile: async () => { throw new Error('must not reconcile stale route'); }, isCurrent: () => current,
+    });
+    expect(result.status).toBe('stale_route');
+    expect(posts).toBe(1);
   });
 });
