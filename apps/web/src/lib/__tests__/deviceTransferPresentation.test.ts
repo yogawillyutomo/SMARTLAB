@@ -109,6 +109,47 @@ describe('Device Transfer presentation and reconciliation', () => {
     expect(stale.status).toBe('stale_route');
   });
 
+  it('preserves Device auth, network, and not-found evidence when reconciliation GET fails', async () => {
+    const auth = await reconcileDeviceTransfer({
+      deviceId: device.id,
+      canViewHistory: false,
+      deviceGateway: { show: async () => { throw new ApiClientError('session expired', { kind: 'api', status: 401, code: 'UNAUTHENTICATED' }); } },
+      transferGateway: { history: async () => historyPage([]) },
+      isCurrent: () => true,
+    });
+    expect(auth).toMatchObject({ status: 'unavailable', deviceIssue: { authBoundary: true, notFound: false } });
+
+    const network = await reconcileDeviceTransfer({
+      deviceId: device.id,
+      canViewHistory: false,
+      deviceGateway: { show: async () => { throw new ApiClientError('offline', { kind: 'network' }); } },
+      transferGateway: { history: async () => historyPage([]) },
+      isCurrent: () => true,
+    });
+    expect(network).toMatchObject({ status: 'unavailable', deviceIssue: { authBoundary: false, notFound: false, retryable: true } });
+
+    const notFound = await reconcileDeviceTransfer({
+      deviceId: device.id,
+      canViewHistory: false,
+      deviceGateway: { show: async () => { throw new ApiClientError('missing', { kind: 'api', status: 404, code: 'DEVICE_NOT_FOUND' }); } },
+      transferGateway: { history: async () => historyPage([]) },
+      isCurrent: () => true,
+    });
+    expect(notFound).toMatchObject({ status: 'unavailable', deviceIssue: { authBoundary: false, notFound: true } });
+  });
+
+  it('keeps reconciliation stale when the route changes while a failed Device GET settles', async () => {
+    let current = true;
+    const result = await reconcileDeviceTransfer({
+      deviceId: device.id,
+      canViewHistory: false,
+      deviceGateway: { show: async () => { current = false; throw new ApiClientError('session expired', { kind: 'api', status: 401, code: 'UNAUTHENTICATED' }); } },
+      transferGateway: { history: async () => historyPage([]) },
+      isCurrent: () => current,
+    });
+    expect(result).toEqual({ status: 'stale_route' });
+  });
+
   it('keeps Device evidence when history GET fails and treats valid 2xx parse failures as ambiguous mutation outcomes', async () => {
     const result = await reconcileDeviceTransfer({
       deviceId: device.id,
@@ -171,6 +212,34 @@ describe('Device Transfer presentation and reconciliation', () => {
     });
     expect(malformed.status).toBe('unavailable');
     expect(calls).toEqual(['POST', 'GET-malformed']);
+  });
+
+  it('preserves known-success versus ambiguous outcomes when Device reconciliation returns 401, without replaying POST', async () => {
+    let knownPosts = 0;
+    const knownSuccess = await executeTransferMutation({
+      deviceId: device.id,
+      expectedVersion: 3,
+      input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' },
+      snapshot,
+      create: async () => { knownPosts += 1; },
+      reconcile: async () => ({ status: 'unavailable' as const, deviceIssue: { authBoundary: true, message: 'expired', retryable: false, notFound: false, versionConflict: false, preconditionFailure: false, fieldErrors: {} } }),
+      isCurrent: () => true,
+    });
+    expect(knownSuccess).toMatchObject({ status: 'unavailable', knownSuccess: true, reconciliation: { deviceIssue: { authBoundary: true } } });
+    expect(knownPosts).toBe(1);
+
+    let ambiguousPosts = 0;
+    const ambiguous = await executeTransferMutation({
+      deviceId: device.id,
+      expectedVersion: 3,
+      input: { destinationLaboratoryId: transfer.destinationLaboratory.id, reason: 'Move' },
+      snapshot,
+      create: async () => { ambiguousPosts += 1; throw new ApiClientError('offline', { kind: 'network' }); },
+      reconcile: async () => ({ status: 'unavailable' as const, deviceIssue: { authBoundary: true, message: 'expired', retryable: false, notFound: false, versionConflict: false, preconditionFailure: false, fieldErrors: {} } }),
+      isCurrent: () => true,
+    });
+    expect(ambiguous).toMatchObject({ status: 'unavailable', knownSuccess: false, reconciliation: { deviceIssue: { authBoundary: true } } });
+    expect(ambiguousPosts).toBe(1);
   });
 
   it('stops late mutation completion after route scope changes and never runs a second POST', async () => {

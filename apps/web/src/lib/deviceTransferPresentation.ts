@@ -1,4 +1,5 @@
 import { ApiClientError } from '@/lib/apiClient';
+import { devicePresentationIssue, type DevicePresentationIssue } from '@/lib/devicePresentation';
 import { DeviceTransferContractError, isTransferNetworkAmbiguity, type DeviceTransferDto } from '@/services/deviceTransferApi';
 import type { DeviceDto, DeviceGateway } from '@/services/deviceApi';
 import type { DeviceTransferGateway, DeviceTransferPage } from '@/services/deviceTransferApi';
@@ -45,7 +46,7 @@ export type TransferReconciliationResult =
   | { status: 'confirmed'; device: DeviceDto; history?: TransferHistoryEvidence; knownSuccess: boolean }
   | { status: 'unconfirmed'; device: DeviceDto; history?: TransferHistoryEvidence }
   | { status: 'concurrent_change'; device: DeviceDto; history?: TransferHistoryEvidence }
-  | { status: 'unavailable' }
+  | { status: 'unavailable'; deviceIssue?: DevicePresentationIssue }
   | { status: 'stale_route' };
 
 interface ReconcileTransferOptions {
@@ -73,8 +74,10 @@ export async function reconcileDeviceTransfer(options: ReconcileTransferOptions)
   let device: DeviceDto;
   try {
     device = await options.deviceGateway.show(options.deviceId);
-  } catch {
-    return options.isCurrent() ? { status: 'unavailable' } : { status: 'stale_route' };
+  } catch (error) {
+    return options.isCurrent()
+      ? { status: 'unavailable', deviceIssue: devicePresentationIssue(error) }
+      : { status: 'stale_route' };
   }
   if (!options.isCurrent()) return { status: 'stale_route' };
 

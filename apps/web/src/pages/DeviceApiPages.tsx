@@ -982,7 +982,13 @@ export function DeviceDetailPage() {
       isCurrent,
     });
     if (result.status === 'stale_route' || !isCurrent()) return { status: 'stale_route' };
-    if (result.status === 'unavailable') return result;
+    if (result.status === 'unavailable') {
+      if (result.deviceIssue?.authBoundary) {
+        await bootstrapSession({ force: true });
+        if (!isCurrent()) return { status: 'stale_route' };
+      }
+      return isCurrent() ? result : { status: 'stale_route' };
+    }
     if (isCurrent()) setState({ status: 'ready', device: result.device });
     if (result.history?.status === 'available' && isCurrent()) {
       const page = result.history.page;
@@ -1045,7 +1051,10 @@ export function DeviceDetailPage() {
       } else if (outcome.status === 'concurrent_change') {
       setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
       } else if (outcome.status === 'rejected') {
-        if (outcome.issue.authBoundary) await bootstrapSession({ force: true });
+        if (outcome.issue.authBoundary) {
+          await bootstrapSession({ force: true });
+          if (!isCurrent()) return;
+        }
         else if (outcome.issue.versionConflict) setTransferErrors({ request: outcome.issue.message });
         else setTransferErrors({ ...outcome.issue.fieldErrors, request: outcome.issue.fieldErrors.request ?? outcome.issue.message });
       }
