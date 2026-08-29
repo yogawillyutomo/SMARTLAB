@@ -1,6 +1,6 @@
 # Incident Domain Field Classification
 
-Status: Proposed — Pending Independent Review
+Status: Approved — Architecture Locked
 
 Companion to: [Incident Domain Contract RFC](incident-domain-contract.md)
 
@@ -206,4 +206,4 @@ Legacy `Menunggu Spare Part` maps to future Work Order state, not an Incident en
 
 Architecture blockers: none.
 
-Independent review must confirm the field bounds, snapshot set, transition-specific permission precedence, separate row/history permissions, administrative reported-state correction policy, path-aware assignee invariants, participant comments, versioned create fingerprints, custody/location semantics, and Work Order exclusions before this companion is approved.
+Independent architecture review completed with Critical 0, High 0, Medium 0, and Low 0. This locked companion is now implementation authority for Incident v1 field ownership and classification. Any substantive change requires a separately reviewed architecture amendment.

@@ -1,6 +1,6 @@
 # Incident Domain Contract RFC
 
-Status: Proposed — Pending Independent Review
+Status: Approved — Architecture Locked
 
 Scope: Incident v1 architecture and implementation contract only. This document does not implement backend, frontend, OpenAPI, permissions, migrations, Work Order, notifications, or reporting.
 
@@ -733,4 +733,4 @@ The backend PR must not implement Work Order, Asset, notification, telemetry ale
 
 Architecture blockers: none.
 
-Independent review must verify transition-specific permission/error precedence, exact row-scope versus history-projection permissions, versioned canonical create fingerprints and ticket lock ordering, path-aware lifecycle/assignee invariants, administrative PATCH authority, participant comments, custody/location semantics, and Work Order exclusions before this RFC can be marked approved or locked.
+Independent architecture review completed with Critical 0, High 0, Medium 0, and Low 0. This locked contract is now implementation authority for Incident v1. Any substantive change requires a separately reviewed architecture amendment.
