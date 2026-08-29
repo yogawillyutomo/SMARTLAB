@@ -8,22 +8,23 @@ Canonical base: `eaf7ec358d391c7493706f51ad17e01e41fdbdae` (`feat(web): integrat
 
 ## 1. Decision summary
 
-An Incident is a School-owned report of an operational problem or abnormal condition observed in one Laboratory, optionally involving one canonical Device. It owns report identity, reporter evidence, subject snapshots, operational priority, triage, accountable assignment, lifecycle, append-only comments, verification, closure, and immutable domain history.
+An Incident is a School-owned report of an operational problem or abnormal condition in one operational/reporting Laboratory context, optionally involving one canonical Device. The context records where the problem was reported or handled; it is not itself proof of a Device's current physical location. Incident owns report identity, reporter evidence, subject snapshots, operational priority, triage, accountable assignment, lifecycle, append-only participant comments, verification, closure, and immutable internal domain history.
 
 Incident v1 makes these decisions:
 
 - School and reporter identity are derived from the authenticated active `SchoolMembership`; clients cannot supply either authority.
-- A new Incident requires one active same-School Laboratory. A Device is optional and, when present, must be an eligible same-School Device whose home Laboratory matches the reported Laboratory.
-- The report subject is correctable only while `reported`, only through generic PATCH by `incidents.update`, and freezes after triage.
+- A new Incident requires one active same-School Laboratory. A Device is optional and, when present, must be an eligible same-School Device whose home Laboratory matches the reported Laboratory as a v1 discovery/eligibility constraint, not as a current-location claim.
+- The report subject and canonical report evidence are correctable only while `reported`, only through generic PATCH by a caller holding both `incidents.update` and `incidents.assign`, and freeze after triage.
 - Reporter, Laboratory, Device, assignee, and actor display evidence is snapshotted so later rename, deactivation, retirement, or deletion cannot rewrite history.
 - `incidents.view` grants access to records visible under row policy; proposed `incidents.view-all` expands visibility to all Incidents in the active School. Without it, a caller sees only Incidents reported by the same User.
-- Proposed `incidents.comment` is separate from `incidents.update`. Comments are bounded, append-only `incident.comment_added` events and have no edit/delete operation.
+- Proposed `incidents.comment` is separate from `incidents.update`. Comments are bounded, participant-visible, append-only `incident.comment_added` events and have no edit/delete operation. The participant comment projection is separate from full internal event history.
 - The lifecycle is `reported`, `triaged`, `assigned`, `in_progress`, `resolved`, `verified`, `closed`, or `rejected`. `closed` and `rejected` are terminal. Waiting for spare parts is Work Order-owned and is not an Incident status.
 - Assignment targets an active same-School membership whose active User has effective `incidents.update`. It is capability-driven, not role-name-driven.
 - Technician-style progress transitions require the actor to be the current assignee or to hold `incidents.assign` as an administrative override, in addition to `incidents.update`.
+- Resolution retains any current assignee. Reopen is path-aware: a resolved Incident with an assignee returns to `in_progress`; one without an assignee returns to `triaged`.
 - The aggregate has one positive integer `version`. Every post-create mutation requires strong `If-Match: "<version>"`; meaningful commits increment once and append exactly one typed Incident event.
 - Effective no-ops preserve `version`, ETag, `updatedAt`, and event history.
-- Incident v1 has no hard delete, no general idempotency key, and no automatic replay after an ambiguous mutation outcome.
+- Create requires one client-generated opaque `submissionId` used only for create correlation. Incident v1 has no general mutation idempotency framework, no hard delete, and no automatic replay after an ambiguous mutation outcome.
 - Incident and Work Order are separate aggregates. Future Work Orders own nullable `incident_id`; one Incident may have zero to many Work Orders.
 
 ## 2. Existing implementation audit
@@ -80,6 +81,8 @@ Incident does not own:
 - notification delivery, QR flows, Maintenance execution, or Work Order lifecycle;
 - duplicate-title suppression or automatic telemetry-alert creation.
 
+Incident's Laboratory subject is historical operational/reporting context. Device home custody is not physical-location authority. Incident v1 uses a matching `homeLaboratoryId` only because Loan and Maintenance current-location authorities do not yet exist; Incident never asserts or mutates current location.
+
 ## 4. Canonical aggregate fields
 
 The proposed `incidents` aggregate contains:
@@ -107,7 +110,7 @@ The proposed `incidents` aggregate contains:
 | `steps_taken` | no | create/PATCH allowlist | mutable only while `reported` |
 | `occurred_at` | yes | client observation time | mutable only while `reported` |
 | `status` | yes | transition/assignment commands | never generic PATCH |
-| `assignee_membership_id` and current assignee snapshot | no | assignment command | assignment command only |
+| `assignee_membership_id` and current assignee snapshot | state-dependent | assignment command | assignment command only; retained through resolution, verification, closure, and reopen |
 | `triage_summary` | no until triaged | triage transition | transition command only |
 | `resolution_summary` | no until resolved | resolve transition | transition command only; cleared on reopen |
 | `rejection_reason` | no until rejected | reject transition | transition command only |
@@ -118,6 +121,8 @@ The proposed `incidents` aggregate contains:
 | `created_at`, `updated_at` | yes | server | server-managed |
 
 Live foreign keys support current joins but are not historical display authority. Historical snapshot fields remain required even if a referenced User, membership, Laboratory, or Device is later renamed, deactivated, retired, decommissioned, or removed under a future retention policy.
+
+Create correlation is canonical infrastructure outside mutable Incident business data. `incident_submissions` stores the active School, immutable reporter User snapshot ID, opaque submission ID, exact server-normalized create payload, and committed Incident reference. It is immutable after commit, is not authorization evidence, and is omitted from the normal Incident DTO.
 
 ## 5. Stable API enums and bounds
 
@@ -143,6 +148,7 @@ Bounds:
 - `resolutionSummary`: required for resolve, 5-4,000 characters;
 - rejection, reassignment, and reopen reasons: required where specified, 5-1,000 characters;
 - comment text: trimmed, 1-2,000 characters;
+- `submissionId`: exact lowercase RFC 4122 UUID v4, canonical 36-character hyphenated form;
 - `occurredAt`: RFC 3339 date-time no later than five minutes after server receipt time;
 - search: trimmed 2-100 characters;
 - pagination: `page >= 1`, `perPage` default 25 and maximum 100, except Device reporting discovery maximum 20.
@@ -160,7 +166,7 @@ Every Incident read starts with `school_id = currentSchoolId` and the row-visibi
 
 Using the User snapshot rather than the live membership ID preserves ownership when the same User receives a replacement membership in the same School. Access still requires one current active membership and `incidents.view`. An unknown, cross-School, or non-visible Incident identifier returns the same `404 INCIDENT_NOT_FOUND` response.
 
-Row visibility applies to detail, PATCH, assignment, transition, comment, and event history. Action permission never expands row visibility. Controllers and policies must not hardcode role names.
+Row visibility applies to detail, PATCH, assignment, transition, participant comments, and submission recovery. Full internal event history additionally requires `incidents.view-all`. Action permission never expands row visibility. Controllers and policies must not hardcode role names.
 
 ## 7. Permission model
 
@@ -184,6 +190,14 @@ Final proposed grants for the later backend PR:
 
 Super Admin receives explicitly catalogued permissions through the seeder convention; there is no role-name or wildcard authorization fallback. `incidents.export` remains catalogued but has no Incident v1 endpoint. Export is deferred to a reporting slice that can define redaction, row scope, limits, and asynchronous delivery.
 
+Permission semantics are deliberately split:
+
+- Generic reported-state PATCH requires `incidents.view`, row visibility, `incidents.update`, and `incidents.assign`. This is administrative correction authority for Admin Lab and Super Admin, not technician progress authority.
+- A reporter cannot PATCH because reporter roles lack `incidents.update` and `incidents.assign`.
+- A technician with `incidents.update` cannot PATCH any canonical report field, including on an Incident currently assigned to them, because technicians lack `incidents.assign`.
+- Technician `incidents.update` authorizes only graph-defined progress transitions when the actor is current assignee; an actor who also has `incidents.assign` has the documented administrative progress override.
+- `incidents.view-all` expands row visibility only. It does not grant PATCH, assignment, transition, comment, export, or any other action.
+
 ## 8. Reporting discovery boundary
 
 Users with `incidents.create` do not require `laboratories.view` or `devices.view`. Incident v1 provides two narrow, read-only reporting discovery endpoints registered before `/incidents/{incidentId}`:
@@ -195,7 +209,7 @@ Users with `incidents.create` do not require `laboratories.view` or `devices.vie
 
 Laboratories are paginated and ordered by normalized `code ASC, id ASC`; optional search matches code/name. The Device endpoint requires a selected active Laboratory and a 2-100 character `search` matching normalized `deviceCode`; it returns at most 20 rows ordered by `deviceCode ASC, id ASC`. It never supports unfiltered inventory browsing.
 
-These projections do not expose serial number, hostname, QR public identity, technical profile, telemetry, Layout placement, Asset data, current location, lifecycle detail, user data, or counts. Device candidates are limited to `in_service` and `spare` Devices whose `home_laboratory_id` equals the selected Laboratory. A caller may omit Device and report a Laboratory-level Incident. Raw ULID entry is not a supported UI path, but direct API create still revalidates every identifier and eligibility rule.
+These projections do not expose serial number, hostname, QR public identity, technical profile, telemetry, Layout placement, Asset data, current location, lifecycle detail, user data, or counts. Device candidates are limited to `in_service` and `spare` Devices whose `home_laboratory_id` equals the selected Laboratory. This match expresses permanent home custody and is only a v1 discovery/eligibility constraint while Loan and Maintenance current-location authorities do not exist; it does not assert that the Device is physically present. A caller may omit Device and report a Laboratory-level Incident. Raw ULID entry is not a supported UI path, but direct API create still revalidates every identifier and eligibility rule.
 
 ## 9. Laboratory and Device subject policy
 
@@ -206,11 +220,13 @@ Create and reported-state subject correction require:
 - Device lifecycle is `in_service` or `spare`;
 - Device `homeLaboratoryId` equals the selected Laboratory.
 
+`Incident.laboratoryId` is the operational/reporting Laboratory context. `Device.homeLaboratoryId` is permanent home custody, not current physical location. Incident never mutates Device home custody or any present/future current-location projection. A future reviewed Loan/Maintenance integration may supply canonical current location and widen Device candidate resolution; it must not rewrite existing Incident subject snapshots, which remain historical report context.
+
 An inactive Laboratory cannot receive a new Incident. An Incident remains readable, assignable, progressable, commentable, resolvable, verifiable, and closable if its Laboratory later becomes inactive.
 
 An Incident remains manageable if its referenced Device later becomes `retired` or `decommissioned`. Those lifecycle changes do not mutate Incident status, subject snapshots, assignment, or history. Incident never mutates Device or Laboratory.
 
-Subject Laboratory and Device may be corrected only while status is `reported`, through PATCH with `incidents.update` and matching `If-Match`. After triage, subject identity and snapshots freeze. If a post-triage report is discovered to name the wrong subject, staff create a correct replacement Incident, add a comment on the original identifying the replacement ticket, and resolve the original with an explicit administrative resolution summary. The original historical subject is not rewritten.
+Subject Laboratory and Device may be corrected only while status is `reported`, through PATCH with both `incidents.update` and `incidents.assign` plus matching `If-Match`. After triage, subject identity and snapshots freeze. If a post-triage report is discovered to name the wrong subject, staff create a correct replacement Incident, add a comment on the original identifying the replacement ticket, and resolve the original with an explicit administrative resolution summary. The original historical subject is not rewritten.
 
 ## 10. Lifecycle and transition authority
 
@@ -226,12 +242,15 @@ The exact graph is:
 | `assigned` | `resolved` | `incidents.update` | same ownership rule | `resolutionSummary` |
 | `in_progress` | `resolved` | `incidents.update` | same ownership rule | `resolutionSummary` |
 | `resolved` | `verified` | `incidents.approve` | visible record | `verificationNote` |
-| `resolved` | `in_progress` | `incidents.approve` | failed verification/reopen | `reason` |
+| `resolved` | `in_progress` | `incidents.approve` | reopen only when a current assignee is present | `reason` |
+| `resolved` | `triaged` | `incidents.approve` | reopen only when no current assignee is present | `reason` |
 | `verified` | `closed` | `incidents.approve` | visible record | no data |
 
-No other edge exists. `closed` and `rejected` reject PATCH, assignment, transition, and comment commands. A closed Incident cannot reopen in v1.
+No other edge exists. The two reopen edges are mutually exclusive and path-aware. A resolved Incident with an assignee cannot transition to `triaged`; a resolved Incident without an assignee cannot transition to `in_progress`. Either mismatch returns `409 INCIDENT_INVALID_TRANSITION`, and `in_progress` can never have a null assignee. `closed` and `rejected` reject PATCH, assignment, transition, and comment commands. A closed Incident cannot reopen in v1.
 
-`reported -> triaged` may finalize `priority`, `impact`, and `blocksLaboratoryOperation` atomically with one `incident.triaged` event and one version increment. It cannot change subject, title, description, category, steps taken, or occurrence time. Reopen clears current `resolutionSummary`, `resolvedAt`, `verificationNote`, and `verifiedAt`; the prior evidence remains in immutable events.
+`reported -> triaged` may finalize `priority`, `impact`, and `blocksLaboratoryOperation` atomically with one `incident.triaged` event and one version increment. It cannot change subject, title, description, category, steps taken, or occurrence time. Resolution never implicitly clears the current assignee; an assignee is retained through `resolved`, `verified`, and `closed`.
+
+Both reopen edges clear current `resolutionSummary` and `resolvedAt`, defensively clear `verificationNote` and `verifiedAt` if populated, increment Incident version exactly once, and append exactly one `incident.reopened` event. An assignee-present reopen to `in_progress` initializes `startedAt` to the server time only when it is still null (for example after direct `assigned -> resolved`); otherwise it retains the first-start timestamp. The event records `previousStatus`, `newStatus`, required `reason`, `assigneePresent`, the names and prior values of cleared current-resolution fields, and whether/when `startedAt` was initialized so reconstruction does not depend on mutable root state. Prior resolution and verification evidence remains immutable in events.
 
 ## 11. Assignment semantics
 
@@ -266,8 +285,10 @@ V1 adopts comments through `incidents.comment`.
 - There is no `incident_comments` mutable aggregate and no independent comment version.
 - The `incident.comment_added` event is the canonical comment record; its event ID is the comment ID.
 - A meaningful comment increments Incident version once and appends exactly one event in the same transaction.
+- Every v1 Incident comment is participant-visible to every caller who can view that Incident under normal own/view-all row scope.
+- V1 has no private comment or internal-note feature. A future private staff note requires a separately reviewed permission, storage, and projection contract and cannot be smuggled into comment text or payload metadata.
 
-Comments are read through the event history endpoint. The Incident DTO does not embed an unbounded comment array.
+Comments are read through `GET /api/v1/incidents/{incidentId}/comments`, which projects only `incident.comment_added` events as `{id, incidentId, actor: {userId, name}, text, createdAt}`. It never exposes raw event payloads, versions, reassignment/reopen reasons, or other administrative evidence. The Incident DTO does not embed an unbounded comment array.
 
 ## 13. Ticket numbering
 
@@ -277,16 +298,19 @@ Ticket numbers are server-generated and unique within a School. Format:
 
 Example: `INC-2026-000123`.
 
-The database has `incident_number_sequences(school_id, ticket_year, last_value)` with a unique `(school_id, ticket_year)` key. During Incident create, inside the same transaction:
+The database has `incident_number_sequences(school_id, ticket_year, last_value)` with a unique `(school_id, ticket_year)` key. Create also has one immutable `incident_submissions` correlation row keyed by `(school_id, reporter_user_id_snapshot, submission_id)`. During Incident create, inside the same transaction:
 
-1. Validate and lock the Laboratory and optional Device under the repository lock order.
-2. `INSERT ... ON CONFLICT DO NOTHING` the School/year sequence row.
-3. `SELECT ... FOR UPDATE` that exact row.
-4. Reject exhaustion above 999,999 with `409 INCIDENT_TICKET_SEQUENCE_EXHAUSTED`.
-5. Increment `last_value`, format the ticket, and insert the Incident plus `incident.reported` event.
-6. Commit all changes together; rollback returns the sequence increment.
+1. Normalize the complete create business payload excluding `submissionId` and lock-or-create its exact submission row before domain locks. A concurrent request with the same key waits on that row.
+2. If the row already maps to a committed Incident, byte-compare the stored normalized payload. The same payload returns that canonical Incident with HTTP 200 and its ETag; a different payload returns `409 INCIDENT_SUBMISSION_CONFLICT`. Neither path touches subject or sequence rows.
+3. For a new submission, validate and lock the Laboratory and optional Device under the repository lock order.
+4. `INSERT ... ON CONFLICT DO NOTHING` the School/year sequence row and `SELECT ... FOR UPDATE` that exact row.
+5. Reject exhaustion above 999,999 with `409 INCIDENT_TICKET_SEQUENCE_EXHAUSTED`.
+6. Increment `last_value`, format the ticket, insert the Incident and `incident.reported` event, and attach the Incident to the submission row.
+7. Commit all changes together; rollback removes the uncommitted submission row and returns the sequence increment.
 
 Database uniqueness covers `(school_id, ticket_year, ticket_sequence)` and `(school_id, ticket_number)`. The client cannot supply or reserve a number. Neither `count()+1` nor timestamps participate in numbering. Numbers are immutable and are not globally unique outside their School context.
+
+The `submissionId` is a client-generated lowercase RFC 4122 UUID v4 in canonical 36-character hyphenated form, fresh for one report attempt. It is not the Incident ID, user-editable business data, authorization evidence, or a reusable key for any post-create mutation. The server stores the exact normalized payload in correlation infrastructure for deterministic equality; submission material is never included in normal Incident/event/comment projections.
 
 ## 14. Concurrency and precondition precedence
 
@@ -311,6 +335,8 @@ Request precedence is:
 
 No command introduces a child aggregate version. Every meaningful commit changes the Incident and writes exactly one IncidentEvent in one transaction. A failed event insert rolls back the aggregate change.
 
+For PATCH, "exact route permission" means both `incidents.update` and `incidents.assign`; failure returns 403 before precondition or row disclosure. Being the reporter or current assignee does not substitute for either permission. After a row is visible and locked, any PATCH outside `reported` returns `409 INCIDENT_STATUS_CONFLICT` regardless of permissions.
+
 ## 15. Effective no-op policy
 
 Generic PATCH normalizes strings, nullable blanks, enums, booleans, and timestamps before comparison. If every allowed field is canonically equal, it returns HTTP 200 with the current Incident DTO and ETag while preserving `version`, `updatedAt`, and history.
@@ -321,11 +347,13 @@ Even an effective no-op requires a current matching `If-Match`. Stale no-op subm
 
 ## 16. Ambiguous mutation and retry policy
 
-Incident v1 has no general idempotency key and clients never automatically replay an ambiguous mutation.
+Incident v1 has no general post-create mutation idempotency key and clients never automatically replay an ambiguous mutation.
 
-For a lost PATCH, assignment, transition, or comment response, the frontend must GET the canonical Incident and GET event history before allowing another mutation. If the first command committed, a manual repeat with its old `If-Match` fails 412 and writes no duplicate event. If reconciliation cannot establish the outcome, the UI remains explicitly unconfirmed.
+For a lost PATCH, assignment, transition, or comment response, the frontend GETs the canonical Incident before allowing another mutation. Staff with `incidents.view-all` may additionally GET full event history. Own-only callers cannot access full events; for comment outcomes they may GET the participant comment projection. If caller-visible canonical Incident/comments do not establish the outcome, the UI remains explicitly unconfirmed. If the first command committed, a manual repeat with its old `If-Match` fails 412 and writes no duplicate event.
 
-Create also has no automatic replay. After a lost create response, the reporter refreshes the own-visible Incident list and reconciles using canonical ticket, subject, occurrence time, and title evidence before a manual resubmission. The server does not treat equal titles as duplicates because distinct operational reports can legitimately share text.
+Create also has no automatic replay. After a lost create response, the reporter issues `GET /api/v1/incidents/submissions/{submissionId}`. A committed submission returns the canonical Incident and ETag. Unknown, cross-School, other-reporter, rolled-back, or otherwise non-visible submission keys return the same `404 INCIDENT_SUBMISSION_NOT_FOUND`. If recovery remains unavailable, the UI stays explicitly unconfirmed.
+
+A later manual POST with the same `submissionId` and identical normalized payload is safe and returns the already-created Incident without allocating a ticket or event. Reusing it with a different normalized payload returns `409 INCIDENT_SUBMISSION_CONFLICT`. Equal titles without the same submission key remain valid distinct reports. This create-only correlation mechanism does not apply to PATCH, assignment, transition, or comment.
 
 Recovery actions issue GET requests only. Authentication or membership recovery never replays a mutation.
 
@@ -351,7 +379,7 @@ Event types and payload ownership:
 | `incident.reassigned` | previous/new assignee snapshots and required reason |
 | `incident.started` | previous and new status |
 | `incident.resolved` | resolution summary |
-| `incident.reopened` | required reason and cleared current-resolution fields |
+| `incident.reopened` | previous/new status, required reason, assignee-present flag, cleared current-resolution field names/prior values, and optional first-start initialization |
 | `incident.verified` | verification note |
 | `incident.closed` | previous and new status |
 | `incident.rejected` | rejection reason |
@@ -361,6 +389,8 @@ Rejected requests, permission failures, stale preconditions, and effective no-op
 
 IncidentEvent is authoritative for domain reconstruction. A future platform audit log may record request-level security metadata and reference `incidentId` plus `incidentEventId`; it must not become a competing mutable Incident history or duplicate unrestricted comment/report payloads.
 
+Full event history is internal operational evidence. `GET /events` requires both `incidents.view` and `incidents.view-all` plus normal active-School row visibility, and returns the complete typed event representation. Own-only reporters cannot use it. Participant comments are a separate, redacted projection over `incident.comment_added`; it cannot reveal triage summaries, assignment snapshots/reasons, reopen reasons, or any other event payload.
+
 ## 18. REST surface
 
 | Method and path | Permission | If-Match | Result |
@@ -368,16 +398,18 @@ IncidentEvent is authoritative for domain reconstruction. A future platform audi
 | `GET /api/v1/incidents/reporting-context/laboratories` | `incidents.create` | no | paginated minimal active Laboratory projection |
 | `GET /api/v1/incidents/reporting-context/laboratories/{laboratoryId}/devices` | `incidents.create` | no | searched minimal eligible Device projection |
 | `GET /api/v1/incidents/assignee-candidates` | `incidents.assign` | no | paginated minimal eligible membership projection |
+| `GET /api/v1/incidents/submissions/{submissionId}` | `incidents.view`; same reporter only | no | committed Incident for create reconciliation, or safe 404; view-all does not widen this route |
 | `GET /api/v1/incidents` | `incidents.view` | no | row-scoped paginated Incident collection |
-| `POST /api/v1/incidents` | `incidents.create` | no | 201 Incident DTO, ETag `"1"` |
+| `POST /api/v1/incidents` | `incidents.create` | no | 201 for new Incident; 200 for exact committed submission repeat; Incident DTO + ETag |
 | `GET /api/v1/incidents/{incidentId}` | `incidents.view` | no | visible Incident DTO and ETag |
-| `PATCH /api/v1/incidents/{incidentId}` | `incidents.view` + `incidents.update` | yes | reported-state allowlist; 200 Incident DTO |
+| `PATCH /api/v1/incidents/{incidentId}` | `incidents.view` + `incidents.update` + `incidents.assign` | yes | administrative reported-state correction; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/assignments` | `incidents.view` + `incidents.assign` | yes | initial assignment/reassignment; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/transitions` | `incidents.view` + edge permission | yes | allowed lifecycle edge; 200 Incident DTO |
-| `POST /api/v1/incidents/{incidentId}/comments` | `incidents.view` + `incidents.comment` | yes | 201 comment event DTO and aggregate ETag |
-| `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` | no | row-scoped paginated immutable events |
+| `POST /api/v1/incidents/{incidentId}/comments` | `incidents.view` + `incidents.comment` | yes | 201 participant-safe comment DTO and aggregate ETag |
+| `GET /api/v1/incidents/{incidentId}/comments` | `incidents.view` | no | row-scoped participant-visible comment projection |
+| `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` + `incidents.view-all` | no | complete paginated immutable internal events |
 
-Static discovery routes are registered before `{incidentId}`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
+Static discovery and `/submissions/{submissionId}` routes are registered before `{incidentId}`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
 
 ## 19. Request allowlists
 
@@ -385,6 +417,7 @@ Create accepts exactly:
 
 ```json
 {
+  "submissionId": "8d5969f0-41f7-4d22-a0be-3f51f71455cb",
   "laboratoryId": "01J...",
   "deviceId": "01D... or null",
   "category": "hardware",
@@ -398,9 +431,9 @@ Create accepts exactly:
 }
 ```
 
-`deviceId`, `impact`, and `stepsTaken` may be null/omitted. `priority` defaults server-side to `normal`; `blocksLaboratoryOperation` defaults false. All other displayed fields are required.
+`deviceId`, `impact`, and `stepsTaken` may be null/omitted. `priority` defaults server-side to `normal`; `blocksLaboratoryOperation` defaults false. `submissionId` is required infrastructure input and is normalized/validated separately from business fields. All other displayed fields are required.
 
-PATCH accepts any nonempty subset of the same report fields only while `reported`. It never accepts School, reporter, ticket, status, assignee, lifecycle timestamps, version, event history, Work Order, Asset, or audit fields.
+PATCH accepts any nonempty subset of the report business fields, excluding `submissionId`, only while `reported` and only with both `incidents.update` and `incidents.assign`. Reporter ownership and current assignment never grant PATCH. It never accepts School, reporter, ticket, status, assignee, lifecycle timestamps, version, event history, Work Order, Asset, or audit fields. Comments document participant communication but are not a substitute mechanism for rewriting canonical report fields.
 
 Assignment accepts exactly `assigneeMembershipId` and optional `reason`; reason is required for reassignment. Transition accepts exactly `toStatus` plus only the data listed for that edge. Comment accepts exactly `text`. Empty objects and unknown fields fail with 422 except assignment-to-current, whose syntactically valid same-assignee payload is a no-op.
 
@@ -441,9 +474,9 @@ Assignment accepts exactly `assigneeMembershipId` and optional `reason`; reason 
 }
 ```
 
-`device` and `assignee` are null when absent. Snapshot projections are returned; the DTO does not embed live full User, membership, Laboratory, Device, Asset, Work Order, Layout, telemetry, comments, or event arrays.
+`device` is null when absent. `assignee` is null before assignment and remains null through the simple `triaged -> resolved -> verified -> closed` path. Once assigned, the current assignee is retained through resolution, verification, closure, and an assignee-present reopen. Snapshot projections are returned; the DTO does not expose `submissionId` or embed live full User, membership, Laboratory, Device, Asset, Work Order, Layout, telemetry, comments, or event arrays.
 
-Comment event DTO is `{id, incidentId, type: "incident.comment_added", actor: {userId, name}, text, incidentVersionBefore, incidentVersionAfter, createdAt}`. Other event DTOs use `{id, incidentId, ticketNumber, type, actor, incidentVersionBefore, incidentVersionAfter, data, createdAt}` with the typed payload defined above.
+Comment mutation returns the participant-safe DTO `{id, incidentId, actor: {userId, name}, text, createdAt}` plus the aggregate ETag. The same shape is used by `/comments`. Full event DTOs use `{id, incidentId, ticketNumber, type, actor, incidentVersionBefore, incidentVersionAfter, data, createdAt}` with the typed payload defined above and are available only through `/events` to callers with `incidents.view-all`.
 
 ## 21. List and filter contract
 
@@ -456,7 +489,7 @@ Comment event DTO is `{id, incidentId, type: "incident.comment_added", actor: {u
 
 The query applies `school_id` and own/view-all row scope before every filter. Valid ULID filters that identify another School or a non-visible association return an empty collection, not existence evidence. Search matches ticket number, title, Laboratory code snapshot, and Device code snapshot. It never searches comment text or unrestricted description/impact fields.
 
-Canonical order is `reportedAt DESC, id DESC`; client-selected sorting is not exposed in v1. Event order is `createdAt DESC, id DESC`. Both collections return exactly `{data, meta: {page, perPage, total, lastPage}}`.
+Canonical order is `reportedAt DESC, id DESC`; client-selected sorting is not exposed in v1. Event and participant-comment order is `createdAt DESC, id DESC`. All three collections return exactly `{data, meta: {page, perPage, total, lastPage}}`. Comment projection filtering is fixed to `incident.comment_added` and exposes no generic event-type filter or internal payload search.
 
 ## 22. Error taxonomy
 
@@ -476,8 +509,10 @@ Incident errors:
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 404 | `INCIDENT_NOT_FOUND` | unknown, cross-School, or row-invisible Incident |
+| 404 | `INCIDENT_SUBMISSION_NOT_FOUND` | unknown, cross-School, other-reporter, rolled-back, or non-visible submission correlation |
 | 412 | `INCIDENT_VERSION_CONFLICT` | syntactically valid stale Incident version |
 | 409 | `INCIDENT_INVALID_TRANSITION` | requested lifecycle edge is not in the graph |
+| 409 | `INCIDENT_SUBMISSION_CONFLICT` | same reporter submission ID reused with a different normalized create payload |
 | 404 | `INCIDENT_ASSIGNEE_NOT_FOUND` | assignee membership unknown or outside current School |
 | 409 | `INCIDENT_ASSIGNEE_INELIGIBLE` | known membership/User inactive or lacks effective update capability |
 | 409 | `INCIDENT_LABORATORY_INELIGIBLE` | Laboratory unknown, cross-School, or inactive for create/correction |
@@ -485,24 +520,25 @@ Incident errors:
 | 409 | `INCIDENT_STATUS_CONFLICT` | PATCH, assignment, or comment is unavailable in current status |
 | 409 | `INCIDENT_TICKET_SEQUENCE_EXHAUSTED` | School/year sequence exceeds six digits |
 
-`INCIDENT_ASSIGNMENT_REQUIRED` is not emitted in v1. Initial assignment atomically sets both assignee and `assigned`, and database/application invariants prohibit an assigned/in-progress Incident without an assignee. A failed update-ownership check returns `FORBIDDEN`; it does not claim the assignee is absent.
+`INCIDENT_ASSIGNMENT_REQUIRED` is not emitted in v1. Initial assignment atomically sets both assignee and `assigned`, and database/application invariants prohibit an assigned/in-progress Incident without an assignee. Reopen-path/assignee mismatches are invalid lifecycle edges and return `INCIDENT_INVALID_TRANSITION`. A failed progress-ownership rule or missing PATCH authority returns `FORBIDDEN`; it does not claim the assignee is absent.
 
 ## 23. Transaction and lock ordering
 
 Incident extends the repository lock family without changing existing ordering:
 
-1. Laboratory rows, ascending ULID;
-2. Layout rows, ascending ULID, when another domain requires them;
-3. Device rows, ascending ULID;
-4. User rows, ascending ULID;
-5. SchoolMembership rows, ascending ULID;
-6. one `incident_number_sequences` row;
-7. Incident rows, ascending ULID;
-8. append-only IncidentEvent insert.
+1. one create-only `incident_submissions` row, when creating;
+2. Laboratory rows, ascending ULID;
+3. Layout rows, ascending ULID, when another domain requires them;
+4. Device rows, ascending ULID;
+5. User rows, ascending ULID;
+6. SchoolMembership rows, ascending ULID;
+7. one `incident_number_sequences` row;
+8. Incident rows, ascending ULID;
+9. append-only IncidentEvent insert.
 
 Incident never locks Layout because it neither reads placement eligibility nor mutates Layout. The Layout position in the family is retained for compatibility with existing Transfer/Layout transactions.
 
-Create locks the Laboratory, optional Device, then sequence row before inserting Incident/event. Assignment pre-reads the candidate membership as routing information, locks its User and membership, then locks Incident and revalidates version/status/eligibility. Reported-state subject correction uses a two-phase algorithm: pre-read current subject IDs, lock current/requested Laboratories and Devices in sorted order, then lock Incident, check version first, and revalidate that the pre-read subject still matches. A changed Incident returns 412 rather than acting on stale routing information.
+Create locks exactly one submission row before the Laboratory, optional Device, and sequence row, then inserts Incident/event. No non-create transaction locks a submission row, and create never acquires a second submission row, so the new create-correlation lock cannot invert the existing domain family. Assignment pre-reads the candidate membership as routing information, locks its User and membership, then locks Incident and revalidates version/status/eligibility. Reported-state subject correction uses a two-phase algorithm: pre-read current subject IDs, lock current/requested Laboratories and Devices in sorted order, then lock Incident, check version first, and revalidate that the pre-read subject still matches. A changed Incident returns 412 rather than acting on stale routing information.
 
 PATCH without subject changes, lifecycle transitions, and comments lock only the Incident row. All mutations insert their event after the aggregate update in the same transaction. Future User/membership and Work Order contracts must extend this family consistently rather than invert it.
 
@@ -516,12 +552,14 @@ Required protections for the later backend PR:
 - positive `version` and event before/after checks;
 - check constraints for closed status/category/priority strings;
 - unique School/year sequence and School/ticket number keys;
-- status/assignee consistency: `assigned` and `in_progress` require current assignee fields; other pre-assignment and terminal states follow the transition service;
-- state-dependent required timestamps and summaries/reasons;
+- immutable create-correlation rows unique on `(school_id, reporter_user_id_snapshot, submission_id)`, with one committed Incident reference and exact normalized create payload;
+- status/assignee consistency: `reported`, `triaged`, and `rejected` require null current assignee; `assigned` and `in_progress` require all current assignee fields; `resolved`, `verified`, and `closed` allow either all-null or all-present assignee fields according to the path, never a partial snapshot;
+- state-dependent required timestamps and summaries/reasons, including non-null `started_at` whenever status is `in_progress`;
 - bounded snapshot/text columns and JSON payload validation in one application validator;
 - restrict School deletion; nullable live User/membership/Laboratory/Device joins use null-on-delete while immutable snapshots remain;
 - no cascade from subject records into Incident or IncidentEvent history;
 - indexes for `(school_id, reported_at, id)`, reporter scope, status/priority/category, Laboratory/Device/assignee filters, and `(school_id, incident_id_snapshot, created_at, id)` events;
+- a unique committed Incident reference from submission infrastructure so one Incident cannot be attached to multiple create keys;
 - no Incident hard-delete repository method or HTTP route.
 
 ## 25. Work Order boundary
@@ -571,7 +609,7 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 20 | In-service Device homed in selected Laboratory | allowed |
 | 21 | Spare Device homed in selected Laboratory | allowed |
 | 22 | Retired or decommissioned Device on new report | 409 Device not eligible |
-| 23 | Device home differs from reported Laboratory | 409 Device not eligible |
+| 23 | Device home custody differs from reported Laboratory | 409 Device not eligible under v1 discovery policy; no physical-location inference |
 | 24 | Laboratory later becomes inactive | existing Incident remains manageable; snapshots unchanged |
 | 25 | Device later becomes retired/decommissioned | existing Incident remains manageable; no Incident auto-transition |
 | 26 | Two concurrent creates in same School/year | distinct serialized ticket numbers |
@@ -580,7 +618,7 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 29 | Forged reporter or School | 422; server authority wins |
 | 30 | Forged ticket/status/version/timestamps | 422 |
 | 31 | Equal open titles | both may exist; no client/server title dedup authority |
-| 32 | Reporter attempts PATCH without update permission | 403; may append a correction comment when permitted |
+| 32 | Reporter attempts PATCH without update permission | 403; may append a participant-visible clarification when permitted, but canonical report fields remain unchanged |
 | 33 | Admin corrects subject while reported | one version increment/event after full revalidation |
 | 34 | Subject correction after triage | 409 status conflict; use replacement workflow |
 | 35 | Canonically equal PATCH with current ETag | 200 no-op; no version/time/event change |
@@ -589,14 +627,14 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 38 | `reported -> rejected` without reason | 422 |
 | 39 | `reported -> rejected` with reason | terminal rejected; one event |
 | 40 | `triaged -> assigned` through transition endpoint | invalid transition; assignment command is required |
-| 41 | `triaged -> resolved` with summary | succeeds under approve |
+| 41 | `triaged -> resolved` with summary | succeeds under approve with null assignee retained |
 | 42 | `assigned -> in_progress` by assignee | succeeds; one started event |
 | 43 | `assigned -> resolved` with summary by assignee | succeeds |
 | 44 | `in_progress -> resolved` with summary | succeeds |
 | 45 | `resolved -> verified` without verification note | 422 |
 | 46 | `resolved -> verified` with note | succeeds |
-| 47 | `resolved -> in_progress` without reopen reason | 422 |
-| 48 | `resolved -> in_progress` with reason | clears current resolution/verification fields; event preserves prior evidence |
+| 47 | Assignee-present `resolved -> in_progress` without reopen reason | 422 |
+| 48 | Assignee-present `resolved -> in_progress` with reason | retains assignee, clears current resolution/verification fields, and preserves prior evidence in one reopened event |
 | 49 | `verified -> closed` | succeeds; closed is terminal |
 | 50 | Closed/rejected mutation or comment | 409 status conflict/invalid transition; no event |
 | 51 | Forbidden lifecycle skip | 409 `INCIDENT_INVALID_TRANSITION` |
@@ -611,18 +649,40 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 60 | Assignment races transition | deterministic locks/version allow one; loser 412 |
 | 61 | Comment races transition | one commits; loser 412; no lost comment/status |
 | 62 | PATCH races assignment | one commits; loser 412 |
-| 63 | Lost successful post-create mutation response | GET Incident/events reconciles; no automatic replay |
+| 63 | Lost successful post-create mutation response | GET Incident and caller-authorized comments/events as applicable; no automatic replay |
 | 64 | Manual repeat with old ETag after committed mutation | 412; no duplicate event |
 | 65 | Blank/oversized comment | 422; no version/event |
-| 66 | Valid comment on visible non-terminal Incident | one version increment and one comment event |
+| 66 | Valid comment on visible non-terminal Incident | one version increment/event and participant-safe comment projection |
 | 67 | Actor renamed/deactivated later | event actor snapshot remains reconstructable |
 | 68 | Laboratory/Device renamed later | Incident and event subject snapshots retain report-time meaning |
 | 69 | Incident without Work Order | fully valid through v1 lifecycle |
 | 70 | Future two Work Orders reference one Incident | Work Orders own two `incident_id` links; Incident unchanged absent orchestration |
 | 71 | Client submits waiting-spare-part Incident status | 422/invalid transition; state belongs to Work Order |
 | 72 | Client submits repair diagnosis/parts/cost through Incident | 422 unknown fields; no Incident mutation |
+| 73 | `triaged -> resolved` then reopen with no assignee | only `resolved -> triaged` succeeds; one reopened event |
+| 74 | Assigned Incident resolves before first start, then reopens | only `resolved -> in_progress` succeeds; assignee retained and `startedAt` initialized once |
+| 75 | Direct `resolved` without assignee to `in_progress` | 409 invalid transition; invariant cannot be violated |
+| 76 | Direct `resolved` with assignee to `triaged` | 409 invalid transition; no version/event |
+| 77 | Technician PATCHes a reported Incident | 403 because `incidents.assign` is absent, even with view-all/update |
+| 78 | Assigned technician PATCHes canonical report fields | 403; assignment grants progress authority, not correction authority |
+| 79 | Admin Lab PATCHes a visible reported Incident | allowed with view + update + assign and current ETag |
+| 80 | Admin Lab PATCHes after triage | 409 status conflict despite administrative permissions |
+| 81 | Student requests `/events` for their own Incident | 403; full internal history requires view-all |
+| 82 | Student requests `/comments` for their own Incident | allowed; participant-safe comment DTOs only |
+| 83 | Student inspects comments after reassignment/reopen | no assignee snapshots, reassignment reasons, reopen reasons, or internal payload leakage |
+| 84 | Technician or Admin with view-all requests visible `/events` | complete typed history allowed under active-School row scope |
+| 85 | Cross-School or row-invisible comments/events request | same safe 404; no Incident or event existence disclosure |
+| 86 | Device home matches reporting Laboratory | eligible v1 candidate but not evidence of physical presence; no Device custody/location mutation |
+| 87 | Successful create response is lost | GET by same reporter `submissionId` returns canonical Incident and ETag; no POST replay |
+| 88 | Same reporter repeats same `submissionId` and normalized payload | existing Incident returned; no ticket/version/event allocation |
+| 89 | Same reporter reuses `submissionId` with different normalized payload | 409 submission conflict; original Incident unchanged |
+| 90 | Concurrent identical creates share one `submissionId` | submission-row serialization yields one ticket, one Incident, one reported event |
+| 91 | Another reporter or School probes a known `submissionId` | 404 submission not found; no correlation disclosure |
+| 92 | Duplicate request waits while first create rolls back | waiter may create once after rollback; at most one committed ticket/Incident/event |
+| 93 | Future current-location integration is introduced | existing Incident Laboratory/Device snapshots remain unchanged historical report context |
+| 94 | Own-only caller loses comment response | canonical Incident plus `/comments` may reconcile; `/events` stays forbidden and uncertain outcome is not replayed automatically |
 
-Scenario count: 72.
+Scenario count: 94.
 
 ## 28. Implementation sequencing gate
 
@@ -634,4 +694,4 @@ The backend PR must not implement Work Order, Asset, notification, telemetry ale
 
 Architecture blockers: none.
 
-Independent review must verify row visibility, proposed permission grants, ticket sequence/lock ordering, subject correction boundary, lifecycle authority, and comment-as-event design before this RFC can be marked approved or locked.
+Independent review must verify row visibility, proposed permission grants, path-aware lifecycle/assignee invariants, administrative PATCH authority, participant-comment/internal-event separation, create-correlation and ticket lock ordering, custody/location semantics, and Work Order exclusions before this RFC can be marked approved or locked.

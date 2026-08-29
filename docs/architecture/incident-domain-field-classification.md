@@ -25,7 +25,7 @@ This companion classifies the current local prototype and the proposed canonical
 | `id` | Canonical Incident | server ULID | Stable aggregate identity |
 | `ticketNumber` | Canonical Incident | server `INC-{UTC_YEAR}-{6 digits}` | Human identity; never client supplied |
 | `reporterName` | Rejected legacy/local field | replace with server-derived reporter live references and immutable snapshots | Free text cannot authorize or reconstruct identity |
-| `laboratoryId` | Canonical Incident + canonical immutable snapshot | same-School live reference plus ID/code/name snapshots | Required report context and stable historical display |
+| `laboratoryId` | Canonical Incident + canonical immutable snapshot | same-School live reference plus ID/code/name snapshots | Operational/reporting context and stable historical display; not proof of Device location |
 | `assetCode` | Future/deferred | no Asset dependency in Incident v1 | Asset backend/relationship is not canonical yet |
 | `date` | Canonical Incident | split into client observation `occurredAt` and server `reportedAt` | Distinguishes occurrence from persistence time |
 | `category` | Canonical Incident | closed machine enum | Indonesian/local values map at presentation layer |
@@ -38,8 +38,8 @@ This companion classifies the current local prototype and the proposed canonical
 | `status` | Canonical Incident | closed machine lifecycle | Changes only through assignment/transition commands |
 | `assignedTechnician` | Rejected legacy/local field | replace with canonical same-School membership plus snapshots | Free text cannot enforce eligibility or ownership |
 | `workOrderId` | Rejected legacy/local field | future Work Order owns nullable `incident_id`; cardinality 0..N | Single reverse link is the wrong authority/cardinality |
-| `comments` | Incident event/history only | `incident.comment_added` events | Append-only, actor-derived, aggregate-versioned |
-| `timeline` | Derived projection | render from immutable Incident events | Local mutable array duplicates domain history |
+| `comments` | Incident event/history only + participant projection | `incident.comment_added` events read through `/comments` | Append-only, actor-derived, aggregate-versioned; participant-safe projection only |
+| `timeline` | Derived internal projection | render from immutable Incident events for `incidents.view-all` callers | Local mutable array duplicates domain history and must not expose internal events to own-only reporters |
 
 ## 3. Canonical Incident root fields
 
@@ -55,26 +55,26 @@ This companion classifies the current local prototype and the proposed canonical
 | `reporter_user_id_snapshot` | `reporter.userId` | yes | never | authenticated User | row-visibility/report evidence |
 | `reporter_membership_id_snapshot` | omitted | yes | never | active membership | immutable context evidence |
 | `reporter_name_snapshot` | `reporter.name` | yes | never | authenticated User | immutable display evidence |
-| `laboratory_id` | live join not authority | nullable live FK | reported PATCH only | validated same-School active Laboratory | null-on-delete convenience |
-| `laboratory_id_snapshot` | `laboratory.id` | yes | reported PATCH only | selected Laboratory | frozen after triage |
-| `laboratory_code_snapshot` | `laboratory.code` | yes | reported PATCH only | selected Laboratory | frozen after triage |
-| `laboratory_name_snapshot` | `laboratory.name` | yes | reported PATCH only | selected Laboratory | frozen after triage |
-| `device_id` | live join not authority | nullable | reported PATCH only | validated optional Device | null-on-delete convenience |
-| `device_id_snapshot` | `device.id` | nullable | reported PATCH only | selected Device | all Device snapshots null together when absent |
-| `device_code_snapshot` | `device.deviceCode` | nullable | reported PATCH only | selected Device | frozen after triage |
-| `device_type_snapshot` | `device.deviceType` | nullable | reported PATCH only | selected Device | frozen after triage |
-| `category` | `category` | yes | PATCH while reported | create/PATCH allowlist | every change captured in event |
-| `priority` | `priority` | yes | PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
-| `title` | `title` | yes | PATCH while reported | create/PATCH allowlist | every change captured in event |
-| `description` | `description` | yes | PATCH while reported | create/PATCH allowlist | every change captured in event |
-| `impact` | `impact` | no | PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
-| `blocks_laboratory_operation` | `blocksLaboratoryOperation` | yes | PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
-| `steps_taken` | `stepsTaken` | no | PATCH while reported | create/PATCH allowlist | every change captured in event |
-| `occurred_at` | `occurredAt` | yes | PATCH while reported | client observation time | event evidence |
+| `laboratory_id` | live join not authority | nullable live FK | administrative reported PATCH only | validated same-School active Laboratory; PATCH requires update + assign | null-on-delete convenience |
+| `laboratory_id_snapshot` | `laboratory.id` | yes | administrative reported PATCH only | selected operational context | frozen after triage; not current-location evidence |
+| `laboratory_code_snapshot` | `laboratory.code` | yes | administrative reported PATCH only | selected Laboratory | frozen after triage |
+| `laboratory_name_snapshot` | `laboratory.name` | yes | administrative reported PATCH only | selected Laboratory | frozen after triage |
+| `device_id` | live join not authority | nullable | administrative reported PATCH only | validated optional Device | null-on-delete convenience |
+| `device_id_snapshot` | `device.id` | nullable | administrative reported PATCH only | selected Device | all Device snapshots null together when absent |
+| `device_code_snapshot` | `device.deviceCode` | nullable | administrative reported PATCH only | selected Device | frozen after triage |
+| `device_type_snapshot` | `device.deviceType` | nullable | administrative reported PATCH only | selected Device | frozen after triage |
+| `category` | `category` | yes | administrative PATCH while reported | create/PATCH allowlist; PATCH requires update + assign | every change captured in event |
+| `priority` | `priority` | yes | administrative PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
+| `title` | `title` | yes | administrative PATCH while reported | create/PATCH allowlist; PATCH requires update + assign | every change captured in event |
+| `description` | `description` | yes | administrative PATCH while reported | create/PATCH allowlist; PATCH requires update + assign | every change captured in event |
+| `impact` | `impact` | no | administrative PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
+| `blocks_laboratory_operation` | `blocksLaboratoryOperation` | yes | administrative PATCH while reported; triage finalization | create/PATCH/transition | every change captured in event |
+| `steps_taken` | `stepsTaken` | no | administrative PATCH while reported | create/PATCH allowlist; PATCH requires update + assign | every change captured in event |
+| `occurred_at` | `occurredAt` | yes | administrative PATCH while reported | client observation time; PATCH requires update + assign | event evidence |
 | `status` | `status` | yes | assignment/transition only | lifecycle graph | every transition captured |
-| `assignee_membership_id` | `assignee.membershipId` | state-dependent | assignment only | eligible same-School membership | live pointer plus current snapshot |
-| `assignee_user_id_snapshot` | `assignee.userId` | state-dependent | assignment only | assignee User at assignment | replacement updates current snapshot; events retain prior |
-| `assignee_name_snapshot` | `assignee.name` | state-dependent | assignment only | assignee User at assignment | replacement updates current snapshot; events retain prior |
+| `assignee_membership_id` | `assignee.membershipId` | path-dependent | assignment only | eligible same-School membership | required in assigned/in_progress; retained through resolved/verified/closed when present |
+| `assignee_user_id_snapshot` | `assignee.userId` | path-dependent | assignment only | assignee User at assignment | all-null/all-present invariant; events retain prior |
+| `assignee_name_snapshot` | `assignee.name` | path-dependent | assignment only | assignee User at assignment | all-null/all-present invariant; events retain prior |
 | `triage_summary` | `triageSummary` | triaged onward | triage transition only | approver command | triage event retains value |
 | `resolution_summary` | `resolutionSummary` | resolved/verified/closed | resolve transition; cleared on reopen | resolver command | prior summaries remain in events |
 | `rejection_reason` | `rejectionReason` | rejected only | reject transition only | approver command | rejection event retains value |
@@ -83,7 +83,7 @@ This companion classifies the current local prototype and the proposed canonical
 | `reported_at` | `reportedAt` | yes | never | server clock | immutable report time |
 | `triaged_at` | `triagedAt` | state-dependent | triage transition | server clock | event time also retained |
 | `assigned_at` | `assignedAt` | state-dependent | initial assignment | server clock | first assignment evidence |
-| `started_at` | `startedAt` | state-dependent | first start transition | server clock | first start retained; reopen does not replace it |
+| `started_at` | `startedAt` | required in `in_progress`; path-dependent afterward | first start transition or assignee-present reopen when null | server clock | direct assigned-to-resolved may remain null; reopen initializes if null and never replaces a prior start |
 | `resolved_at` | `resolvedAt` | state-dependent | resolve; cleared on reopen | server clock | prior resolved event remains |
 | `verified_at` | `verifiedAt` | state-dependent | verify; cleared on reopen | server clock | prior verified event remains |
 | `closed_at` | `closedAt` | closed only | close transition | server clock | immutable terminal time |
@@ -97,10 +97,10 @@ This companion classifies the current local prototype and the proposed canonical
 | --- | --- | --- | --- |
 | Reporter own-scope | Incident School + `reporter_user_id_snapshot` + current User | no | used when caller lacks `incidents.view-all` |
 | Laboratory display | Incident Laboratory snapshots | no | does not silently replace with current Laboratory name |
-| Device display | Incident Device snapshots | no | null for Laboratory-level report |
-| Assignee display | current Incident assignee snapshots | no | event history reconstructs prior assignments |
-| Comment list | `incident.comment_added` events | no | ordered through event endpoint |
-| Timeline | all typed Incident events | no | never persisted as mutable JSON array |
+| Device display | Incident Device snapshots | no | null for Laboratory-level report; does not claim present physical location |
+| Assignee display | current Incident assignee snapshots | no | may remain present through resolved/verified/closed; event history reconstructs prior assignments |
+| Participant comment list | only `incident.comment_added` events | no | `/comments` exposes id, Incident, safe actor snapshot, text, and time only |
+| Internal timeline | all typed Incident events | no | `/events` requires view + view-all; never persisted as mutable JSON array |
 | Work Order count/list | future Work Order query by `incident_id` | no | omitted from Incident v1 DTO |
 | Current Device/Laboratory status | live domain query with separate permissions | no | not embedded in Incident DTO |
 | Open/terminal label | Incident status | no | UI mapping only |
@@ -125,15 +125,15 @@ This companion classifies the current local prototype and the proposed canonical
 | `payload` | Incident event/history only | yes | event-specific validator | exact keys per event type; no arbitrary audit blob |
 | `created_at` | Incident event/history only | yes | server clock | immutable |
 
-Event payloads contain only the typed data required by the parent RFC. Sensitive authentication/session data, unrestricted request bodies, technical profiles, telemetry, Asset accounting, and Work Order repair data are prohibited.
+Event payloads contain only the typed data required by the parent RFC. Full payloads are internal and require `incidents.view-all`; participant comment projection never leaks them. Sensitive authentication/session data, unrestricted request bodies, technical profiles, telemetry, Asset accounting, and Work Order repair data are prohibited.
 
 ## 6. Assignment field disposition
 
 | Concern | Classification | Decision |
 | --- | --- | --- |
 | Free-text technician name | Rejected legacy/local field | never canonical |
-| Current membership reference | Canonical Incident | nullable before assignment; command-owned |
-| Current assignee User/name snapshot | Canonical immutable snapshot on root | represents current accountable assignee |
+| Current membership reference | Canonical Incident | nullable on pre-assignment/simple-triage path; retained after assignment |
+| Current assignee User/name snapshot | Canonical immutable snapshot on root | represents current accountable assignee through resolved/verified/closed when present |
 | Previous assignee | Incident event/history only | preserved in assigned/reassigned event payload |
 | Role name | Derived projection/rejected authority | eligibility uses effective `incidents.update`, not role key |
 | Email, phone, NIP/NIS | Rejected from Incident projection | not required for assignment UI/API |
@@ -147,7 +147,8 @@ Event payloads contain only the typed data required by the parent RFC. Sensitive
 | Rejection reason | Canonical Incident + event history | required on `reported -> rejected` |
 | Resolution summary | Canonical Incident + event history | required for every resolve edge; current value cleared on reopen |
 | Verification note | Canonical Incident + event history | required on `resolved -> verified`; current value cleared on reopen |
-| Reopen reason | Incident event/history only | required on `resolved -> in_progress` |
+| Reopen reason | Incident event/history only | required on path-aware `resolved -> in_progress` or `resolved -> triaged` |
+| Reopen destination | Incident event/history only | `in_progress` iff assignee present; otherwise `triaged`; event records statuses, assignee presence, and any first-start initialization |
 | Reassignment reason | Incident event/history only | required for a different assignee |
 | Waiting for spare parts | Work Order-owned | no Incident enum/field |
 | Repair diagnosis/action | Work Order-owned | rejected from Incident payload |
@@ -165,19 +166,33 @@ Event payloads contain only the typed data required by the parent RFC. Sensitive
 
 The sequence row is not exposed through API and is not an Incident child aggregate. Its lock exists only to allocate one human number safely during create.
 
+### Create-correlation infrastructure
+
+| Field | Classification | Authority | Integrity/exposure |
+| --- | --- | --- | --- |
+| submission `school_id` | Canonical Incident infrastructure | active School context | part of reporter-scoped unique key; never client-selected |
+| `reporter_user_id_snapshot` | Canonical immutable infrastructure snapshot | authenticated User | part of unique key and GET recovery scope |
+| `submission_id` | Canonical Incident infrastructure | client-generated lowercase UUID v4 | required on create; immutable; not business data or authorization evidence |
+| `normalized_payload` | Canonical Incident infrastructure | server normalizer | exact immutable create comparison; omitted from API projections |
+| committed `incident_id` | Canonical Incident infrastructure | create transaction | exactly one mapping; unique; absent only inside the uncommitted transaction |
+
+The unique key is `(school_id, reporter_user_id_snapshot, submission_id)`. A duplicate identical create returns the mapped Incident; a different normalized payload returns `INCIDENT_SUBMISSION_CONFLICT`. The submission row is locked before Laboratory/Device/ticket sequence locks, so a duplicate race cannot allocate two tickets, Incidents, or reported events. This mechanism is create-only and does not apply to PATCH, assignment, transition, or comment.
+
 ## 9. Cross-domain boundary table
 
 | Domain concern | Incident stores | Incident must not store/mutate |
 | --- | --- | --- |
 | School/identity | tenant ID, reporter/actor/assignee snapshots | client-selected School or free-text identity |
-| Laboratory | one subject live reference plus report snapshots | Laboratory status/capacity/layout/current occupancy |
-| Device | optional live reference plus report snapshots | lifecycle, home custody, placement, QR, technical profile, telemetry |
+| Laboratory | one operational/reporting-context live reference plus historical snapshots | Laboratory status/capacity/layout/current occupancy or a claim about Device physical location |
+| Device | optional live reference plus historical report snapshots | lifecycle, home custody, placement/current location, QR, technical profile, telemetry |
 | Asset | nothing in v1 | asset code, condition, depreciation, procurement, disposal |
 | Work Order | no reverse authority | diagnosis, action, technician execution, parts, cost, waiting state |
-| Comments | append-only comment events | mutable root comment array or delete/edit |
-| Audit | typed Incident events | competing generic mutable timeline |
+| Comments | append-only participant-visible comment events and redacted `/comments` projection | mutable root comment array, private-note metadata, or delete/edit |
+| Audit | typed internal Incident events readable only with view-all | competing generic mutable timeline or raw event access by own-only reporters |
 | Notifications | nothing in v1 | recipients, delivery state, preferences |
 | Reporting/export | versioned Incident data and permissions | export job/file state in Incident aggregate |
+
+The v1 requirement that a selected Device's `homeLaboratoryId` match the Incident Laboratory is only a discovery/eligibility constraint. Home custody is not present physical location. A future reviewed Loan/Maintenance contract may supply canonical current-location projections and widen candidate resolution, but must not rewrite existing Incident snapshots.
 
 ## 10. Migration disposition
 
@@ -189,4 +204,4 @@ Legacy `Menunggu Spare Part` maps to future Work Order state, not an Incident en
 
 Architecture blockers: none.
 
-Independent review must confirm the field bounds, snapshot set, reported-state correction policy, comment-as-event representation, and Work Order exclusions before this companion is approved.
+Independent review must confirm the field bounds, snapshot set, administrative reported-state correction policy, path-aware assignee invariants, participant-comment/internal-event separation, create-correlation infrastructure, custody/location semantics, and Work Order exclusions before this companion is approved.
