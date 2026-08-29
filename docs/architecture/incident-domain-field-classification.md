@@ -39,7 +39,7 @@ This companion classifies the current local prototype and the proposed canonical
 | `assignedTechnician` | Rejected legacy/local field | replace with canonical same-School membership plus snapshots | Free text cannot enforce eligibility or ownership |
 | `workOrderId` | Rejected legacy/local field | future Work Order owns nullable `incident_id`; cardinality 0..N | Single reverse link is the wrong authority/cardinality |
 | `comments` | Incident event/history only + participant projection | `incident.comment_added` events read through `/comments` | Append-only, actor-derived, aggregate-versioned; participant-safe projection only |
-| `timeline` | Derived internal projection | render from immutable Incident events for `incidents.view-all` callers | Local mutable array duplicates domain history and must not expose internal events to own-only reporters |
+| `timeline` | Derived internal projection | render from immutable Incident events for `incidents.view-history` callers on otherwise visible rows | Local mutable array duplicates domain history and must not expose internal events without exact projection authority |
 
 ## 3. Canonical Incident root fields
 
@@ -100,7 +100,7 @@ This companion classifies the current local prototype and the proposed canonical
 | Device display | Incident Device snapshots | no | null for Laboratory-level report; does not claim present physical location |
 | Assignee display | current Incident assignee snapshots | no | may remain present through resolved/verified/closed; event history reconstructs prior assignments |
 | Participant comment list | only `incident.comment_added` events | no | `/comments` exposes id, Incident, safe actor snapshot, text, and time only |
-| Internal timeline | all typed Incident events | no | `/events` requires view + view-all; never persisted as mutable JSON array |
+| Internal timeline | all typed Incident events | no | `/events` requires view + view-history and normal own/view-all row scope; never persisted as mutable JSON array |
 | Work Order count/list | future Work Order query by `incident_id` | no | omitted from Incident v1 DTO |
 | Current Device/Laboratory status | live domain query with separate permissions | no | not embedded in Incident DTO |
 | Open/terminal label | Incident status | no | UI mapping only |
@@ -125,7 +125,7 @@ This companion classifies the current local prototype and the proposed canonical
 | `payload` | Incident event/history only | yes | event-specific validator | exact keys per event type; no arbitrary audit blob |
 | `created_at` | Incident event/history only | yes | server clock | immutable |
 
-Event payloads contain only the typed data required by the parent RFC. Full payloads are internal and require `incidents.view-all`; participant comment projection never leaks them. Sensitive authentication/session data, unrestricted request bodies, technical profiles, telemetry, Asset accounting, and Work Order repair data are prohibited.
+Event payloads contain only the typed data required by the parent RFC. Full payloads are internal and require `incidents.view-history` for an already-visible row; participant comment projection never leaks them. Sensitive authentication/session data, unrestricted request bodies, technical profiles, telemetry, Asset accounting, and Work Order repair data are prohibited.
 
 ## 6. Assignment field disposition
 
@@ -173,10 +173,12 @@ The sequence row is not exposed through API and is not an Incident child aggrega
 | submission `school_id` | Canonical Incident infrastructure | active School context | part of reporter-scoped unique key; never client-selected |
 | `reporter_user_id_snapshot` | Canonical immutable infrastructure snapshot | authenticated User | part of unique key and GET recovery scope |
 | `submission_id` | Canonical Incident infrastructure | client-generated lowercase UUID v4 | required on create; immutable; not business data or authorization evidence |
-| `normalized_payload` | Canonical Incident infrastructure | server normalizer | exact immutable create comparison; omitted from API projections |
+| `payload_fingerprint` | Canonical Incident infrastructure | versioned create normalizer + canonical serializer + SHA-256 | 64-character lowercase hex; correlation only; omitted from API projections |
+| `payload_fingerprint_version` | Canonical Incident infrastructure | server algorithm catalog | positive immutable version; earlier algorithms retained for retries |
 | committed `incident_id` | Canonical Incident infrastructure | create transaction | exactly one mapping; unique; absent only inside the uncommitted transaction |
+| `created_at` | Canonical Incident infrastructure | server clock | immutable correlation creation evidence |
 
-The unique key is `(school_id, reporter_user_id_snapshot, submission_id)`. A duplicate identical create returns the mapped Incident; a different normalized payload returns `INCIDENT_SUBMISSION_CONFLICT`. The submission row is locked before Laboratory/Device/ticket sequence locks, so a duplicate race cannot allocate two tickets, Incidents, or reported events. This mechanism is create-only and does not apply to PATCH, assignment, transition, or comment.
+The unique key is `(school_id, reporter_user_id_snapshot, submission_id)`. The v1 fingerprint covers, in exact order, `laboratoryId`, `deviceId`, `category`, `priority`, `title`, `description`, `impact`, `blocksLaboratoryOperation`, `stepsTaken`, and `occurredAt`, after the parent RFC's canonical normalization. A duplicate equivalent fingerprint returns the mapped Incident; a different fingerprint returns `INCIDENT_SUBMISSION_CONFLICT`. No full report payload is copied into submission infrastructure; complete initial evidence remains in `incident.reported`. The submission row is locked before Laboratory/Device/ticket sequence locks, so a duplicate race cannot allocate two tickets, Incidents, or reported events. This mechanism is create-only and does not apply to PATCH, assignment, transition, or comment.
 
 ## 9. Cross-domain boundary table
 
@@ -188,7 +190,7 @@ The unique key is `(school_id, reporter_user_id_snapshot, submission_id)`. A dup
 | Asset | nothing in v1 | asset code, condition, depreciation, procurement, disposal |
 | Work Order | no reverse authority | diagnosis, action, technician execution, parts, cost, waiting state |
 | Comments | append-only participant-visible comment events and redacted `/comments` projection | mutable root comment array, private-note metadata, or delete/edit |
-| Audit | typed internal Incident events readable only with view-all | competing generic mutable timeline or raw event access by own-only reporters |
+| Audit | typed internal Incident events readable only with view-history on a visible row | competing generic mutable timeline or raw event access without exact projection permission |
 | Notifications | nothing in v1 | recipients, delivery state, preferences |
 | Reporting/export | versioned Incident data and permissions | export job/file state in Incident aggregate |
 
@@ -204,4 +206,4 @@ Legacy `Menunggu Spare Part` maps to future Work Order state, not an Incident en
 
 Architecture blockers: none.
 
-Independent review must confirm the field bounds, snapshot set, administrative reported-state correction policy, path-aware assignee invariants, participant-comment/internal-event separation, create-correlation infrastructure, custody/location semantics, and Work Order exclusions before this companion is approved.
+Independent review must confirm the field bounds, snapshot set, transition-specific permission precedence, separate row/history permissions, administrative reported-state correction policy, path-aware assignee invariants, participant comments, versioned create fingerprints, custody/location semantics, and Work Order exclusions before this companion is approved.

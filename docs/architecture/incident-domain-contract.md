@@ -16,7 +16,7 @@ Incident v1 makes these decisions:
 - A new Incident requires one active same-School Laboratory. A Device is optional and, when present, must be an eligible same-School Device whose home Laboratory matches the reported Laboratory as a v1 discovery/eligibility constraint, not as a current-location claim.
 - The report subject and canonical report evidence are correctable only while `reported`, only through generic PATCH by a caller holding both `incidents.update` and `incidents.assign`, and freeze after triage.
 - Reporter, Laboratory, Device, assignee, and actor display evidence is snapshotted so later rename, deactivation, retirement, or deletion cannot rewrite history.
-- `incidents.view` grants access to records visible under row policy; proposed `incidents.view-all` expands visibility to all Incidents in the active School. Without it, a caller sees only Incidents reported by the same User.
+- `incidents.view` grants access to records visible under row policy; proposed `incidents.view-all` expands visibility to all Incidents in the active School, while proposed `incidents.view-history` separately permits the full internal event projection for an already-visible Incident. Neither permission implies the other.
 - Proposed `incidents.comment` is separate from `incidents.update`. Comments are bounded, participant-visible, append-only `incident.comment_added` events and have no edit/delete operation. The participant comment projection is separate from full internal event history.
 - The lifecycle is `reported`, `triaged`, `assigned`, `in_progress`, `resolved`, `verified`, `closed`, or `rejected`. `closed` and `rejected` are terminal. Waiting for spare parts is Work Order-owned and is not an Incident status.
 - Assignment targets an active same-School membership whose active User has effective `incidents.update`. It is capability-driven, not role-name-driven.
@@ -24,7 +24,7 @@ Incident v1 makes these decisions:
 - Resolution retains any current assignee. Reopen is path-aware: a resolved Incident with an assignee returns to `in_progress`; one without an assignee returns to `triaged`.
 - The aggregate has one positive integer `version`. Every post-create mutation requires strong `If-Match: "<version>"`; meaningful commits increment once and append exactly one typed Incident event.
 - Effective no-ops preserve `version`, ETag, `updatedAt`, and event history.
-- Create requires one client-generated opaque `submissionId` used only for create correlation. Incident v1 has no general mutation idempotency framework, no hard delete, and no automatic replay after an ambiguous mutation outcome.
+- Create requires one client-generated opaque `submissionId` and a versioned canonical SHA-256 payload fingerprint used only for create correlation. Incident v1 has no general mutation idempotency framework, no hard delete, and no automatic replay after an ambiguous mutation outcome.
 - Incident and Work Order are separate aggregates. Future Work Orders own nullable `incident_id`; one Incident may have zero to many Work Orders.
 
 ## 2. Existing implementation audit
@@ -122,7 +122,7 @@ The proposed `incidents` aggregate contains:
 
 Live foreign keys support current joins but are not historical display authority. Historical snapshot fields remain required even if a referenced User, membership, Laboratory, or Device is later renamed, deactivated, retired, decommissioned, or removed under a future retention policy.
 
-Create correlation is canonical infrastructure outside mutable Incident business data. `incident_submissions` stores the active School, immutable reporter User snapshot ID, opaque submission ID, exact server-normalized create payload, and committed Incident reference. It is immutable after commit, is not authorization evidence, and is omitted from the normal Incident DTO.
+Create correlation is canonical infrastructure outside mutable Incident business data. `incident_submissions` stores the active School, immutable reporter User snapshot ID, opaque submission ID, lowercase SHA-256 `payload_fingerprint`, positive `payload_fingerprint_version`, committed Incident reference, and creation time. It does not duplicate the normalized report payload, is immutable after commit, is not authorization evidence, and is omitted from the normal Incident DTO.
 
 ## 5. Stable API enums and bounds
 
@@ -166,27 +166,28 @@ Every Incident read starts with `school_id = currentSchoolId` and the row-visibi
 
 Using the User snapshot rather than the live membership ID preserves ownership when the same User receives a replacement membership in the same School. Access still requires one current active membership and `incidents.view`. An unknown, cross-School, or non-visible Incident identifier returns the same `404 INCIDENT_NOT_FOUND` response.
 
-Row visibility applies to detail, PATCH, assignment, transition, participant comments, and submission recovery. Full internal event history additionally requires `incidents.view-all`. Action permission never expands row visibility. Controllers and policies must not hardcode role names.
+Row visibility applies to detail, PATCH, assignment, transition, participant comments, submission recovery, and full history. Full internal event history additionally requires `incidents.view-history`; that permission never widens row visibility. Action or projection permission never expands row visibility. Controllers and policies must not hardcode role names.
 
 ## 7. Permission model
 
-The existing permissions remain unchanged in meaning. This RFC proposes exactly two additions:
+The existing permissions remain unchanged in meaning. This RFC proposes exactly three additions:
 
 - `incidents.view-all`: expand `incidents.view` from own-reported records to every Incident in the active School;
+- `incidents.view-history`: read the full typed internal IncidentEvent history of an Incident already visible under normal row policy;
 - `incidents.comment`: append a comment to a visible non-terminal Incident.
 
 Final proposed grants for the later backend PR:
 
-| Role | view | create | update | approve | assign | export | view-all | comment |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `admin-lab` | yes | yes | yes | no | yes | yes | yes | yes |
-| `kepala-lab` | yes | no | no | yes | no | yes | yes | yes |
-| `teknisi` | yes | no | yes | no | no | no | yes | yes |
-| `guru` | yes | yes | no | no | no | no | no | yes |
-| `ketua-kelas` | yes | yes | no | no | no | no | no | yes |
-| `siswa` | yes | yes | no | no | no | no | no | yes |
-| `pimpinan` | yes | no | no | no | no | yes | yes | no |
-| `super-admin` | yes | yes | yes | yes | yes | yes | yes | yes |
+| Role | view | create | update | approve | assign | export | view-all | view-history | comment |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `admin-lab` | yes | yes | yes | no | yes | yes | yes | yes | yes |
+| `kepala-lab` | yes | no | no | yes | no | yes | yes | yes | yes |
+| `teknisi` | yes | no | yes | no | no | no | yes | yes | yes |
+| `guru` | yes | yes | no | no | no | no | no | no | yes |
+| `ketua-kelas` | yes | yes | no | no | no | no | no | no | yes |
+| `siswa` | yes | yes | no | no | no | no | no | no | yes |
+| `pimpinan` | yes | no | no | no | no | yes | yes | yes | no |
+| `super-admin` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 
 Super Admin receives explicitly catalogued permissions through the seeder convention; there is no role-name or wildcard authorization fallback. `incidents.export` remains catalogued but has no Incident v1 endpoint. Export is deferred to a reporting slice that can define redaction, row scope, limits, and asynchronous delivery.
 
@@ -196,7 +197,8 @@ Permission semantics are deliberately split:
 - A reporter cannot PATCH because reporter roles lack `incidents.update` and `incidents.assign`.
 - A technician with `incidents.update` cannot PATCH any canonical report field, including on an Incident currently assigned to them, because technicians lack `incidents.assign`.
 - Technician `incidents.update` authorizes only graph-defined progress transitions when the actor is current assignee; an actor who also has `incidents.assign` has the documented administrative progress override.
-- `incidents.view-all` expands row visibility only. It does not grant PATCH, assignment, transition, comment, export, or any other action.
+- `incidents.view-all` expands row visibility only. It does not grant internal history or any mutation/export action.
+- `incidents.view-history` unlocks the full internal history projection only for rows already visible through the normal own/view-all policy. It does not widen rows or grant any mutation/export action. A future role may therefore receive history without view-all and read full events only for its own-visible Incidents.
 
 ## 8. Reporting discovery boundary
 
@@ -300,8 +302,8 @@ Example: `INC-2026-000123`.
 
 The database has `incident_number_sequences(school_id, ticket_year, last_value)` with a unique `(school_id, ticket_year)` key. Create also has one immutable `incident_submissions` correlation row keyed by `(school_id, reporter_user_id_snapshot, submission_id)`. During Incident create, inside the same transaction:
 
-1. Normalize the complete create business payload excluding `submissionId` and lock-or-create its exact submission row before domain locks. A concurrent request with the same key waits on that row.
-2. If the row already maps to a committed Incident, byte-compare the stored normalized payload. The same payload returns that canonical Incident with HTTP 200 and its ETag; a different payload returns `409 INCIDENT_SUBMISSION_CONFLICT`. Neither path touches subject or sequence rows.
+1. Normalize the complete create business payload excluding `submissionId`, compute its current versioned canonical fingerprint, and lock-or-create the exact submission row before domain locks. A concurrent request with the same key waits on that row.
+2. If the row already maps to a committed Incident, recompute the request using the row's stored `payload_fingerprint_version`. The same digest returns that canonical current Incident with HTTP 200 and its current ETag; a different digest returns `409 INCIDENT_SUBMISSION_CONFLICT`. Neither path touches subject or sequence rows.
 3. For a new submission, validate and lock the Laboratory and optional Device under the repository lock order.
 4. `INSERT ... ON CONFLICT DO NOTHING` the School/year sequence row and `SELECT ... FOR UPDATE` that exact row.
 5. Reject exhaustion above 999,999 with `409 INCIDENT_TICKET_SEQUENCE_EXHAUSTED`.
@@ -310,7 +312,16 @@ The database has `incident_number_sequences(school_id, ticket_year, last_value)`
 
 Database uniqueness covers `(school_id, ticket_year, ticket_sequence)` and `(school_id, ticket_number)`. The client cannot supply or reserve a number. Neither `count()+1` nor timestamps participate in numbering. Numbers are immutable and are not globally unique outside their School context.
 
-The `submissionId` is a client-generated lowercase RFC 4122 UUID v4 in canonical 36-character hyphenated form, fresh for one report attempt. It is not the Incident ID, user-editable business data, authorization evidence, or a reusable key for any post-create mutation. The server stores the exact normalized payload in correlation infrastructure for deterministic equality; submission material is never included in normal Incident/event/comment projections.
+The `submissionId` is a client-generated lowercase RFC 4122 UUID v4 in canonical 36-character hyphenated form, fresh for one report attempt. It is not the Incident ID, user-editable business data, authorization evidence, ticket identity, or a reusable key for any post-create mutation.
+
+Fingerprint version 1 is exact:
+
+1. Run the Incident create normalizer: trim and NFC-normalize strings; convert nullable blank `deviceId`, `impact`, and `stepsTaken` to null; canonicalize validated ULIDs to lowercase; canonicalize enum keys to lowercase; apply `priority = normal` and `blocksLaboratoryOperation = false` defaults; canonicalize the boolean; and convert `occurredAt` to UTC RFC 3339 with six fractional-second digits and `Z`.
+2. Construct one JSON object in this fixed field order: `laboratoryId`, `deviceId`, `category`, `priority`, `title`, `description`, `impact`, `blocksLaboratoryOperation`, `stepsTaken`, `occurredAt`.
+3. Encode strings with RFC 8259 JSON escaping, null as `null`, and the boolean as lowercase `true`/`false`; emit no insignificant whitespace and preserve the fixed key order.
+4. UTF-8 encode those canonical JSON bytes, compute SHA-256, and store the 64-character lowercase hexadecimal digest with `payload_fingerprint_version = 1`.
+
+`incident_submissions` never stores the full report payload. The complete initial normalized report remains reconstructable from `incident.reported` history. Future servers must retain every previously persisted fingerprint algorithm and compute retries using the stored version; they must not reinterpret an existing submission using a newer normalizer or serializer.
 
 ## 14. Concurrency and precondition precedence
 
@@ -322,20 +333,32 @@ Every PATCH, assignment, transition, and comment command requires exactly one st
 
 Weak, wildcard, unquoted, comma-separated, whitespace-padded, zero, negative, missing, or malformed forms return `428 PRECONDITION_REQUIRED`. A syntactically valid stale value returns `412 INCIDENT_VERSION_CONFLICT`.
 
-Request precedence is:
+Fixed-permission mutation endpoints use endpoint-specific precedence:
 
-1. Sanctum authentication;
-2. active membership and School context;
-3. exact route permission;
-4. `If-Match` syntax for mutations;
-5. structural request validation, including unknown fields;
-6. tenant and row-visible Incident lookup;
-7. locked Incident version;
-8. status, transition, assignment ownership, and eligibility rules.
+- PATCH: authenticate; resolve active membership/School; require `incidents.view`, `incidents.update`, and `incidents.assign`; validate `If-Match` syntax; structurally validate the allowlist; find a tenant- and row-visible Incident; acquire subject/Incident locks as documented; compare version; enforce reported status and subject eligibility; mutate.
+- Assignment: authenticate; resolve active membership/School; require `incidents.view` and `incidents.assign`; validate `If-Match` syntax; structurally validate the assignment body; find a tenant- and row-visible Incident; acquire candidate/Incident locks as documented; compare version; enforce status and assignee eligibility; mutate.
+- Comment: authenticate; resolve active membership/School; require `incidents.view` and `incidents.comment`; validate `If-Match` syntax; structurally validate the comment body; find and lock a tenant- and row-visible Incident; compare version; enforce the non-terminal rule; mutate.
 
-No command introduces a child aggregate version. Every meaningful commit changes the Incident and writes exactly one IncidentEvent in one transaction. A failed event insert rolls back the aggregate change.
+Transition permission is edge-dependent and therefore uses this distinct precedence:
 
-For PATCH, "exact route permission" means both `incidents.update` and `incidents.assign`; failure returns 403 before precondition or row disclosure. Being the reporter or current assignee does not substitute for either permission. After a row is visible and locked, any PATCH outside `reported` returns `409 INCIDENT_STATUS_CONFLICT` regardless of permissions.
+1. authenticate with Sanctum;
+2. resolve active membership and School context;
+3. require base `incidents.view`;
+4. validate `If-Match` syntax;
+5. structurally validate `toStatus`, unknown fields, and the closed union of transition data that can be checked without current state;
+6. find the tenant- and row-visible Incident;
+7. lock that Incident;
+8. compare the locked Incident version;
+9. resolve the requested edge from locked current status plus validated target status;
+10. return `409 INCIDENT_INVALID_TRANSITION` if no such edge exists;
+11. determine and require the exact permission catalogued for that resolved edge;
+12. return `403 FORBIDDEN` when a visible caller lacks that permission;
+13. enforce edge-specific required data, ownership, assignee presence, and eligibility;
+14. commit exactly one version increment and one typed event.
+
+This ordering is security-significant. A non-visible Incident returns `404 INCIDENT_NOT_FOUND` before its current status or edge permission can be inferred. For a visible Incident, an invalid edge returns 409 while a valid edge lacking authority returns 403. A syntactically valid stale `If-Match` returns `412 INCIDENT_VERSION_CONFLICT` after the visible row is locked but before current-edge resolution or permission evaluation.
+
+No command introduces a child aggregate version. Every meaningful commit changes the Incident and writes exactly one IncidentEvent in one transaction. A failed event insert rolls back the aggregate change. Being the reporter or current assignee does not substitute for fixed PATCH permissions. After a row is visible and locked, any PATCH outside `reported` returns `409 INCIDENT_STATUS_CONFLICT` regardless of permissions.
 
 ## 15. Effective no-op policy
 
@@ -349,11 +372,11 @@ Even an effective no-op requires a current matching `If-Match`. Stale no-op subm
 
 Incident v1 has no general post-create mutation idempotency key and clients never automatically replay an ambiguous mutation.
 
-For a lost PATCH, assignment, transition, or comment response, the frontend GETs the canonical Incident before allowing another mutation. Staff with `incidents.view-all` may additionally GET full event history. Own-only callers cannot access full events; for comment outcomes they may GET the participant comment projection. If caller-visible canonical Incident/comments do not establish the outcome, the UI remains explicitly unconfirmed. If the first command committed, a manual repeat with its old `If-Match` fails 412 and writes no duplicate event.
+For a lost PATCH, assignment, transition, or comment response, the frontend GETs the canonical Incident before allowing another mutation. Callers with `incidents.view-history` may additionally GET full event history for that visible row. Callers without it use only canonical Incident data and, for comment outcomes, the participant comment projection. If caller-visible canonical Incident/comments do not establish the outcome, the UI remains explicitly unconfirmed. If the first command committed, a manual repeat with its old `If-Match` fails 412 and writes no duplicate event.
 
 Create also has no automatic replay. After a lost create response, the reporter issues `GET /api/v1/incidents/submissions/{submissionId}`. A committed submission returns the canonical Incident and ETag. Unknown, cross-School, other-reporter, rolled-back, or otherwise non-visible submission keys return the same `404 INCIDENT_SUBMISSION_NOT_FOUND`. If recovery remains unavailable, the UI stays explicitly unconfirmed.
 
-A later manual POST with the same `submissionId` and identical normalized payload is safe and returns the already-created Incident without allocating a ticket or event. Reusing it with a different normalized payload returns `409 INCIDENT_SUBMISSION_CONFLICT`. Equal titles without the same submission key remain valid distinct reports. This create-only correlation mechanism does not apply to PATCH, assignment, transition, or comment.
+A later manual POST with the same `submissionId` and an equivalent versioned canonical fingerprint is safe and returns the already-created Incident without allocating a ticket or event. Reusing it with a materially different fingerprint returns `409 INCIDENT_SUBMISSION_CONFLICT`. Equal titles without the same submission key remain valid distinct reports. This create-only correlation mechanism does not apply to PATCH, assignment, transition, or comment.
 
 Recovery actions issue GET requests only. Authentication or membership recovery never replays a mutation.
 
@@ -389,7 +412,7 @@ Rejected requests, permission failures, stale preconditions, and effective no-op
 
 IncidentEvent is authoritative for domain reconstruction. A future platform audit log may record request-level security metadata and reference `incidentId` plus `incidentEventId`; it must not become a competing mutable Incident history or duplicate unrestricted comment/report payloads.
 
-Full event history is internal operational evidence. `GET /events` requires both `incidents.view` and `incidents.view-all` plus normal active-School row visibility, and returns the complete typed event representation. Own-only reporters cannot use it. Participant comments are a separate, redacted projection over `incident.comment_added`; it cannot reveal triage summaries, assignment snapshots/reasons, reopen reasons, or any other event payload.
+Full event history is internal operational evidence. `GET /events` requires both `incidents.view` and `incidents.view-history` plus normal active-School own/view-all row visibility, and returns the complete typed event representation. `incidents.view-history` never widens rows. Participant comments are a separate, redacted projection over `incident.comment_added`; it cannot reveal triage summaries, assignment snapshots/reasons, reopen reasons, or any other event payload.
 
 ## 18. REST surface
 
@@ -404,10 +427,10 @@ Full event history is internal operational evidence. `GET /events` requires both
 | `GET /api/v1/incidents/{incidentId}` | `incidents.view` | no | visible Incident DTO and ETag |
 | `PATCH /api/v1/incidents/{incidentId}` | `incidents.view` + `incidents.update` + `incidents.assign` | yes | administrative reported-state correction; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/assignments` | `incidents.view` + `incidents.assign` | yes | initial assignment/reassignment; 200 Incident DTO |
-| `POST /api/v1/incidents/{incidentId}/transitions` | `incidents.view` + edge permission | yes | allowed lifecycle edge; 200 Incident DTO |
+| `POST /api/v1/incidents/{incidentId}/transitions` | base `incidents.view`; exact edge permission after locked edge resolution | yes | allowed lifecycle edge; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/comments` | `incidents.view` + `incidents.comment` | yes | 201 participant-safe comment DTO and aggregate ETag |
 | `GET /api/v1/incidents/{incidentId}/comments` | `incidents.view` | no | row-scoped participant-visible comment projection |
-| `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` + `incidents.view-all` | no | complete paginated immutable internal events |
+| `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` + `incidents.view-history` | no | complete paginated immutable internal events for an already-visible row |
 
 Static discovery and `/submissions/{submissionId}` routes are registered before `{incidentId}`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
 
@@ -476,7 +499,7 @@ Assignment accepts exactly `assigneeMembershipId` and optional `reason`; reason 
 
 `device` is null when absent. `assignee` is null before assignment and remains null through the simple `triaged -> resolved -> verified -> closed` path. Once assigned, the current assignee is retained through resolution, verification, closure, and an assignee-present reopen. Snapshot projections are returned; the DTO does not expose `submissionId` or embed live full User, membership, Laboratory, Device, Asset, Work Order, Layout, telemetry, comments, or event arrays.
 
-Comment mutation returns the participant-safe DTO `{id, incidentId, actor: {userId, name}, text, createdAt}` plus the aggregate ETag. The same shape is used by `/comments`. Full event DTOs use `{id, incidentId, ticketNumber, type, actor, incidentVersionBefore, incidentVersionAfter, data, createdAt}` with the typed payload defined above and are available only through `/events` to callers with `incidents.view-all`.
+Comment mutation returns the participant-safe DTO `{id, incidentId, actor: {userId, name}, text, createdAt}` plus the aggregate ETag. The same shape is used by `/comments`. Full event DTOs use `{id, incidentId, ticketNumber, type, actor, incidentVersionBefore, incidentVersionAfter, data, createdAt}` with the typed payload defined above and are available only through `/events` to callers with `incidents.view-history` for a row visible under own/view-all policy.
 
 ## 21. List and filter contract
 
@@ -512,7 +535,7 @@ Incident errors:
 | 404 | `INCIDENT_SUBMISSION_NOT_FOUND` | unknown, cross-School, other-reporter, rolled-back, or non-visible submission correlation |
 | 412 | `INCIDENT_VERSION_CONFLICT` | syntactically valid stale Incident version |
 | 409 | `INCIDENT_INVALID_TRANSITION` | requested lifecycle edge is not in the graph |
-| 409 | `INCIDENT_SUBMISSION_CONFLICT` | same reporter submission ID reused with a different normalized create payload |
+| 409 | `INCIDENT_SUBMISSION_CONFLICT` | same reporter submission ID reused with a different stored-version canonical fingerprint |
 | 404 | `INCIDENT_ASSIGNEE_NOT_FOUND` | assignee membership unknown or outside current School |
 | 409 | `INCIDENT_ASSIGNEE_INELIGIBLE` | known membership/User inactive or lacks effective update capability |
 | 409 | `INCIDENT_LABORATORY_INELIGIBLE` | Laboratory unknown, cross-School, or inactive for create/correction |
@@ -521,6 +544,8 @@ Incident errors:
 | 409 | `INCIDENT_TICKET_SEQUENCE_EXHAUSTED` | School/year sequence exceeds six digits |
 
 `INCIDENT_ASSIGNMENT_REQUIRED` is not emitted in v1. Initial assignment atomically sets both assignee and `assigned`, and database/application invariants prohibit an assigned/in-progress Incident without an assignee. Reopen-path/assignee mismatches are invalid lifecycle edges and return `INCIDENT_INVALID_TRANSITION`. A failed progress-ownership rule or missing PATCH authority returns `FORBIDDEN`; it does not claim the assignee is absent.
+
+Transition errors follow the transition-specific precedence: row-invisible is 404 before edge analysis; a stale visible version is 412 before edge analysis; a version-current visible request for a nonexistent edge is 409; and a version-current visible request for a valid edge without its exact edge permission is 403. Missing `incidents.view-history` is 403 and never widens or probes row visibility.
 
 ## 23. Transaction and lock ordering
 
@@ -552,7 +577,7 @@ Required protections for the later backend PR:
 - positive `version` and event before/after checks;
 - check constraints for closed status/category/priority strings;
 - unique School/year sequence and School/ticket number keys;
-- immutable create-correlation rows unique on `(school_id, reporter_user_id_snapshot, submission_id)`, with one committed Incident reference and exact normalized create payload;
+- immutable create-correlation rows unique on `(school_id, reporter_user_id_snapshot, submission_id)`, with one committed Incident reference, 64-character lowercase SHA-256 fingerprint, and positive supported fingerprint version; no full report payload copy;
 - status/assignee consistency: `reported`, `triaged`, and `rejected` require null current assignee; `assigned` and `in_progress` require all current assignee fields; `resolved`, `verified`, and `closed` allow either all-null or all-present assignee fields according to the path, never a partial snapshot;
 - state-dependent required timestamps and summaries/reasons, including non-null `started_at` whenever status is `in_progress`;
 - bounded snapshot/text columns and JSON payload validation in one application validator;
@@ -667,22 +692,36 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 78 | Assigned technician PATCHes canonical report fields | 403; assignment grants progress authority, not correction authority |
 | 79 | Admin Lab PATCHes a visible reported Incident | allowed with view + update + assign and current ETag |
 | 80 | Admin Lab PATCHes after triage | 409 status conflict despite administrative permissions |
-| 81 | Student requests `/events` for their own Incident | 403; full internal history requires view-all |
+| 81 | Student requests `/events` for their own Incident | 403; full internal history requires view-history |
 | 82 | Student requests `/comments` for their own Incident | allowed; participant-safe comment DTOs only |
 | 83 | Student inspects comments after reassignment/reopen | no assignee snapshots, reassignment reasons, reopen reasons, or internal payload leakage |
-| 84 | Technician or Admin with view-all requests visible `/events` | complete typed history allowed under active-School row scope |
-| 85 | Cross-School or row-invisible comments/events request | same safe 404; no Incident or event existence disclosure |
+| 84 | Technician or Admin with view-history requests visible `/events` | complete typed history allowed under normal active-School row scope |
+| 85 | Caller holding the endpoint's required permissions requests cross-School or row-invisible comments/events | same safe 404; no Incident or event existence disclosure |
 | 86 | Device home matches reporting Laboratory | eligible v1 candidate but not evidence of physical presence; no Device custody/location mutation |
 | 87 | Successful create response is lost | GET by same reporter `submissionId` returns canonical Incident and ETag; no POST replay |
-| 88 | Same reporter repeats same `submissionId` and normalized payload | existing Incident returned; no ticket/version/event allocation |
-| 89 | Same reporter reuses `submissionId` with different normalized payload | 409 submission conflict; original Incident unchanged |
-| 90 | Concurrent identical creates share one `submissionId` | submission-row serialization yields one ticket, one Incident, one reported event |
+| 88 | Same reporter repeats same `submissionId` and equivalent stored-version fingerprint | existing Incident returned; no ticket/version/event allocation |
+| 89 | Same reporter reuses `submissionId` with materially different fingerprint | 409 submission conflict; original Incident unchanged |
+| 90 | Concurrent equivalent creates share one `submissionId` | submission-row serialization and fingerprint comparison yield one ticket, one Incident, one reported event |
 | 91 | Another reporter or School probes a known `submissionId` | 404 submission not found; no correlation disclosure |
 | 92 | Duplicate request waits while first create rolls back | waiter may create once after rollback; at most one committed ticket/Incident/event |
 | 93 | Future current-location integration is introduced | existing Incident Laboratory/Device snapshots remain unchanged historical report context |
 | 94 | Own-only caller loses comment response | canonical Incident plus `/comments` may reconcile; `/events` stays forbidden and uncertain outcome is not replayed automatically |
+| 95 | Update-only technician requests assigned-to-in-progress | valid edge resolves to update; allowed when actor is current assignee |
+| 96 | Update-only technician requests assignee-present resolved-to-in-progress | valid reopen edge resolves to approve; 403 before ownership mutation |
+| 97 | Approve-only Kepala Lab requests assigned-to-in-progress | valid start edge resolves to update; 403 |
+| 98 | Approve-only Kepala Lab requests assignee-present resolved-to-in-progress | valid reopen edge resolves to approve; allowed with reason and current ETag |
+| 99 | Visible caller requests an edge absent from the locked graph | 409 invalid transition before edge-permission evaluation |
+| 100 | Caller targets a non-visible Incident transition | 404 before current status or required edge permission is disclosed |
+| 101 | Visible transition carries syntactically valid stale `If-Match` | 412 before current-edge resolution and permission decision |
+| 102 | Future role has view-history without view-all | full events allowed only for that role's own-visible Incidents; other rows remain 404 |
+| 103 | Future role has view-all without view-history | school-wide Incident rows visible, but `/events` returns 403 |
+| 104 | Own reporter has view/comment but no view-history | Incident and participant comments visible; internal events remain 403 |
+| 105 | Same submission UUID uses reordered JSON keys, omitted defaults versus explicit defaults, equivalent timezone, and nullable blanks | v1 normalization/canonical serialization produces the same fingerprint and returns existing Incident |
+| 106 | Same submission UUID changes any canonical business field | fingerprint differs; 409 submission conflict with no sequence/event change |
+| 107 | Retry reaches a newer server after a v1 submission committed | server recomputes with stored fingerprint version 1 and preserves original retry semantics |
+| 108 | New fingerprint algorithm version is introduced | new submissions may use it, but persisted earlier rows are never silently reinterpreted or rewritten |
 
-Scenario count: 94.
+Scenario count: 108.
 
 ## 28. Implementation sequencing gate
 
@@ -694,4 +733,4 @@ The backend PR must not implement Work Order, Asset, notification, telemetry ale
 
 Architecture blockers: none.
 
-Independent review must verify row visibility, proposed permission grants, path-aware lifecycle/assignee invariants, administrative PATCH authority, participant-comment/internal-event separation, create-correlation and ticket lock ordering, custody/location semantics, and Work Order exclusions before this RFC can be marked approved or locked.
+Independent review must verify transition-specific permission/error precedence, exact row-scope versus history-projection permissions, versioned canonical create fingerprints and ticket lock ordering, path-aware lifecycle/assignee invariants, administrative PATCH authority, participant comments, custody/location semantics, and Work Order exclusions before this RFC can be marked approved or locked.
