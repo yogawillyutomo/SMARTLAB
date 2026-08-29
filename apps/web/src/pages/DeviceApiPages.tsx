@@ -33,6 +33,7 @@ import {
   normalizeTransferReason,
   reconcileDeviceTransfer,
   validateTransferForm,
+  type TransferMutationResult,
   type DeviceTransferPresentationIssue,
   type TransferReconciliationResult,
   type TransferReconciliationSnapshot,
@@ -84,6 +85,12 @@ interface TransferFormValues {
   destinationLaboratoryId: string;
   reason: string;
 }
+
+// Exported for focused Transfer orchestration regression coverage.
+// eslint-disable-next-line react-refresh/only-export-components
+export const shouldCloseTransferDialog = (outcome: TransferMutationResult): boolean => (
+  outcome.status === 'confirmed' || (outcome.status === 'unavailable' && outcome.knownSuccess)
+);
 
 function lifecycleTone(status: DeviceLifecycleStatus): 'success' | 'info' | 'muted' | 'danger' {
   if (status === 'in_service') return 'success';
@@ -1037,19 +1044,17 @@ export function DeviceDetailPage() {
       isCurrent,
       });
       if (!isCurrent() || outcome.status === 'stale_route') return;
+      if (shouldCloseTransferDialog(outcome)) setTransferDialogOpen(false);
       if (outcome.status === 'confirmed') {
-      if (outcome.reconciliation.status === 'unavailable') setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
-      else {
-        setTransferDialogOpen(false);
-        toast('Laboratorium asal perangkat diperbarui', 'success');
-      }
-    } else if (outcome.status === 'unavailable') {
-      if (outcome.knownSuccess) setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
-      else setTransferErrors({ request: 'Hasil pemindahan belum dapat dipastikan. Muat ulang data kanonik sebelum mencoba lagi.' });
+        if (outcome.reconciliation.status === 'unavailable') setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+        else toast('Laboratorium asal perangkat diperbarui', 'success');
+      } else if (outcome.status === 'unavailable') {
+        if (outcome.knownSuccess) setTransferRecoveryMessage('Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.');
+        else setTransferErrors({ request: 'Hasil pemindahan belum dapat dipastikan. Muat ulang data kanonik sebelum mencoba lagi.' });
       } else if (outcome.status === 'unconfirmed') {
-      setTransferErrors({ request: 'Pemindahan tidak terkonfirmasi. Periksa data terbaru sebelum mengirim perintah baru.' });
+        setTransferErrors({ request: 'Pemindahan tidak terkonfirmasi. Periksa data terbaru sebelum mengirim perintah baru.' });
       } else if (outcome.status === 'concurrent_change') {
-      setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
+        setTransferErrors({ request: 'Data perangkat telah berubah di server. Periksa kembali laboratorium asal dan tujuan.' });
       } else if (outcome.status === 'rejected') {
         if (outcome.issue.authBoundary) {
           await bootstrapSession({ force: true });

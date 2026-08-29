@@ -4,11 +4,13 @@ import {
   DeviceDetailView,
   DeviceFormFields,
   DeviceListView,
+  shouldCloseTransferDialog,
   type DeviceListState,
 } from '@/pages/DeviceApiPages';
 import { ApiClientError } from '@/lib/apiClient';
 import { loadDeviceCollectionForSearchParams, runDeviceListMutation } from '@/lib/deviceCollection';
 import { deviceFormFromDto, devicePresentationIssue, loadLatestDeviceAfterConflict } from '@/lib/devicePresentation';
+import { executeTransferMutation } from '@/lib/deviceTransferPresentation';
 import type { DeviceDto } from '@/services/deviceApi';
 import type { LaboratoryDto } from '@/services/laboratoryApi';
 
@@ -205,6 +207,16 @@ describe('Device API list presentation', () => {
 });
 
 describe('Device API detail and edit boundaries', () => {
+  const destinationLaboratoryId = '01DESTINATION';
+  const transferInput = { destinationLaboratoryId, reason: 'UAT recovery' };
+  const transferSnapshot = {
+    deviceId: device.id,
+    submittedVersion: device.version,
+    sourceLaboratoryId: device.homeLaboratoryId!,
+    destinationLaboratoryId,
+    reason: transferInput.reason,
+  };
+
   it('reloads the latest canonical Device after a 412 without issuing another mutation', async () => {
     const latest = { ...device, version: 5, hostname: 'RTR-SERVER-LATEST' };
     const show = vi.fn(async () => latest);
@@ -303,5 +315,83 @@ describe('Device API detail and edit boundaries', () => {
     );
     expect(withoutPermission).not.toContain('Pindahkan Laboratorium');
     expect(withoutPermission).not.toContain('Transfer belum dihubungkan');
+  });
+
+  it('closes the Transfer command after known success when reconciliation is unavailable and exposes GET-only recovery', async () => {
+    const create = vi.fn(async () => undefined);
+    const reconcile = vi.fn(async () => ({ status: 'unavailable' as const }));
+    const outcome = await executeTransferMutation({
+      deviceId: device.id,
+      expectedVersion: device.version,
+      input: transferInput,
+      snapshot: transferSnapshot,
+      create,
+      reconcile,
+      isCurrent: () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: 'unavailable', knownSuccess: true });
+    expect(shouldCloseTransferDialog(outcome)).toBe(true);
+    expect(create).toHaveBeenCalledOnce();
+    expect(reconcile).toHaveBeenCalledOnce();
+
+    const recoveryMessage = 'Pemindahan berhasil, tetapi data terbaru belum dapat dimuat.';
+    const markup = renderToStaticMarkup(
+      <DeviceDetailView
+        state={{ status: 'ready', device }}
+        canUpdate={false}
+        transferRecoveryMessage={recoveryMessage}
+        onRetryReconciliation={vi.fn()}
+        onRetry={vi.fn()}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+    expect(markup).toContain(recoveryMessage);
+    expect(markup).toContain('Muat ulang data');
+  });
+
+  it('keeps an ambiguous unconfirmed Transfer dialog open without mutation replay', async () => {
+    const create = vi.fn(async () => {
+      throw new ApiClientError('offline', { kind: 'network' });
+    });
+    const reconcile = vi.fn(async () => ({ status: 'unconfirmed' as const, device }));
+    const outcome = await executeTransferMutation({
+      deviceId: device.id,
+      expectedVersion: device.version,
+      input: transferInput,
+      snapshot: transferSnapshot,
+      create,
+      reconcile,
+      isCurrent: () => true,
+    });
+
+    expect(outcome.status).toBe('unconfirmed');
+    expect(shouldCloseTransferDialog(outcome)).toBe(false);
+    expect(create).toHaveBeenCalledOnce();
+    expect(reconcile).toHaveBeenCalledOnce();
+  });
+
+  it('keeps ordinary confirmed Transfer success closing behavior unchanged', async () => {
+    const create = vi.fn(async () => undefined);
+    const reconcile = vi.fn(async () => ({
+      status: 'confirmed' as const,
+      device: { ...device, homeLaboratoryId: destinationLaboratoryId, version: device.version + 1 },
+      knownSuccess: true,
+    }));
+    const outcome = await executeTransferMutation({
+      deviceId: device.id,
+      expectedVersion: device.version,
+      input: transferInput,
+      snapshot: transferSnapshot,
+      create,
+      reconcile,
+      isCurrent: () => true,
+    });
+
+    expect(outcome.status).toBe('confirmed');
+    expect(shouldCloseTransferDialog(outcome)).toBe(true);
+    expect(create).toHaveBeenCalledOnce();
+    expect(reconcile).toHaveBeenCalledOnce();
   });
 });
