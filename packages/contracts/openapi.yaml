@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.5.0
-  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, and Layout endpoints.
+  version: 0.6.0
+  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident read endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -423,6 +423,40 @@ paths:
         '412': { $ref: '#/components/responses/DeviceVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
+  /incidents/{incidentId}:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        description: Incident ULID. Lookup starts inside the current School and then applies the reporter-own or incidents.view-all row policy.
+        schema:
+          type: string
+          format: ulid
+    get:
+      operationId: getIncident
+      summary: Read one visible Incident using immutable display snapshots
+      description: Requires the exact `incidents.view` permission. Without `incidents.view-all`, only Incidents whose reporter User snapshot equals the authenticated User are visible. Unknown, cross-School, and same-School row-invisible identifiers return the same safe not-found response.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Canonical snapshot-authoritative Incident detail
+          headers:
+            ETag:
+              $ref: '#/components/headers/IncidentETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/IncidentNotFound'
+        '409':
+          $ref: '#/components/responses/MembershipContextConflict'
   /laboratories/{laboratoryId}/layouts:
     parameters:
       - name: laboratoryId
@@ -680,6 +714,14 @@ components:
           example:
             message: Layout not found.
             code: LAYOUT_NOT_FOUND
+    IncidentNotFound:
+      description: No Incident is visible under the current School and reporter-own or incidents.view-all row policy
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: Incident not found.
+            code: INCIDENT_NOT_FOUND
     LayoutConflict:
       description: The Layout operation violates lifecycle, Laboratory, Device-placement, or geometry invariants
       content:
@@ -799,6 +841,12 @@ components:
       example: '"1"'
     LayoutETag:
       description: Strong entity tag whose quoted positive integer exactly matches `data.version`.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+      example: '"1"'
+    IncidentETag:
+      description: Strong entity tag whose quoted positive integer exactly matches the persisted Incident aggregate `data.version`.
       schema:
         type: string
         pattern: '^"[1-9][0-9]*"$'
@@ -1038,6 +1086,127 @@ components:
       required: [data]
       properties:
         data: { $ref: '#/components/schemas/DeviceTransfer' }
+    IncidentResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Incident'
+    Incident:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ticketNumber
+        - reporter
+        - laboratory
+        - device
+        - category
+        - priority
+        - title
+        - description
+        - impact
+        - blocksLaboratoryOperation
+        - stepsTaken
+        - status
+        - assignee
+        - triageSummary
+        - resolutionSummary
+        - rejectionReason
+        - verificationNote
+        - version
+        - occurredAt
+        - reportedAt
+        - triagedAt
+        - assignedAt
+        - startedAt
+        - resolvedAt
+        - verifiedAt
+        - closedAt
+        - rejectedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        ticketNumber: { type: string, pattern: '^INC-[0-9]{4}-[0-9]{6}$', readOnly: true }
+        reporter: { $ref: '#/components/schemas/IncidentReporterSnapshot' }
+        laboratory: { $ref: '#/components/schemas/IncidentLaboratorySnapshot' }
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/IncidentDeviceSnapshot'
+            - type: 'null'
+        category: { $ref: '#/components/schemas/IncidentCategory' }
+        priority: { $ref: '#/components/schemas/IncidentPriority' }
+        title: { type: string, minLength: 5, maxLength: 200, readOnly: true }
+        description: { type: string, minLength: 10, maxLength: 4000, readOnly: true }
+        impact: { type: [string, 'null'], minLength: 1, maxLength: 2000, readOnly: true }
+        blocksLaboratoryOperation: { type: boolean, readOnly: true }
+        stepsTaken: { type: [string, 'null'], minLength: 1, maxLength: 2000, readOnly: true }
+        status: { $ref: '#/components/schemas/IncidentStatus' }
+        assignee:
+          oneOf:
+            - $ref: '#/components/schemas/IncidentAssigneeSnapshot'
+            - type: 'null'
+        triageSummary: { type: [string, 'null'], minLength: 1, maxLength: 2000, readOnly: true }
+        resolutionSummary: { type: [string, 'null'], minLength: 5, maxLength: 4000, readOnly: true }
+        rejectionReason: { type: [string, 'null'], minLength: 5, maxLength: 1000, readOnly: true }
+        verificationNote: { type: [string, 'null'], minLength: 1, maxLength: 2000, readOnly: true }
+        version: { type: integer, minimum: 1, readOnly: true }
+        occurredAt: { type: string, format: date-time, readOnly: true }
+        reportedAt: { type: string, format: date-time, readOnly: true }
+        triagedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        assignedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        startedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        resolvedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        verifiedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        closedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        rejectedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    IncidentReporterSnapshot:
+      type: object
+      additionalProperties: false
+      required: [userId, name]
+      properties:
+        userId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentLaboratorySnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        code: { type: string, maxLength: 50, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentDeviceSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, deviceCode, deviceType]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        deviceCode: { type: string, maxLength: 32, readOnly: true }
+        deviceType: { type: string, maxLength: 32, readOnly: true }
+    IncidentAssigneeSnapshot:
+      type: object
+      additionalProperties: false
+      required: [membershipId, userId, name]
+      properties:
+        membershipId: { type: string, format: ulid, readOnly: true }
+        userId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentCategory:
+      type: string
+      enum: [hardware, software, network, electrical, peripheral, facility, cleanliness, security, other]
+      readOnly: true
+    IncidentPriority:
+      type: string
+      enum: [low, normal, high, critical]
+      readOnly: true
+    IncidentStatus:
+      type: string
+      enum: [reported, triaged, assigned, in_progress, resolved, verified, closed, rejected]
+      readOnly: true
     DeviceTransfer:
       type: object
       additionalProperties: false
@@ -1602,7 +1771,7 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
+          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, INCIDENT_NOT_FOUND, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
     ValidationError:
       type: object
       required: [message, code, errors]

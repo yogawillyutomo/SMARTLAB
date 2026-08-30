@@ -3,6 +3,7 @@
 use App\Application\Identity\SpaAuthenticationException;
 use App\Domain\Device\DeviceDomainException;
 use App\Domain\DeviceTransfer\TransferDomainException;
+use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Layout\LayoutDomainException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
@@ -87,6 +88,16 @@ return Application::configure(basePath: dirname(__DIR__))
             ], $exception->status);
         });
         $exceptions->render(function (TransferDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+        });
+        $exceptions->render(function (IncidentDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
