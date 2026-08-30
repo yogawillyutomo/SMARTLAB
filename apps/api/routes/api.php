@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -55,5 +56,8 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:layouts.delete', RequireLayoutVersionPrecondition::class]);
         Route::get('layouts/{layoutId}/unplaced-devices', [LayoutController::class, 'unplacedDevices'])
             ->middleware(['permission:layouts.view', 'permission:devices.view']);
+
+        Route::get('incidents/{incidentId}', [IncidentController::class, 'show'])
+            ->middleware('permission:incidents.view');
     });
 });
