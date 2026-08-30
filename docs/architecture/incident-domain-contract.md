@@ -410,7 +410,22 @@ Incident v1 has no general post-create mutation idempotency key and clients neve
 
 For a lost PATCH, assignment, transition, or comment response, the frontend GETs the canonical Incident before allowing another mutation. Callers with `incidents.view-history` may additionally GET full event history for that visible row. Callers without it use only canonical Incident data and, for comment outcomes, the participant comment projection. If caller-visible canonical Incident/comments do not establish the outcome, the UI remains explicitly unconfirmed. If the first command committed, a manual repeat with its old `If-Match` fails 412 and writes no duplicate event.
 
-Create also has no automatic replay. After a lost create response, the reporter issues `GET /api/v1/incidents/submissions/{submissionId}`. A committed submission returns the canonical Incident and ETag. Unknown, cross-School, other-reporter, rolled-back, or otherwise non-visible submission keys return the same `404 INCIDENT_SUBMISSION_NOT_FOUND`. If recovery remains unavailable, the UI stays explicitly unconfirmed.
+Create also has no automatic replay. After a lost create response, the reporter issues `GET /api/v1/incidents/submissions/{submissionId}`. A committed submission returns the canonical Incident and ETag. A malformed, syntactically valid but unknown, cross-School, other-reporter, rolled-back/noncommitted, or otherwise non-visible submission key returns the exact same canonical response:
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+```json
+{
+  "message": "Incident submission not found.",
+  "code": "INCIDENT_SUBMISSION_NOT_FOUND"
+}
+```
+
+E4 treats `submissionId` as an opaque recovery correlation. Route constraints, implicit model binding, framework-level UUID parsing, and FormRequest validation must not short-circuit malformed E4 identifiers to a framework 404, `422 VALIDATION_FAILED`, or any response other than the canonical 404 above. Application code may reject a malformed identifier before database access, provided the externally visible result remains identical. This prevents correlation existence or format oracles. The authority remains the current School, matching immutable reporter User snapshot, submitted correlation, and committed Incident mapping; `incidents.view-all` never widens E4, while replacement membership for the same User remains valid. If recovery remains unavailable, the UI stays explicitly unconfirmed.
+
+This E4 rule does not change E6 create validation. `POST /api/v1/incidents` still requires `submissionId` to be a lowercase canonical RFC 4122 UUID v4 in 36-character hyphenated form, and a malformed create value returns `422 VALIDATION_FAILED`. E6 request validation must not be reused in a way that changes malformed E4 recovery behavior.
 
 A later manual POST with the same `submissionId` and an equivalent versioned canonical fingerprint is safe and returns the already-created Incident without allocating a ticket or event. Reusing it with a materially different fingerprint returns `409 INCIDENT_SUBMISSION_CONFLICT`. Equal titles without the same submission key remain valid distinct reports. This create-only correlation mechanism does not apply to PATCH, assignment, transition, or comment.
 
@@ -457,7 +472,7 @@ Full event history is internal operational evidence. `GET /events` requires both
 | `GET /api/v1/incidents/reporting-context/laboratories` | `incidents.create` | no | paginated minimal active Laboratory projection |
 | `GET /api/v1/incidents/reporting-context/laboratories/{laboratoryId}/devices` | `incidents.create` | no | searched minimal eligible Device projection |
 | `GET /api/v1/incidents/assignee-candidates` | `incidents.assign` | no | paginated minimal eligible membership projection |
-| `GET /api/v1/incidents/submissions/{submissionId}` | `incidents.view`; same reporter only | no | committed Incident for create reconciliation, or safe 404; view-all does not widen this route |
+| `GET /api/v1/incidents/submissions/{submissionId}` | `incidents.view`; same reporter only | no | committed Incident for create reconciliation; malformed through non-visible correlations use the exact same canonical 404; view-all does not widen this route |
 | `GET /api/v1/incidents` | `incidents.view` | no | row-scoped paginated Incident collection |
 | `POST /api/v1/incidents` | `incidents.create` | no | 201 for new Incident; 200 for exact committed submission repeat; Incident DTO + ETag |
 | `GET /api/v1/incidents/{incidentId}` | `incidents.view` | no | visible Incident DTO and ETag |
@@ -469,6 +484,8 @@ Full event history is internal operational evidence. `GET /events` requires both
 | `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` + `incidents.view-history` | no | complete paginated immutable internal events for an already-visible row |
 
 Static Incident routes are registered before `GET /api/v1/incidents/{incidentId}` in this relative order: `reporting-context/*`, `assignee-candidates`, `submissions/{submissionId}`, `GET /api/v1/incidents`, then `GET /api/v1/incidents/{incidentId}`. This is a route-order contract, not a requirement that every documented route be implemented in the same slice. Static path segments must never be interpreted as `incidentId`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
+
+The E4 recovery route accepts the path segment as an opaque correlation and delegates canonical lookup/error handling to application code. It must not apply a UUID route constraint, implicit model binding, framework-level UUID parser, or FormRequest rule that could distinguish malformed identifiers with another status or body. This route behavior is deliberately different from E6 create-body validation, where a malformed `submissionId` remains `422 VALIDATION_FAILED`.
 
 ## 19. Request allowlists
 
@@ -611,7 +628,7 @@ Incident errors:
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 404 | `INCIDENT_NOT_FOUND` | unknown, cross-School, or row-invisible Incident |
-| 404 | `INCIDENT_SUBMISSION_NOT_FOUND` | unknown, cross-School, other-reporter, rolled-back, or non-visible submission correlation |
+| 404 | `INCIDENT_SUBMISSION_NOT_FOUND` | malformed, syntactically valid but unknown, cross-School, other-reporter, rolled-back/noncommitted, or otherwise non-visible submission correlation; all cases use the exact same canonical body |
 | 412 | `INCIDENT_VERSION_CONFLICT` | syntactically valid stale Incident version |
 | 409 | `INCIDENT_INVALID_TRANSITION` | requested lifecycle edge is not in the graph |
 | 409 | `INCIDENT_SUBMISSION_CONFLICT` | same reporter submission ID reused with a different stored-version canonical fingerprint |
@@ -800,8 +817,9 @@ Privacy erasure, legal retention, or archival deletion requires a separate revie
 | 106 | Same submission UUID changes any canonical business field | fingerprint differs; 409 submission conflict with no sequence/event change |
 | 107 | Retry reaches a newer server after a v1 submission committed | server recomputes with stored fingerprint version 1 and preserves original retry semantics |
 | 108 | New fingerprint algorithm version is introduced | new submissions may use it, but persisted earlier rows are never silently reinterpreted or rewritten |
+| 109 | Malformed E4 `submissionId` | exact 404 `INCIDENT_SUBMISSION_NOT_FOUND`; no framework 404/422 distinction and no side effect |
 
-Scenario count: 108.
+Scenario count: 109.
 
 ## 28. Implementation sequencing gate
 
