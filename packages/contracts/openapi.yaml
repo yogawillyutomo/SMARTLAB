@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: SmartLab API
   version: 0.6.0
-  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident read endpoints.
+  description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident endpoints.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -483,6 +483,32 @@ paths:
         '404': { $ref: '#/components/responses/IncidentReportingLaboratoryNotFound' }
         '409': { $ref: '#/components/responses/MembershipContextConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /incidents/submissions/{submissionId}:
+    parameters:
+      - name: submissionId
+        in: path
+        required: true
+        description: Opaque create correlation. Malformed, unknown, cross-School, other-reporter, noncommitted, and otherwise non-visible values share the exact canonical safe not-found response.
+        schema: { type: string }
+    get:
+      operationId: recoverIncidentSubmission
+      summary: Recover the current Incident after an ambiguous create response
+      description: Requires `incidents.view`. Lookup is restricted to the current School and authenticated reporter User snapshot; `incidents.view-all` never widens this endpoint. Replacement membership for the same User remains eligible.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Current canonical Incident for the committed same-reporter submission
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentSubmissionNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
   /incidents:
     get:
       operationId: listIncidents
@@ -515,6 +541,37 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      operationId: createIncident
+      summary: Create an Incident with reporter-scoped submission correlation
+      description: Requires `incidents.create` only. School and reporter authority come from the active membership context. Business fields are accepted from the JSON body only; any query parameter is rejected with 422. A new submission returns 201; an equivalent committed repeat under its stored fingerprint version returns the current canonical Incident with 200 and allocates no additional ticket or event.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIncidentRequest' }
+      responses:
+        '200':
+          description: Equivalent committed submission; current canonical Incident returned without mutation
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '201':
+          description: New Incident, submission mapping, ticket allocation, and reported event committed atomically
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/IncidentCreateConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
   /incidents/{incidentId}:
     parameters:
@@ -815,6 +872,24 @@ components:
           example:
             message: Incident not found.
             code: INCIDENT_NOT_FOUND
+    IncidentSubmissionNotFound:
+      description: The recovery correlation is malformed, unknown, cross-School, owned by another reporter, noncommitted, or otherwise non-visible; all cases use this exact response
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: Incident submission not found.
+            code: INCIDENT_SUBMISSION_NOT_FOUND
+    IncidentCreateConflict:
+      description: Membership context is unresolved, the submission conflicts, a subject is ineligible, or the ticket sequence is exhausted
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            submissionConflict: { value: { message: The submission ID was already used for different Incident data., code: INCIDENT_SUBMISSION_CONFLICT } }
+            laboratoryIneligible: { value: { message: The Laboratory is not eligible for Incident reporting., code: INCIDENT_LABORATORY_INELIGIBLE } }
+            deviceIneligible: { value: { message: The Device is not eligible for this Incident., code: INCIDENT_DEVICE_NOT_ELIGIBLE } }
+            ticketExhausted: { value: { message: The Incident ticket sequence is exhausted for this School and year., code: INCIDENT_TICKET_SEQUENCE_EXHAUSTED } }
     IncidentReportingLaboratoryNotFound:
       description: The reporting-context Laboratory identifier is malformed, unknown, cross-School, or inactive
       content:
@@ -1277,6 +1352,50 @@ components:
           type: array
           items: { $ref: '#/components/schemas/IncidentListItem' }
         meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
+    CreateIncidentRequest:
+      type: object
+      additionalProperties: false
+      required: [submissionId, laboratoryId, category, title, description, occurredAt]
+      properties:
+        submissionId:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          description: Fresh lowercase canonical RFC 4122 UUID v4 for one create attempt.
+        laboratoryId: { type: string, format: ulid }
+        deviceId:
+          anyOf:
+            - { type: string, format: ulid }
+            - { type: string, pattern: '^\s*$' }
+            - { type: 'null' }
+          default: null
+          description: A blank string or null is canonicalized to null; a nonblank value is normalized as a ULID.
+        category:
+          type: string
+          pattern: '^\s*(?:[Hh][Aa][Rr][Dd][Ww][Aa][Rr][Ee]|[Ss][Oo][Ff][Tt][Ww][Aa][Rr][Ee]|[Nn][Ee][Tt][Ww][Oo][Rr][Kk]|[Ee][Ll][Ee][Cc][Tt][Rr][Ii][Cc][Aa][Ll]|[Pp][Ee][Rr][Ii][Pp][Hh][Ee][Rr][Aa][Ll]|[Ff][Aa][Cc][Ii][Ll][Ii][Tt][Yy]|[Cc][Ll][Ee][Aa][Nn][Ll][Ii][Nn][Ee][Ss][Ss]|[Ss][Ee][Cc][Uu][Rr][Ii][Tt][Yy]|[Oo][Tt][Hh][Ee][Rr])\s*$'
+          description: "Case-insensitive value normalized to lowercase: hardware, software, network, electrical, peripheral, facility, cleanliness, security, or other."
+        priority:
+          type: string
+          pattern: '^\s*(?:[Ll][Oo][Ww]|[Nn][Oo][Rr][Mm][Aa][Ll]|[Hh][Ii][Gg][Hh]|[Cc][Rr][Ii][Tt][Ii][Cc][Aa][Ll])\s*$'
+          default: normal
+          description: "Case-insensitive value normalized to lowercase: low, normal, high, or critical."
+        title: { type: string, minLength: 5, maxLength: 200 }
+        description: { type: string, minLength: 10, maxLength: 4000 }
+        impact:
+          type: [string, 'null']
+          maxLength: 2000
+          default: null
+          description: Blank text or null is canonicalized to null.
+        blocksLaboratoryOperation: { type: boolean, default: false }
+        stepsTaken:
+          type: [string, 'null']
+          maxLength: 2000
+          default: null
+          description: Blank text or null is canonicalized to null.
+        occurredAt:
+          type: string
+          format: date-time
+          description: RFC3339 observation time no later than five minutes after server receipt; timezone-offset equivalents are canonicalized to UTC for fingerprinting.
     IncidentResponse:
       type: object
       additionalProperties: false

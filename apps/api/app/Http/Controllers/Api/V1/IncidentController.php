@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Incident\IncidentCreationService;
 use App\Application\Incident\IncidentListQueryService;
 use App\Application\Incident\IncidentQueryService;
 use App\Application\Incident\IncidentReportingContextQueryService;
+use App\Application\Incident\IncidentSubmissionQueryService;
+use App\Domain\Incident\IncidentCreatePayloadValidationException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CreateIncidentRequest;
 use App\Http\Requests\ListIncidentReportingDevicesRequest;
 use App\Http\Requests\ListIncidentReportingLaboratoriesRequest;
 use App\Http\Requests\ListIncidentsRequest;
@@ -17,9 +21,42 @@ use App\Http\Resources\IncidentSummaryResource;
 use App\Models\Incident;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class IncidentController extends Controller
 {
+    public function store(
+        CreateIncidentRequest $request,
+        IncidentCreationService $creation,
+        IncidentQueryService $queries,
+    ): JsonResponse {
+        $context = $this->context($request);
+
+        try {
+            $result = $creation->create(
+                $context,
+                (string) $request->validated('submissionId'),
+                $request->businessPayload(),
+            );
+        } catch (IncidentCreatePayloadValidationException $exception) {
+            throw ValidationException::withMessages(['payload' => $exception->getMessage()]);
+        }
+
+        $incident = $queries->find($context, (string) $result->incident->id);
+
+        return $this->incidentResponse($incident, $request, $result->wasExistingSubmission ? 200 : 201);
+    }
+
+    public function submission(
+        Request $request,
+        string $submissionId,
+        IncidentSubmissionQueryService $queries,
+    ): JsonResponse {
+        $incident = $queries->find($this->context($request), $submissionId);
+
+        return $this->incidentResponse($incident, $request);
+    }
+
     public function index(ListIncidentsRequest $request, IncidentListQueryService $queries): JsonResponse
     {
         $paginator = $queries->list($this->context($request), $request->validated());
@@ -62,10 +99,11 @@ class IncidentController extends Controller
         return $this->incidentResponse($incident, $request);
     }
 
-    private function incidentResponse(Incident $incident, Request $request): JsonResponse
+    private function incidentResponse(Incident $incident, Request $request, int $status = 200): JsonResponse
     {
         return (new IncidentResource($incident))
             ->response($request)
+            ->setStatusCode($status)
             ->header('ETag', '"'.$incident->version.'"');
     }
 

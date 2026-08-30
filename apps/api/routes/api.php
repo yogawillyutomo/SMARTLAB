@@ -61,8 +61,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:incidents.create');
         Route::get('incidents/reporting-context/laboratories/{laboratoryId}/devices', [IncidentController::class, 'reportingDevices'])
             ->middleware('permission:incidents.create');
+        Route::get('incidents/submissions/{submissionId}', [IncidentController::class, 'submission'])
+            ->middleware('permission:incidents.view');
         Route::get('incidents', [IncidentController::class, 'index'])
             ->middleware('permission:incidents.view');
+        Route::post('incidents', [IncidentController::class, 'store'])
+            ->middleware('permission:incidents.create');
         Route::get('incidents/{incidentId}', [IncidentController::class, 'show'])
             ->middleware('permission:incidents.view');
     });
