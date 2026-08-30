@@ -3,9 +3,11 @@
 namespace App\Application\Incident;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Domain\Incident\Fingerprint\IncidentFingerprint;
 use App\Domain\Incident\Fingerprint\IncidentFingerprintRegistry;
 use App\Domain\Incident\IncidentAggregateValidator;
 use App\Domain\Incident\IncidentCatalog;
+use App\Domain\Incident\IncidentCreatePayloadValidationException;
 use App\Domain\Incident\IncidentCreatePayloadValidator;
 use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Incident\IncidentEventType;
@@ -65,9 +67,12 @@ final class IncidentCreationService
 
             if ($submission !== null) {
                 $storedAlgorithm = $this->fingerprints->forVersion((int) $submission->payload_fingerprint_version);
-                $storedNormalized = $storedAlgorithm->canonicalize($businessPayload);
-                $this->payloadValidator->validate($businessPayload, $storedNormalized, $receiptTime);
-                if (! hash_equals((string) $submission->payload_fingerprint, $storedAlgorithm->fingerprint($businessPayload))) {
+                [, $candidateFingerprint] = $this->validateAndFingerprint(
+                    $storedAlgorithm,
+                    $businessPayload,
+                    $receiptTime,
+                );
+                if (! hash_equals((string) $submission->payload_fingerprint, $candidateFingerprint)) {
                     throw IncidentDomainException::submissionConflict();
                 }
                 if ($submission->incident_id === null) {
@@ -83,9 +88,11 @@ final class IncidentCreationService
             }
 
             $algorithm = $this->fingerprints->current();
-            $normalized = $algorithm->canonicalize($businessPayload);
-            $this->payloadValidator->validate($businessPayload, $normalized, $receiptTime);
-            $fingerprint = $algorithm->fingerprint($businessPayload);
+            [$normalized, $fingerprint] = $this->validateAndFingerprint(
+                $algorithm,
+                $businessPayload,
+                $receiptTime,
+            );
 
             DB::table('incident_submissions')->insert([
                 'school_id' => $schoolId,
@@ -190,6 +197,28 @@ final class IncidentCreationService
 
             return new IncidentCreationResult($incident, false);
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $businessPayload
+     * @return array{array<string, mixed>, string}
+     */
+    private function validateAndFingerprint(
+        IncidentFingerprint $algorithm,
+        array $businessPayload,
+        CarbonImmutable $receiptTime,
+    ): array {
+        try {
+            $normalized = $algorithm->canonicalize($businessPayload);
+            $this->payloadValidator->validate($businessPayload, $normalized, $receiptTime);
+
+            return [$normalized, $algorithm->fingerprint($businessPayload)];
+        } catch (InvalidArgumentException $exception) {
+            throw new IncidentCreatePayloadValidationException(
+                $exception->getMessage(),
+                previous: $exception,
+            );
+        }
     }
 
     private function serializeSubmissionKey(string $schoolId, string $reporterId, string $submissionId): void
