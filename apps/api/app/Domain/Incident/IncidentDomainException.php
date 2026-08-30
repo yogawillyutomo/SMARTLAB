@@ -44,6 +44,11 @@ class IncidentDomainException extends RuntimeException
         return new self('Incident not found.', 'INCIDENT_NOT_FOUND', 404);
     }
 
+    public static function laboratoryNotFound(): self
+    {
+        return new self('Laboratory not found.', 'LABORATORY_NOT_FOUND', 404);
+    }
+
     public static function submissionNotFound(): self
     {
         return new self('Incident submission not found.', 'INCIDENT_SUBMISSION_NOT_FOUND', 404);
