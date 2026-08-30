@@ -423,6 +423,99 @@ paths:
         '412': { $ref: '#/components/responses/DeviceVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
+  /incidents/reporting-context/laboratories:
+    get:
+      operationId: listIncidentReportingLaboratories
+      summary: Discover active Laboratories eligible for Incident reporting
+      description: Requires only `incidents.create`; general Laboratory and Device view permissions are not required. Results are limited to active Laboratories in the current School, ordered by normalized code then ULID.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: search
+          in: query
+          description: Optional trimmed literal search over Laboratory code or name. Percent, underscore, and backslash are not wildcards.
+          schema: { type: string, minLength: 2, maxLength: 100 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Current-School active Laboratory reporting candidates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentReportingLaboratoryCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /incidents/reporting-context/laboratories/{laboratoryId}/devices:
+    parameters:
+      - name: laboratoryId
+        in: path
+        required: true
+        description: Candidate Laboratory identifier. Malformed, unknown, cross-School, and inactive identifiers share the canonical safe not-found response.
+        schema: { type: string }
+    get:
+      operationId: listIncidentReportingDevices
+      summary: Search bounded Device candidates eligible for Incident reporting
+      description: "Requires only `incidents.create`; general Laboratory and Device view permissions are not required. Search is mandatory and this endpoint is intentionally non-browsable: it returns at most 20 candidates and only signals whether the search should be refined."
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: search
+          in: query
+          required: true
+          description: Trimmed literal search over Device code only. Percent, underscore, and backslash are not wildcards.
+          schema: { type: string, minLength: 2, maxLength: 100 }
+      responses:
+        '200':
+          description: Up to 20 eligible Device reporting candidates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentReportingDeviceCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentReportingLaboratoryNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /incidents:
+    get:
+      operationId: listIncidents
+      summary: List visible Incidents using immutable root snapshots
+      description: Requires `incidents.view`. Without `incidents.view-all`, visibility is restricted to rows whose reporter User snapshot equals the authenticated User. Visibility and School scope are applied before filters, counts, and pagination.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/IncidentStatus' } }
+        - { name: priority, in: query, schema: { $ref: '#/components/schemas/IncidentPriority' } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/IncidentCategory' } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: deviceId, in: query, schema: { type: string, format: ulid } }
+        - { name: assigneeMembershipId, in: query, schema: { type: string, format: ulid } }
+        - { name: reportedFrom, in: query, description: Inclusive RFC3339 lower bound., schema: { type: string, format: date-time } }
+        - { name: reportedTo, in: query, description: Inclusive RFC3339 upper bound and must not precede reportedFrom., schema: { type: string, format: date-time } }
+        - name: search
+          in: query
+          description: Trimmed literal search over ticket number, title, Laboratory code snapshot, and Device code snapshot.
+          schema: { type: string, minLength: 2, maxLength: 100 }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Reporter-own or view-all Incident summary page inside the current School
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentListResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
   /incidents/{incidentId}:
     parameters:
       - name: incidentId
@@ -722,6 +815,14 @@ components:
           example:
             message: Incident not found.
             code: INCIDENT_NOT_FOUND
+    IncidentReportingLaboratoryNotFound:
+      description: The reporting-context Laboratory identifier is malformed, unknown, cross-School, or inactive
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: Laboratory not found.
+            code: LABORATORY_NOT_FOUND
     LayoutConflict:
       description: The Layout operation violates lifecycle, Laboratory, Device-placement, or geometry invariants
       content:
@@ -1086,6 +1187,96 @@ components:
       required: [data]
       properties:
         data: { $ref: '#/components/schemas/DeviceTransfer' }
+    IncidentPaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+    IncidentReportingLaboratory:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        code: { type: string, maxLength: 50, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentReportingLaboratoryCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IncidentReportingLaboratory' }
+        meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
+    IncidentReportingDevice:
+      type: object
+      additionalProperties: false
+      required: [id, deviceCode, deviceType]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        deviceCode: { type: string, maxLength: 32, readOnly: true }
+        deviceType: { type: string, maxLength: 32, readOnly: true }
+    IncidentReportingDeviceCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/IncidentReportingDevice' }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [hasMore]
+          properties:
+            hasMore: { type: boolean, description: True only when a fully eligible matching twenty-first row exists; refine search rather than paginate. }
+    IncidentListItem:
+      type: object
+      additionalProperties: false
+      required: [id, ticketNumber, reporter, laboratory, device, category, priority, title, blocksLaboratoryOperation, status, assignee, version, occurredAt, reportedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        ticketNumber: { type: string, pattern: '^INC-[0-9]{4}-[0-9]{6}$', readOnly: true }
+        reporter: { $ref: '#/components/schemas/IncidentReporterSnapshot' }
+        laboratory: { $ref: '#/components/schemas/IncidentLaboratorySnapshot' }
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/IncidentDeviceSnapshot'
+            - type: 'null'
+        category: { $ref: '#/components/schemas/IncidentCategory' }
+        priority: { $ref: '#/components/schemas/IncidentPriority' }
+        title: { type: string, minLength: 5, maxLength: 200, readOnly: true }
+        blocksLaboratoryOperation: { type: boolean, readOnly: true }
+        status: { $ref: '#/components/schemas/IncidentStatus' }
+        assignee:
+          oneOf:
+            - $ref: '#/components/schemas/IncidentListAssigneeSnapshot'
+            - type: 'null'
+        version: { type: integer, minimum: 1, readOnly: true }
+        occurredAt: { type: string, format: date-time, readOnly: true }
+        reportedAt: { type: string, format: date-time, readOnly: true }
+    IncidentListAssigneeSnapshot:
+      type: object
+      additionalProperties: false
+      required: [userId, name]
+      properties:
+        userId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IncidentListItem' }
+        meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
     IncidentResponse:
       type: object
       additionalProperties: false
