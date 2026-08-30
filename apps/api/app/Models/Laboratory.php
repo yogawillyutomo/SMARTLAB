@@ -48,6 +48,11 @@ class Laboratory extends Model
         return $this->hasMany(DeviceTransfer::class, 'destination_laboratory_id');
     }
 
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
