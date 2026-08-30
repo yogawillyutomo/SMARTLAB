@@ -211,6 +211,42 @@ Users with `incidents.create` do not require `laboratories.view` or `devices.vie
 
 Laboratories are paginated and ordered by normalized `code ASC, id ASC`; optional search matches code/name. The Device endpoint requires a selected active Laboratory and a 2-100 character `search` matching normalized `deviceCode`; it returns at most 20 rows ordered by `deviceCode ASC, id ASC`. It never supports unfiltered inventory browsing.
 
+The Device reporting-discovery success response is exactly:
+
+```json
+{
+  "data": [
+    {
+      "id": "01D...",
+      "deviceCode": "PC-0001",
+      "deviceType": "desktop_pc"
+    }
+  ],
+  "meta": {
+    "hasMore": false
+  }
+}
+```
+
+`data` contains at most 20 rows and `meta.hasMore` is a required boolean. The implementation fetches at most 21 fully eligible matching rows internally after applying the current School, selected active Laboratory, matching `home_laboratory_id`, eligible Device lifecycle, normalized literal search, and deterministic `deviceCode ASC, id ASC` order. It returns only the first 20 rows; the twenty-first row is never returned and exists only to set `hasMore = true`. `hasMore = true` directs the caller to refine the search and is not a pagination capability. This endpoint exposes no `total`, `count`, `page`, `perPage`, `lastPage`, next-page token, cursor, or next-page traversal. A valid search with no matching candidates returns exactly `{ "data": [], "meta": { "hasMore": false } }`.
+
+Device search is trimmed before validation and its normalized length must be 2-100 characters. It matches normalized `deviceCode` only, never hostname, serial number, brand, model, or another general-inventory field. Percent (`%`), underscore (`_`), and backslash (`\`) are literal user text, not wildcard or escape instructions; the portable query semantics must preserve those characters literally without prescribing one database-specific helper.
+
+A malformed Laboratory identifier, well-formed unknown Laboratory identifier, cross-School Laboratory identifier, and inactive same-School Laboratory identifier all return the exact same response:
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+```json
+{
+  "message": "Laboratory not found.",
+  "code": "LABORATORY_NOT_FOUND"
+}
+```
+
+The endpoint makes no distinction among those four cases, provides no Laboratory existence or status oracle, and never represents an invalid selected Laboratory as an empty successful collection. Holding `incidents.create` does not imply general Laboratory visibility. Route constraints, implicit route-model binding, and framework-level identifier rejection must not bypass this canonical application error or produce a different status or body for a malformed identifier. This discovery behavior does not alter create or reported-state correction semantics, which continue to use `INCIDENT_LABORATORY_INELIGIBLE` as specified by the mutation contract.
+
 These projections do not expose serial number, hostname, QR public identity, technical profile, telemetry, Layout placement, Asset data, current location, lifecycle detail, user data, or counts. Device candidates are limited to `in_service` and `spare` Devices whose `home_laboratory_id` equals the selected Laboratory. This match expresses permanent home custody and is only a v1 discovery/eligibility constraint while Loan and Maintenance current-location authorities do not exist; it does not assert that the Device is physically present. A caller may omit Device and report a Laboratory-level Incident. Raw ULID entry is not a supported UI path, but direct API create still revalidates every identifier and eligibility rule.
 
 ## 9. Laboratory and Device subject policy
@@ -432,7 +468,7 @@ Full event history is internal operational evidence. `GET /events` requires both
 | `GET /api/v1/incidents/{incidentId}/comments` | `incidents.view` | no | row-scoped participant-visible comment projection |
 | `GET /api/v1/incidents/{incidentId}/events` | `incidents.view` + `incidents.view-history` | no | complete paginated immutable internal events for an already-visible row |
 
-Static discovery and `/submissions/{submissionId}` routes are registered before `{incidentId}`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
+Static Incident routes are registered before `GET /api/v1/incidents/{incidentId}` in this relative order: `reporting-context/*`, `assignee-candidates`, `submissions/{submissionId}`, `GET /api/v1/incidents`, then `GET /api/v1/incidents/{incidentId}`. This is a route-order contract, not a requirement that every documented route be implemented in the same slice. Static path segments must never be interpreted as `incidentId`. There is no DELETE, bulk mutation, hard-close shortcut, reopen-closed endpoint, Work Order endpoint, export endpoint, or nested Device/Laboratory general collection.
 
 ## 19. Request allowlists
 
@@ -499,9 +535,52 @@ Assignment accepts exactly `assigneeMembershipId` and optional `reason`; reason 
 
 `device` is null when absent. `assignee` is null before assignment and remains null through the simple `triaged -> resolved -> verified -> closed` path. Once assigned, the current assignee is retained through resolution, verification, closure, and an assignee-present reopen. Snapshot projections are returned; the DTO does not expose `submissionId` or embed live full User, membership, Laboratory, Device, Asset, Work Order, Layout, telemetry, comments, or event arrays.
 
+### Incident list-item DTO
+
+`GET /api/v1/incidents` uses the dedicated `IncidentListItem` projection and must not reuse the full detail Incident DTO or `IncidentResource` detail semantics. Every collection item contains exactly these 14 top-level fields:
+
+```json
+{
+  "id": "01I...",
+  "ticketNumber": "INC-2026-000123",
+  "reporter": { "userId": "01U...", "name": "Reporter Name" },
+  "laboratory": { "id": "01L...", "code": "LAB-RPL-1", "name": "Lab RPL 1" },
+  "device": { "id": "01D...", "deviceCode": "PC-0001", "deviceType": "desktop_pc" },
+  "category": "hardware",
+  "priority": "high",
+  "title": "Desktop cannot boot",
+  "blocksLaboratoryOperation": false,
+  "status": "assigned",
+  "assignee": { "userId": "01U...", "name": "Technician Name" },
+  "version": 3,
+  "occurredAt": "2026-08-29T03:00:00Z",
+  "reportedAt": "2026-08-29T03:05:00Z"
+}
+```
+
+`reporter` is exactly `{userId, name}` from the Incident reporter snapshots. `laboratory` is exactly `{id, code, name}` from the Incident Laboratory snapshots. `device` is either null or exactly `{id, deviceCode, deviceType}` from the Incident Device snapshots. `assignee` is either null or exactly `{userId, name}` from the current Incident assignee User/name snapshots; it deliberately omits `membershipId`. Collection display values never use live entity names as historical authority.
+
+The list item intentionally omits `description`, `impact`, `stepsTaken`, `triageSummary`, `resolutionSummary`, `rejectionReason`, `verificationNote`, `assignee.membershipId`, `triagedAt`, `assignedAt`, `startedAt`, `resolvedAt`, `verifiedAt`, `closedAt`, `rejectedAt`, `createdAt`, and `updatedAt`. Collection serialization must not reconstruct `assignee.membershipId` from IncidentEvent, query IncidentEvent merely to serialize list items, or perform per-row history reconstruction. Detail reads retain the complete Incident DTO and its existing assignee membership reconstruction semantics.
+
 Comment mutation returns the participant-safe DTO `{id, incidentId, actor: {userId, name}, text, createdAt}` plus the aggregate ETag. The same shape is used by `/comments`. Full event DTOs use `{id, incidentId, ticketNumber, type, actor, incidentVersionBefore, incidentVersionAfter, data, createdAt}` with the typed payload defined above and are available only through `/events` to callers with `incidents.view-history` for a row visible under own/view-all policy.
 
 ## 21. List and filter contract
+
+The Incident collection response is exactly:
+
+```json
+{
+  "data": [],
+  "meta": {
+    "page": 1,
+    "perPage": 25,
+    "total": 0,
+    "lastPage": 1
+  }
+}
+```
+
+Every `data` element is exactly one `IncidentListItem`. `page`, `perPage`, and `lastPage` are positive integers and `total` is a nonnegative integer. All metadata is calculated only over the already School- and row-visible query. Collection implementation begins from the School-leading `IncidentVisibility` own-versus-`incidents.view-all` scope, applies that row scope before every filter and count, and preserves `reportedAt DESC, id DESC` ordering. It may select only fields required by `IncidentListItem`, does not eager-load live reporter, Laboratory, or Device relations for display authority, does not query IncidentEvent for list serialization, and must avoid per-row history reconstruction. This is an API/query clarification and introduces no materialized view or read table.
 
 `GET /api/v1/incidents` accepts only:
 
@@ -538,6 +617,7 @@ Incident errors:
 | 409 | `INCIDENT_SUBMISSION_CONFLICT` | same reporter submission ID reused with a different stored-version canonical fingerprint |
 | 404 | `INCIDENT_ASSIGNEE_NOT_FOUND` | assignee membership unknown or outside current School |
 | 409 | `INCIDENT_ASSIGNEE_INELIGIBLE` | known membership/User inactive or lacks effective update capability |
+| 404 | `LABORATORY_NOT_FOUND` | malformed, unknown, cross-School, or inactive selected Laboratory on Device reporting discovery; all cases use the same response |
 | 409 | `INCIDENT_LABORATORY_INELIGIBLE` | Laboratory unknown, cross-School, or inactive for create/correction |
 | 409 | `INCIDENT_DEVICE_NOT_ELIGIBLE` | Device unknown, cross-School, wrong home Laboratory, or lifecycle-ineligible |
 | 409 | `INCIDENT_STATUS_CONFLICT` | PATCH, assignment, or comment is unavailable in current status |
