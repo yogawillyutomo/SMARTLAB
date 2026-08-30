@@ -40,4 +40,9 @@ class School extends Model
     {
         return $this->hasMany(Layout::class);
     }
+
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class);
+    }
 }

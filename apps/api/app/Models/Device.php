@@ -46,6 +46,11 @@ class Device extends Model
         return $this->hasMany(LayoutDevicePlacement::class);
     }
 
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class);
+    }
+
     protected function technicalProfile(): Attribute
     {
         return Attribute::make(

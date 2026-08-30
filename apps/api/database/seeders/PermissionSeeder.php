@@ -42,10 +42,13 @@ class PermissionSeeder extends Seeder
         ],
         'incidents' => [
             'view' => 'Lihat Insiden',
+            'view-all' => 'Lihat Semua Insiden',
+            'view-history' => 'Lihat Riwayat Insiden',
             'create' => 'Buat Insiden',
             'update' => 'Ubah Insiden',
             'approve' => 'Setujui Insiden',
             'assign' => 'Tugaskan Insiden',
+            'comment' => 'Komentari Insiden',
             'export' => 'Ekspor Insiden',
         ],
         'work-orders' => [

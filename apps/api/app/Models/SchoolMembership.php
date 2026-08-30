@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
 class SchoolMembership extends Model
@@ -53,5 +54,15 @@ class SchoolMembership extends Model
     public function hasPermission(string $permission): bool
     {
         return $this->effectivePermissions()->contains('key', $permission);
+    }
+
+    public function reportedIncidents(): HasMany
+    {
+        return $this->hasMany(Incident::class, 'reporter_membership_id');
+    }
+
+    public function assignedIncidents(): HasMany
+    {
+        return $this->hasMany(Incident::class, 'assignee_membership_id');
     }
 }
