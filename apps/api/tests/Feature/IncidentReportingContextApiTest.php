@@ -239,21 +239,27 @@ class IncidentReportingContextApiTest extends TestCase
         $this->assertSame([
             'api/v1/incidents/reporting-context/laboratories',
             'api/v1/incidents/reporting-context/laboratories/{laboratoryId}/devices',
+            'api/v1/incidents/assignee-candidates',
             'api/v1/incidents/submissions/{submissionId}',
             'api/v1/incidents',
             'api/v1/incidents',
             'api/v1/incidents/{incidentId}',
             'api/v1/incidents/{incidentId}',
+            'api/v1/incidents/{incidentId}/assignments',
         ], $routes->map(fn ($route): string => $route->uri())->all());
         $this->assertContains('permission:incidents.create', $routes[0]->gatherMiddleware());
         $this->assertContains('permission:incidents.create', $routes[1]->gatherMiddleware());
-        $this->assertContains('permission:incidents.view', $routes[2]->gatherMiddleware());
+        $this->assertContains('permission:incidents.assign', $routes[2]->gatherMiddleware());
         $this->assertContains('permission:incidents.view', $routes[3]->gatherMiddleware());
-        $this->assertContains('permission:incidents.create', $routes[4]->gatherMiddleware());
-        $this->assertContains('permission:incidents.view', $routes[5]->gatherMiddleware());
+        $this->assertContains('permission:incidents.view', $routes[4]->gatherMiddleware());
+        $this->assertContains('permission:incidents.create', $routes[5]->gatherMiddleware());
         $this->assertContains('permission:incidents.view', $routes[6]->gatherMiddleware());
-        $this->assertContains('permission:incidents.update', $routes[6]->gatherMiddleware());
-        $this->assertContains('permission:incidents.assign', $routes[6]->gatherMiddleware());
+        $this->assertContains('permission:incidents.view', $routes[7]->gatherMiddleware());
+        $this->assertContains('permission:incidents.update', $routes[7]->gatherMiddleware());
+        $this->assertContains('permission:incidents.assign', $routes[7]->gatherMiddleware());
+        $this->assertContains('permission:incidents.view', $routes[8]->gatherMiddleware());
+        $this->assertContains('permission:incidents.assign', $routes[8]->gatherMiddleware());
+        $this->assertNotContains('permission:incidents.view', $routes[2]->gatherMiddleware());
         $this->assertNotContains('permission:laboratories.view', $routes[0]->gatherMiddleware());
         $this->assertNotContains('permission:devices.view', $routes[1]->gatherMiddleware());
 
