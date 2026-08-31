@@ -62,6 +62,8 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:incidents.create');
         Route::get('incidents/reporting-context/laboratories/{laboratoryId}/devices', [IncidentController::class, 'reportingDevices'])
             ->middleware('permission:incidents.create');
+        Route::get('incidents/assignee-candidates', [IncidentController::class, 'assigneeCandidates'])
+            ->middleware('permission:incidents.assign');
         Route::get('incidents/submissions/{submissionId}', [IncidentController::class, 'submission'])
             ->middleware('permission:incidents.view');
         Route::get('incidents', [IncidentController::class, 'index'])
@@ -74,6 +76,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware([
                 'permission:incidents.view',
                 'permission:incidents.update',
+                'permission:incidents.assign',
+                RequireIncidentVersionPrecondition::class,
+            ]);
+        Route::post('incidents/{incidentId}/assignments', [IncidentController::class, 'assign'])
+            ->middleware([
+                'permission:incidents.view',
                 'permission:incidents.assign',
                 RequireIncidentVersionPrecondition::class,
             ]);

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.6.0
+  version: 0.7.0
   description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident endpoints.
 servers:
   - url: http://localhost:8000/api/v1
@@ -483,6 +483,35 @@ paths:
         '404': { $ref: '#/components/responses/IncidentReportingLaboratoryNotFound' }
         '409': { $ref: '#/components/responses/MembershipContextConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /incidents/assignee-candidates:
+    get:
+      operationId: listIncidentAssigneeCandidates
+      summary: List eligible Incident assignee memberships
+      description: Requires only `incidents.assign`. Returns active memberships in the current School whose active User has effective `incidents.update`; role names are never assignment authority. Results expose only membership ID plus User ID/name and are ordered by normalized User name then membership ULID.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: search
+          in: query
+          description: Optional trimmed case-insensitive literal substring search over User name only. Percent, underscore, and backslash are not wildcards.
+          schema: { type: string, minLength: 2, maxLength: 100 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Current-School eligible assignee membership page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentAssigneeCandidateCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
   /incidents/submissions/{submissionId}:
     parameters:
       - name: submissionId
@@ -633,6 +662,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/IncidentNotFound' }
         '409': { $ref: '#/components/responses/IncidentCorrectionConflict' }
+        '412': { $ref: '#/components/responses/IncidentVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
+  /incidents/{incidentId}/assignments:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        description: Incident ULID resolved through the normal current-School reporter-own or incidents.view-all row policy.
+        schema: { type: string, format: ulid }
+    post:
+      operationId: assignIncident
+      summary: Initially assign or reassign an Incident
+      description: Requires `incidents.view`, `incidents.assign`, and a current strong Incident If-Match. Initial assignment is allowed only from triaged and atomically enters assigned. Reassignment is allowed only while assigned or in_progress, preserves status and first assignment/start timestamps, and requires a 5-1000 character reason. Assigning the current membership is a version-protected effective no-op even when a reason is supplied.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignIncidentRequest' }
+      responses:
+        '200':
+          description: Current Incident after initial assignment, reassignment, or same-assignee no-op
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentAssignmentNotFound' }
+        '409': { $ref: '#/components/responses/IncidentAssignmentConflict' }
         '412': { $ref: '#/components/responses/IncidentVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
@@ -936,8 +1001,24 @@ components:
             status: { value: { message: The operation is unavailable in the current Incident status., code: INCIDENT_STATUS_CONFLICT } }
             laboratoryIneligible: { value: { message: The Laboratory is not eligible for Incident reporting., code: INCIDENT_LABORATORY_INELIGIBLE } }
             deviceIneligible: { value: { message: The Device is not eligible for this Incident., code: INCIDENT_DEVICE_NOT_ELIGIBLE } }
+    IncidentAssignmentNotFound:
+      description: The Incident is not visible, or the requested assignee membership is unknown or outside the current School
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            incident: { value: { message: Incident not found., code: INCIDENT_NOT_FOUND } }
+            assignee: { value: { message: The Incident assignee was not found., code: INCIDENT_ASSIGNEE_NOT_FOUND } }
+    IncidentAssignmentConflict:
+      description: Membership context is unresolved, the current Incident status does not accept assignment, or the requested same-School membership/User is not currently eligible
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            status: { value: { message: The operation is unavailable in the current Incident status., code: INCIDENT_STATUS_CONFLICT } }
+            assigneeIneligible: { value: { message: The Incident assignee is not eligible., code: INCIDENT_ASSIGNEE_INELIGIBLE } }
     IncidentPreconditionRequired:
-      description: Incident PATCH is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
+      description: An Incident mutation is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
@@ -1373,6 +1454,28 @@ components:
           required: [hasMore]
           properties:
             hasMore: { type: boolean, description: True only when a fully eligible matching twenty-first row exists; refine search rather than paginate. }
+    IncidentAssigneeCandidate:
+      type: object
+      additionalProperties: false
+      required: [membershipId, user]
+      properties:
+        membershipId: { type: string, format: ulid, readOnly: true }
+        user:
+          type: object
+          additionalProperties: false
+          required: [id, name]
+          properties:
+            id: { type: string, format: ulid, readOnly: true }
+            name: { type: string, maxLength: 255, readOnly: true }
+    IncidentAssigneeCandidateCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IncidentAssigneeCandidate' }
+        meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
     IncidentListItem:
       type: object
       additionalProperties: false
@@ -1495,6 +1598,19 @@ components:
           type: string
           format: date-time
           description: RFC3339 observation time no later than five minutes after server receipt; timezone-offset equivalents are canonicalized to UTC.
+    AssignIncidentRequest:
+      type: object
+      additionalProperties: false
+      required: [assigneeMembershipId]
+      properties:
+        assigneeMembershipId:
+          type: string
+          format: ulid
+          description: Same-School SchoolMembership candidate. Input is trimmed and canonicalized to lowercase before lookup.
+        reason:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Optional for initial assignment and ignored by same-assignee no-op. Reassignment to a different membership requires 5-1000 normalized characters.
     IncidentResponse:
       type: object
       additionalProperties: false
