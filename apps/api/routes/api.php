@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
+use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
@@ -69,5 +70,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:incidents.create');
         Route::get('incidents/{incidentId}', [IncidentController::class, 'show'])
             ->middleware('permission:incidents.view');
+        Route::patch('incidents/{incidentId}', [IncidentController::class, 'update'])
+            ->middleware([
+                'permission:incidents.view',
+                'permission:incidents.update',
+                'permission:incidents.assign',
+                RequireIncidentVersionPrecondition::class,
+            ]);
     });
 });

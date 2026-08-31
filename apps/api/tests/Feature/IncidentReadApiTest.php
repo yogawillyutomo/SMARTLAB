@@ -432,7 +432,8 @@ class IncidentReadApiTest extends TestCase
     public function test_b1_detail_route_keeps_its_exact_path_and_permission(): void
     {
         $route = collect(Route::getRoutes()->getRoutes())
-            ->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents/{incidentId}');
+            ->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents/{incidentId}'
+                && in_array('GET', $route->methods(), true));
         $this->assertSame(['GET', 'HEAD'], $route->methods());
         $this->assertSame('api/v1/incidents/{incidentId}', $route->uri());
         $this->assertContains('auth:sanctum', $route->gatherMiddleware());

@@ -243,6 +243,7 @@ class IncidentReportingContextApiTest extends TestCase
             'api/v1/incidents',
             'api/v1/incidents',
             'api/v1/incidents/{incidentId}',
+            'api/v1/incidents/{incidentId}',
         ], $routes->map(fn ($route): string => $route->uri())->all());
         $this->assertContains('permission:incidents.create', $routes[0]->gatherMiddleware());
         $this->assertContains('permission:incidents.create', $routes[1]->gatherMiddleware());
@@ -250,6 +251,9 @@ class IncidentReportingContextApiTest extends TestCase
         $this->assertContains('permission:incidents.view', $routes[3]->gatherMiddleware());
         $this->assertContains('permission:incidents.create', $routes[4]->gatherMiddleware());
         $this->assertContains('permission:incidents.view', $routes[5]->gatherMiddleware());
+        $this->assertContains('permission:incidents.view', $routes[6]->gatherMiddleware());
+        $this->assertContains('permission:incidents.update', $routes[6]->gatherMiddleware());
+        $this->assertContains('permission:incidents.assign', $routes[6]->gatherMiddleware());
         $this->assertNotContains('permission:laboratories.view', $routes[0]->gatherMiddleware());
         $this->assertNotContains('permission:devices.view', $routes[1]->gatherMiddleware());
 
