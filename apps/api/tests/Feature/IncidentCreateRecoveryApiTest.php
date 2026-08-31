@@ -55,7 +55,8 @@ class IncidentCreateRecoveryApiTest extends TestCase
         $routes = collect(Route::getRoutes()->getRoutes());
         $recovery = $routes->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents/submissions/{submissionId}');
         $create = $routes->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents' && in_array('POST', $route->methods(), true));
-        $detail = $routes->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents/{incidentId}');
+        $detail = $routes->sole(fn ($route): bool => $route->uri() === 'api/v1/incidents/{incidentId}'
+            && in_array('GET', $route->methods(), true));
 
         $this->assertSame(['GET', 'HEAD'], $recovery->methods());
         $this->assertContains('permission:incidents.view', $recovery->gatherMiddleware());

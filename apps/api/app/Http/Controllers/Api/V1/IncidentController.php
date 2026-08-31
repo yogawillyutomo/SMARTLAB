@@ -3,25 +3,31 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Incident\IncidentCorrectionService;
 use App\Application\Incident\IncidentCreationService;
 use App\Application\Incident\IncidentListQueryService;
 use App\Application\Incident\IncidentQueryService;
 use App\Application\Incident\IncidentReportingContextQueryService;
 use App\Application\Incident\IncidentSubmissionQueryService;
+use App\Domain\Incident\IncidentCorrectionPayloadNormalizer;
 use App\Domain\Incident\IncidentCreatePayloadValidationException;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Requests\CreateIncidentRequest;
 use App\Http\Requests\ListIncidentReportingDevicesRequest;
 use App\Http\Requests\ListIncidentReportingLaboratoriesRequest;
 use App\Http\Requests\ListIncidentsRequest;
+use App\Http\Requests\UpdateIncidentRequest;
 use App\Http\Resources\IncidentReportingDeviceResource;
 use App\Http\Resources\IncidentReportingLaboratoryResource;
 use App\Http\Resources\IncidentResource;
 use App\Http\Resources\IncidentSummaryResource;
 use App\Models\Incident;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 class IncidentController extends Controller
 {
@@ -94,6 +100,30 @@ class IncidentController extends Controller
 
     public function show(Request $request, string $incidentId, IncidentQueryService $queries): JsonResponse
     {
+        $incident = $queries->find($this->context($request), $incidentId);
+
+        return $this->incidentResponse($incident, $request);
+    }
+
+    public function update(
+        UpdateIncidentRequest $request,
+        string $incidentId,
+        IncidentCorrectionPayloadNormalizer $normalizer,
+        IncidentCorrectionService $corrections,
+        IncidentQueryService $queries,
+    ): JsonResponse {
+        try {
+            $payload = $normalizer->normalize($request->businessPayload(), CarbonImmutable::now('UTC'));
+        } catch (InvalidArgumentException $exception) {
+            throw ValidationException::withMessages(['payload' => $exception->getMessage()]);
+        }
+
+        $corrections->correct(
+            $this->context($request),
+            $incidentId,
+            (int) $request->attributes->get(RequireIncidentVersionPrecondition::ATTRIBUTE),
+            $payload,
+        );
         $incident = $queries->find($this->context($request), $incidentId);
 
         return $this->incidentResponse($incident, $request);

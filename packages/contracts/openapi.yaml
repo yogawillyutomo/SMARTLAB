@@ -607,6 +607,35 @@ paths:
           $ref: '#/components/responses/IncidentNotFound'
         '409':
           $ref: '#/components/responses/MembershipContextConflict'
+    patch:
+      operationId: updateReportedIncident
+      summary: Correct reporting facts while an Incident remains reported
+      description: Requires `incidents.view`, `incidents.update`, and `incidents.assign`. The body must be a nonempty subset of the exact ten correction fields and query parameters are rejected. Canonically equivalent requests are successful no-ops that preserve version, updatedAt, snapshots, and event history. Meaningful corrections increment the version once and append one `incident.updated` event. Only reported Incidents may be corrected.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateIncidentRequest' }
+      responses:
+        '200':
+          description: Current full Incident detail after a meaningful correction or canonical no-op
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentNotFound' }
+        '409': { $ref: '#/components/responses/IncidentCorrectionConflict' }
+        '412': { $ref: '#/components/responses/IncidentVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
   /laboratories/{laboratoryId}/layouts:
     parameters:
       - name: laboratoryId
@@ -817,6 +846,14 @@ components:
       bearerFormat: Sanctum
       description: Sanctum personal access token for mobile or API token clients.
   parameters:
+    IncidentIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exactly one strong quoted positive integer equal to the Incident version, for example `"1"`. Missing, weak, wildcard, unquoted, multiple, whitespace-padded, zero, negative, overflow, and malformed values return 428. A valid but stale value returns 412.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     LayoutIfMatch:
       name: If-Match
       in: header
@@ -890,6 +927,31 @@ components:
             laboratoryIneligible: { value: { message: The Laboratory is not eligible for Incident reporting., code: INCIDENT_LABORATORY_INELIGIBLE } }
             deviceIneligible: { value: { message: The Device is not eligible for this Incident., code: INCIDENT_DEVICE_NOT_ELIGIBLE } }
             ticketExhausted: { value: { message: The Incident ticket sequence is exhausted for this School and year., code: INCIDENT_TICKET_SEQUENCE_EXHAUSTED } }
+    IncidentCorrectionConflict:
+      description: Membership context is unresolved, the Incident is no longer reported, or the effective corrected Laboratory or Device is ineligible
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            status: { value: { message: The operation is unavailable in the current Incident status., code: INCIDENT_STATUS_CONFLICT } }
+            laboratoryIneligible: { value: { message: The Laboratory is not eligible for Incident reporting., code: INCIDENT_LABORATORY_INELIGIBLE } }
+            deviceIneligible: { value: { message: The Device is not eligible for this Incident., code: INCIDENT_DEVICE_NOT_ELIGIBLE } }
+    IncidentPreconditionRequired:
+      description: Incident PATCH is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: A valid If-Match Incident version is required.
+            code: PRECONDITION_REQUIRED
+    IncidentVersionConflict:
+      description: The supplied syntactically valid Incident version is stale, including stale routing evidence
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: The Incident has changed since it was loaded.
+            code: INCIDENT_VERSION_CONFLICT
     IncidentReportingLaboratoryNotFound:
       description: The reporting-context Laboratory identifier is malformed, unknown, cross-School, or inactive
       content:
@@ -1396,6 +1458,43 @@ components:
           type: string
           format: date-time
           description: RFC3339 observation time no later than five minutes after server receipt; timezone-offset equivalents are canonicalized to UTC for fingerprinting.
+    UpdateIncidentRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 10
+      description: Nonempty reported-state correction. Omitted fields remain unchanged; values are normalized before equality and no create defaults are applied.
+      properties:
+        laboratoryId: { type: string, format: ulid }
+        deviceId:
+          anyOf:
+            - { type: string, format: ulid }
+            - { type: string, pattern: '^\s*$' }
+            - { type: 'null' }
+          description: A blank string or null is canonicalized to null.
+        category:
+          type: string
+          pattern: '^\s*(?:[Hh][Aa][Rr][Dd][Ww][Aa][Rr][Ee]|[Ss][Oo][Ff][Tt][Ww][Aa][Rr][Ee]|[Nn][Ee][Tt][Ww][Oo][Rr][Kk]|[Ee][Ll][Ee][Cc][Tt][Rr][Ii][Cc][Aa][Ll]|[Pp][Ee][Rr][Ii][Pp][Hh][Ee][Rr][Aa][Ll]|[Ff][Aa][Cc][Ii][Ll][Ii][Tt][Yy]|[Cc][Ll][Ee][Aa][Nn][Ll][Ii][Nn][Ee][Ss][Ss]|[Ss][Ee][Cc][Uu][Rr][Ii][Tt][Yy]|[Oo][Tt][Hh][Ee][Rr])\s*$'
+          description: "Case-insensitive value normalized to lowercase: hardware, software, network, electrical, peripheral, facility, cleanliness, security, or other."
+        priority:
+          type: string
+          pattern: '^\s*(?:[Ll][Oo][Ww]|[Nn][Oo][Rr][Mm][Aa][Ll]|[Hh][Ii][Gg][Hh]|[Cc][Rr][Ii][Tt][Ii][Cc][Aa][Ll])\s*$'
+          description: "Case-insensitive value normalized to lowercase: low, normal, high, or critical."
+        title: { type: string, minLength: 5, maxLength: 200 }
+        description: { type: string, minLength: 10, maxLength: 4000 }
+        impact:
+          type: [string, 'null']
+          maxLength: 2000
+          description: Blank text or null is canonicalized to null.
+        blocksLaboratoryOperation: { type: boolean }
+        stepsTaken:
+          type: [string, 'null']
+          maxLength: 2000
+          description: Blank text or null is canonicalized to null.
+        occurredAt:
+          type: string
+          format: date-time
+          description: RFC3339 observation time no later than five minutes after server receipt; timezone-offset equivalents are canonicalized to UTC.
     IncidentResponse:
       type: object
       additionalProperties: false
