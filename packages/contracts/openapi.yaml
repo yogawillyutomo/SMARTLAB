@@ -262,6 +262,9 @@ paths:
       responses:
         '201':
           description: Device created
+          headers:
+            ETag:
+              $ref: '#/components/headers/DeviceETag'
           content:
             application/json:
               schema:
