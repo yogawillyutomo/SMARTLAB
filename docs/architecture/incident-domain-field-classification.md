@@ -72,9 +72,9 @@ This companion classifies the current local prototype and the proposed canonical
 | `steps_taken` | `stepsTaken` | no | administrative PATCH while reported | create/PATCH allowlist; PATCH requires update + assign | every change captured in event |
 | `occurred_at` | `occurredAt` | yes | administrative PATCH while reported | client observation time; PATCH requires update + assign | event evidence |
 | `status` | `status` | yes | assignment/transition only | lifecycle graph | every transition captured |
-| `assignee_membership_id` | `assignee.membershipId` | path-dependent | assignment only | eligible same-School membership | required in assigned/in_progress; retained through resolved/verified/closed when present |
-| `assignee_user_id_snapshot` | `assignee.userId` | path-dependent | assignment only | assignee User at assignment | all-null/all-present invariant; events retain prior |
-| `assignee_name_snapshot` | `assignee.name` | path-dependent | assignment only | assignee User at assignment | all-null/all-present invariant; events retain prior |
+| `assignee_membership_id` | `assignee.membershipId` | path-dependent nullable live FK | assignment only | eligible same-School membership | required for progress-capable assigned/in_progress state; may be nulled by membership deletion while snapshots retain logical current assignee; recovery is reassignment, never implicit unassignment |
+| `assignee_user_id_snapshot` | `assignee.userId` | path-dependent | assignment only | assignee User at assignment | all-null/all-present current-assignee invariant; retained through resolved/verified/closed and across live-membership deletion; events retain prior |
+| `assignee_name_snapshot` | `assignee.name` | path-dependent | assignment only | assignee User at assignment | all-null/all-present current-assignee invariant; retained through resolved/verified/closed and across live-membership deletion; events retain prior |
 | `triage_summary` | `triageSummary` | triaged onward | triage transition only | approver command | triage event retains value |
 | `resolution_summary` | `resolutionSummary` | resolved/verified/closed | resolve transition; cleared on reopen | resolver command | prior summaries remain in events |
 | `rejection_reason` | `rejectionReason` | rejected only | reject transition only | approver command | rejection event retains value |
@@ -98,7 +98,7 @@ This companion classifies the current local prototype and the proposed canonical
 | Reporter own-scope | Incident School + `reporter_user_id_snapshot` + current User | no | used when caller lacks `incidents.view-all` |
 | Laboratory display | Incident Laboratory snapshots | no | does not silently replace with current Laboratory name |
 | Device display | Incident Device snapshots | no | null for Laboratory-level report; does not claim present physical location |
-| Assignee display | current Incident assignee snapshots | no | may remain present through resolved/verified/closed; event history reconstructs prior assignments |
+| Assignee display | current Incident assignee snapshots plus immutable assignment history when the live membership FK is null | no | snapshots remain current accountable-assignee display authority through resolved/verified/closed; latest assigned/reassigned history reconstructs the missing membership ID after live-membership deletion |
 | Participant comment list | only `incident.comment_added` events | no | `/comments` exposes id, Incident, safe actor snapshot, text, and time only |
 | Internal timeline | all typed Incident events | no | `/events` requires view + view-history and normal own/view-all row scope; never persisted as mutable JSON array |
 | Work Order count/list | future Work Order query by `incident_id` | no | omitted from Incident v1 DTO |
@@ -132,9 +132,10 @@ Event payloads contain only the typed data required by the parent RFC. Full payl
 | Concern | Classification | Decision |
 | --- | --- | --- |
 | Free-text technician name | Rejected legacy/local field | never canonical |
-| Current membership reference | Canonical Incident | nullable on pre-assignment/simple-triage path; retained after assignment |
-| Current assignee User/name snapshot | Canonical immutable snapshot on root | represents current accountable assignee through resolved/verified/closed when present |
-| Previous assignee | Incident event/history only | preserved in assigned/reassigned event payload |
+| Current membership reference | Canonical Incident | nullable on pre-assignment/simple-triage path and nullable by live-membership deletion; a null live FK does not erase snapshot-backed logical current assignment |
+| Current assignee User/name snapshot | Canonical immutable snapshot on root | represents current accountable assignee through resolved/verified/closed and survives deletion/ineligibility of the live membership |
+| Previous assignee | Incident event/history only | preserved in assigned/reassigned event payload; latest assignment history supplies the previous membership ID when the live FK was nulled |
+| Resolved reassignment recovery | Canonical Incident + event history | allowed only when current-assignee snapshots already exist; status and resolution evidence remain unchanged; different eligible assignee plus required reason; exactly one `incident.reassigned` event |
 | Role name | Derived projection/rejected authority | eligibility uses effective `incidents.update`, not role key |
 | Email, phone, NIP/NIS | Rejected from Incident projection | not required for assignment UI/API |
 | Unassignment | Future/deferred | excluded from v1; reassignment is the recovery path |
@@ -148,7 +149,7 @@ Event payloads contain only the typed data required by the parent RFC. Full payl
 | Resolution summary | Canonical Incident + event history | required for every resolve edge; current value cleared on reopen |
 | Verification note | Canonical Incident + event history | required on `resolved -> verified`; current value cleared on reopen |
 | Reopen reason | Incident event/history only | required on path-aware `resolved -> in_progress` or `resolved -> triaged` |
-| Reopen destination | Incident event/history only | `in_progress` iff assignee present; otherwise `triaged`; event records statuses, assignee presence, and any first-start initialization |
+| Reopen destination | Incident event/history only | snapshot-present current assignee selects `in_progress`, snapshot-absent selects `triaged`; `in_progress` additionally requires an eligible live current membership, otherwise 409 assignee-ineligible and reassignment recovery first; event records statuses, assignee presence, and any first-start initialization |
 | Reassignment reason | Incident event/history only | required for a different assignee |
 | Waiting for spare parts | Work Order-owned | no Incident enum/field |
 | Repair diagnosis/action | Work Order-owned | rejected from Incident payload |
