@@ -5,7 +5,6 @@ namespace App\Application\Incident;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Incident\IncidentAggregateValidator;
 use App\Domain\Incident\IncidentDomainException;
-use App\Domain\Incident\IncidentEventType;
 use App\Domain\Incident\IncidentLifecyclePolicy;
 use App\Domain\Incident\IncidentPriority;
 use App\Domain\Incident\IncidentStatus;
