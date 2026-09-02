@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.7.0
+  version: 0.8.0
   description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident endpoints.
 servers:
   - url: http://localhost:8000/api/v1
@@ -262,9 +262,6 @@ paths:
       responses:
         '201':
           description: Device created
-          headers:
-            ETag:
-              $ref: '#/components/headers/DeviceETag'
           content:
             application/json:
               schema:
@@ -701,6 +698,42 @@ paths:
         '412': { $ref: '#/components/responses/IncidentVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
+  /incidents/{incidentId}/transitions:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        description: Incident ULID resolved through the normal current-School reporter-own or incidents.view-all row policy.
+        schema: { type: string, format: ulid }
+    post:
+      operationId: transitionIncident
+      summary: Transition an Incident through the canonical lifecycle graph
+      description: Requires `incidents.view` plus a current strong Incident If-Match. The server locks the visible Incident, rejects stale versions before edge or eligibility oracles, resolves the exact lifecycle edge, and then requires that edge's permission (`incidents.approve` or `incidents.update`). Progress edges requiring `incidents.update` additionally require the actor to be the current live assignee or to hold `incidents.assign` as an administrative override. Every transition into `in_progress` requires the canonical current-assignee snapshots plus a live same-School active membership/User that still has effective `incidents.update`. Resolved reopen is snapshot-path-aware: snapshot-present Incidents reopen only to `in_progress`; snapshot-absent Incidents reopen only to `triaged`. Broken snapshot-backed assignments return `INCIDENT_ASSIGNEE_INELIGIBLE` and must be recovered through the assignment endpoint before retrying with a fresh version.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionIncidentRequest' }
+      responses:
+        '200':
+          description: Current Incident after one canonical lifecycle transition; version increments exactly once and one typed Incident event is appended atomically.
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentNotFound' }
+        '409': { $ref: '#/components/responses/IncidentTransitionConflict' }
+        '412': { $ref: '#/components/responses/IncidentVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
   /laboratories/{laboratoryId}/layouts:
     parameters:
       - name: laboratoryId
@@ -1016,6 +1049,14 @@ components:
           schema: { $ref: '#/components/schemas/ApiError' }
           examples:
             status: { value: { message: The operation is unavailable in the current Incident status., code: INCIDENT_STATUS_CONFLICT } }
+            assigneeIneligible: { value: { message: The Incident assignee is not eligible., code: INCIDENT_ASSIGNEE_INELIGIBLE } }
+    IncidentTransitionConflict:
+      description: The requested lifecycle edge is invalid, or a snapshot-present transition into in_progress cannot use the current live assignee because it is missing or no longer progress-eligible.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            invalidTransition: { value: { message: The requested Incident transition is not allowed., code: INCIDENT_INVALID_TRANSITION } }
             assigneeIneligible: { value: { message: The Incident assignee is not eligible., code: INCIDENT_ASSIGNEE_INELIGIBLE } }
     IncidentPreconditionRequired:
       description: An Incident mutation is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
@@ -1611,6 +1652,43 @@ components:
           type: [string, 'null']
           maxLength: 1000
           description: Optional for initial assignment and ignored by same-assignee no-op. Reassignment to a different membership requires 5-1000 normalized characters.
+    TransitionIncidentRequest:
+      type: object
+      additionalProperties: false
+      required: [toStatus]
+      description: Closed lifecycle command union. Structural validation occurs before Incident visibility; edge-specific allowed/required fields and minimum lengths are evaluated only after the locked lifecycle edge and its exact permission are resolved.
+      properties:
+        toStatus:
+          type: string
+          enum: [reported, triaged, assigned, in_progress, resolved, verified, closed, rejected]
+          description: Requested lifecycle target. Same-status, unsupported, and triaged-to-assigned requests reach the edge resolver and return `INCIDENT_INVALID_TRANSITION` rather than structural validation errors.
+        triageSummary:
+          type: [string, 'null']
+          maxLength: 2000
+          description: Required with 1-2000 normalized characters for reported-to-triaged only.
+        priority:
+          type: string
+          enum: [low, normal, high, critical]
+          description: Optional finalized priority for reported-to-triaged only.
+        impact:
+          type: [string, 'null']
+          maxLength: 2000
+          description: Optional finalized impact for reported-to-triaged only; blank text is normalized to null.
+        blocksLaboratoryOperation:
+          type: boolean
+          description: Optional finalized blocking flag for reported-to-triaged only.
+        resolutionSummary:
+          type: [string, 'null']
+          maxLength: 4000
+          description: Required with 5-4000 normalized characters for every resolve edge.
+        verificationNote:
+          type: [string, 'null']
+          maxLength: 2000
+          description: Required with 1-2000 normalized characters for resolved-to-verified.
+        reason:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Required with 5-1000 normalized characters for rejection and both path-aware reopen edges.
     IncidentResponse:
       type: object
       additionalProperties: false
@@ -2296,7 +2374,7 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, INCIDENT_NOT_FOUND, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
+          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, INCIDENT_NOT_FOUND, INCIDENT_INVALID_TRANSITION, INCIDENT_ASSIGNEE_INELIGIBLE, INCIDENT_VERSION_CONFLICT, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
     ValidationError:
       type: object
       required: [message, code, errors]
