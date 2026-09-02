@@ -90,5 +90,13 @@ Route::prefix('v1')->group(function (): void {
                 'permission:incidents.view',
                 RequireIncidentVersionPrecondition::class,
             ]);
+        Route::get('incidents/{incidentId}/comments', [IncidentController::class, 'comments'])
+            ->middleware('permission:incidents.view');
+        Route::post('incidents/{incidentId}/comments', [IncidentController::class, 'comment'])
+            ->middleware([
+                'permission:incidents.view',
+                'permission:incidents.comment',
+                RequireIncidentVersionPrecondition::class,
+            ]);
     });
 });
