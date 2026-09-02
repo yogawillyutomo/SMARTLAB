@@ -280,11 +280,13 @@ The exact graph is:
 | `assigned` | `resolved` | `incidents.update` | same ownership rule | `resolutionSummary` |
 | `in_progress` | `resolved` | `incidents.update` | same ownership rule | `resolutionSummary` |
 | `resolved` | `verified` | `incidents.approve` | visible record | `verificationNote` |
-| `resolved` | `in_progress` | `incidents.approve` | reopen only when a current assignee is present | `reason` |
-| `resolved` | `triaged` | `incidents.approve` | reopen only when no current assignee is present | `reason` |
+| `resolved` | `in_progress` | `incidents.approve` | reopen only when current-assignee snapshots are present and the live assignee remains progress-eligible | `reason` |
+| `resolved` | `triaged` | `incidents.approve` | reopen only when current-assignee snapshots are absent | `reason` |
 | `verified` | `closed` | `incidents.approve` | visible record | no data |
 
-No other edge exists. The two reopen edges are mutually exclusive and path-aware. A resolved Incident with an assignee cannot transition to `triaged`; a resolved Incident without an assignee cannot transition to `in_progress`. Either mismatch returns `409 INCIDENT_INVALID_TRANSITION`, and `in_progress` can never have a null assignee. `closed` and `rejected` reject PATCH, assignment, transition, and comment commands. A closed Incident cannot reopen in v1.
+No other edge exists. The two reopen edges are mutually exclusive and path-aware. For reopen edge selection, "current assignee present" means the canonical current-assignee snapshots are present on the Incident root; it is not inferred only from the nullable live `assignee_membership_id` foreign key. A resolved Incident with current-assignee snapshots cannot transition to `triaged`, including when the live membership reference was nulled by deletion. A resolved Incident without current-assignee snapshots cannot transition to `in_progress`. Either target mismatch returns `409 INCIDENT_INVALID_TRANSITION`.
+
+A snapshot-present `resolved -> in_progress` edge additionally requires the current live assignee membership to remain progress-eligible: the live membership exists in the same School, still identifies the snapshotted assignee User, has `status = active`, its User has `status = active`, and it still has effective `incidents.update`. Failure of that edge-specific eligibility returns `409 INCIDENT_ASSIGNEE_INELIGIBLE`; it does not fall back to `triaged` and does not clear assignment state. An administrator with `incidents.assign` first uses the documented resolved-state reassignment recovery, then retries the reopen with a fresh Incident version. A successful transition into `in_progress` always requires an eligible live assignee. If that live membership is later deleted or becomes ineligible, the persisted Incident may become a degraded snapshot-backed assignment state; further assignee-owned progress is blocked until reassignment recovery restores an eligible live assignee. `closed` and `rejected` reject PATCH, assignment, transition, and comment commands. A closed Incident cannot reopen in v1.
 
 `reported -> triaged` may finalize `priority`, `impact`, and `blocksLaboratoryOperation` atomically with one `incident.triaged` event and one version increment. It cannot change subject, title, description, category, steps taken, or occurrence time. Resolution never implicitly clears the current assignee; an assignee is retained through `resolved`, `verified`, and `closed`.
 
@@ -301,9 +303,11 @@ An eligible assignee membership:
 - belongs to a User with `status = active`;
 - has effective `incidents.update` at assignment time.
 
-Initial assignment is allowed only from `triaged`; it atomically sets assignee and status `assigned`. Reassignment is allowed only while `assigned` or `in_progress`; status remains unchanged. Reassignment requires a reason. V1 has no unassignment. Assigning the same current membership is an effective no-op, even if a reason is supplied.
+Initial assignment is allowed only from `triaged`; it atomically sets assignee and status `assigned`. Reassignment is allowed while `assigned` or `in_progress`. It is also allowed while `resolved` only when canonical current-assignee snapshots are already present; this is assignee-recovery reassignment, never initial assignment from `resolved`. A `resolved` Incident without current-assignee snapshots rejects assignment with `409 INCIDENT_STATUS_CONFLICT`. Reassignment keeps the current status unchanged, requires a reason, preserves the original `assignedAt`, and, when status is `resolved`, also preserves `resolutionSummary`, `resolvedAt`, and any prior `startedAt`. V1 has no unassignment. Assigning the same current live membership in an otherwise legal assignment/reassignment state is an effective no-op, even if a reason is supplied.
 
-If the assignee later becomes inactive or loses `incidents.update`, historical snapshots remain readable and the Incident remains assigned. That membership cannot progress the Incident through middleware/policy. An actor with `incidents.assign` reassigns it to an eligible membership.
+If the live assignee membership is later deleted, becomes inactive, belongs to an inactive User, or loses effective `incidents.update`, canonical assignee snapshots remain readable and the Incident remains logically assigned. A missing live foreign key therefore does not turn a previously assigned Incident into the no-assignee reopen path. Progress transitions that require the current assignee cannot proceed until an actor with `incidents.assign` reassigns the Incident to an eligible membership. Recovery reassignment is available in `assigned`, `in_progress`, and snapshot-present `resolved`.
+
+When the live `assignee_membership_id` has been nulled by deletion, the `previousAssignee.membershipId` required by `incident.reassigned` is reconstructed from the latest immutable `incident.assigned` or `incident.reassigned` event for that Incident. The root User/name snapshots remain the current assignee display authority; immutable event lookup supplies only the missing historical membership identifier and does not grant authorization or widen row visibility.
 
 The candidate endpoint is:
 
@@ -394,6 +398,10 @@ Transition permission is edge-dependent and therefore uses this distinct precede
 
 This ordering is security-significant. A non-visible Incident returns `404 INCIDENT_NOT_FOUND` before its current status or edge permission can be inferred. For a visible Incident, an invalid edge returns 409 while a valid edge lacking authority returns 403. A syntactically valid stale `If-Match` returns `412 INCIDENT_VERSION_CONFLICT` after the visible row is locked but before current-edge resolution or permission evaluation.
 
+For reopen edge resolution, assignee presence is derived from canonical current-assignee snapshots on the locked Incident, not solely from the nullable live membership foreign key. Live assignee existence and progress eligibility are step-13 checks after edge resolution and exact edge-permission evaluation. Therefore a snapshot-present resolved Incident targeting `in_progress` with a missing or ineligible live assignee returns `409 INCIDENT_ASSIGNEE_INELIGIBLE`, while snapshot-present `resolved -> triaged` and snapshot-absent `resolved -> in_progress` remain `409 INCIDENT_INVALID_TRANSITION`.
+
+Transitions that may require current-assignee eligibility may pre-read visible assignee routing before the Incident lock so User and SchoolMembership locks remain before the Incident lock in the canonical lock family. After locking the Incident and checking its version, the service revalidates that the locked Incident still references the pre-read assignee routing before using those locks. A competing assignment/reassignment that commits first changes Incident version, so the stale transition loses with `412 INCIDENT_VERSION_CONFLICT` before edge permission or assignee-eligibility disclosure.
+
 No command introduces a child aggregate version. Every meaningful commit changes the Incident and writes exactly one IncidentEvent in one transaction. A failed event insert rolls back the aggregate change. Being the reporter or current assignee does not substitute for fixed PATCH permissions. After a row is visible and locked, any PATCH outside `reported` returns `409 INCIDENT_STATUS_CONFLICT` regardless of permissions.
 
 ## 15. Effective no-op policy
@@ -477,7 +485,7 @@ Full event history is internal operational evidence. `GET /events` requires both
 | `POST /api/v1/incidents` | `incidents.create` | no | 201 for new Incident; 200 for exact committed submission repeat; Incident DTO + ETag |
 | `GET /api/v1/incidents/{incidentId}` | `incidents.view` | no | visible Incident DTO and ETag |
 | `PATCH /api/v1/incidents/{incidentId}` | `incidents.view` + `incidents.update` + `incidents.assign` | yes | administrative reported-state correction; 200 Incident DTO |
-| `POST /api/v1/incidents/{incidentId}/assignments` | `incidents.view` + `incidents.assign` | yes | initial assignment/reassignment; 200 Incident DTO |
+| `POST /api/v1/incidents/{incidentId}/assignments` | `incidents.view` + `incidents.assign` | yes | initial assignment/reassignment, including resolved assignee-recovery reassignment; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/transitions` | base `incidents.view`; exact edge permission after locked edge resolution | yes | allowed lifecycle edge; 200 Incident DTO |
 | `POST /api/v1/incidents/{incidentId}/comments` | `incidents.view` + `incidents.comment` | yes | 201 participant-safe comment DTO and aggregate ETag |
 | `GET /api/v1/incidents/{incidentId}/comments` | `incidents.view` | no | row-scoped participant-visible comment projection |
