@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\IncidentController;
+use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -97,6 +98,11 @@ Route::prefix('v1')->group(function (): void {
                 'permission:incidents.view',
                 'permission:incidents.comment',
                 RequireIncidentVersionPrecondition::class,
+            ]);
+        Route::get('incidents/{incidentId}/events', [IncidentEventController::class, 'index'])
+            ->middleware([
+                'permission:incidents.view',
+                'permission:incidents.view-history',
             ]);
     });
 });
