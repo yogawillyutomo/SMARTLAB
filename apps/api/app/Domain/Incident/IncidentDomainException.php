@@ -39,6 +39,11 @@ class IncidentDomainException extends RuntimeException
         return new self('The operation is unavailable in the current Incident status.', 'INCIDENT_STATUS_CONFLICT', 409);
     }
 
+    public static function forbidden(): self
+    {
+        return new self('You do not have permission to perform this action.', 'FORBIDDEN', 403);
+    }
+
     public static function incidentNotFound(): self
     {
         return new self('Incident not found.', 'INCIDENT_NOT_FOUND', 404);
