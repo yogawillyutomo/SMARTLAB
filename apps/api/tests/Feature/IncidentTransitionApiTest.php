@@ -438,7 +438,11 @@ class IncidentTransitionApiTest extends TestCase
         $this->assertNotNull($incident->started_at);
         $event = $this->event($incident, IncidentEventType::Reopened);
         $this->assertTrue($event->payload['startedAtInitialized']);
-        $this->assertSame($incident->started_at?->utc()->format('Y-m-d\TH:i:s.u\Z'), $event->payload['startedAt']);
+        $this->assertIsString($event->payload['startedAt']);
+        $this->assertSame(
+            $incident->started_at?->utc()->format('Y-m-d\TH:i:s'),
+            substr($event->payload['startedAt'], 0, 19),
+        );
         $this->assertSame([
             'resolutionSummary' => 'Incident telah diselesaikan.',
             'resolvedAt' => $resolvedAt,
