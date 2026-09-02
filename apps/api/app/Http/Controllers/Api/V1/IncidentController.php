@@ -11,9 +11,11 @@ use App\Application\Incident\IncidentListQueryService;
 use App\Application\Incident\IncidentQueryService;
 use App\Application\Incident\IncidentReportingContextQueryService;
 use App\Application\Incident\IncidentSubmissionQueryService;
+use App\Application\Incident\IncidentTransitionService;
 use App\Domain\Incident\IncidentAssignmentPayloadValidationException;
 use App\Domain\Incident\IncidentCorrectionPayloadNormalizer;
 use App\Domain\Incident\IncidentCreatePayloadValidationException;
+use App\Domain\Incident\IncidentTransitionPayloadValidationException;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Requests\AssignIncidentRequest;
@@ -22,6 +24,7 @@ use App\Http\Requests\ListIncidentAssigneeCandidatesRequest;
 use App\Http\Requests\ListIncidentReportingDevicesRequest;
 use App\Http\Requests\ListIncidentReportingLaboratoriesRequest;
 use App\Http\Requests\ListIncidentsRequest;
+use App\Http\Requests\TransitionIncidentRequest;
 use App\Http\Requests\UpdateIncidentRequest;
 use App\Http\Resources\IncidentAssigneeCandidateResource;
 use App\Http\Resources\IncidentReportingDeviceResource;
@@ -164,6 +167,30 @@ class IncidentController extends Controller
             );
         } catch (IncidentAssignmentPayloadValidationException $exception) {
             throw ValidationException::withMessages(['reason' => $exception->getMessage()]);
+        }
+
+        $incident = $queries->find($context, $incidentId);
+
+        return $this->incidentResponse($incident, $request);
+    }
+
+    public function transition(
+        TransitionIncidentRequest $request,
+        string $incidentId,
+        IncidentTransitionService $transitions,
+        IncidentQueryService $queries,
+    ): JsonResponse {
+        $context = $this->context($request);
+
+        try {
+            $transitions->transition(
+                $context,
+                $incidentId,
+                (int) $request->attributes->get(RequireIncidentVersionPrecondition::ATTRIBUTE),
+                $request->businessPayload(),
+            );
+        } catch (IncidentTransitionPayloadValidationException $exception) {
+            throw ValidationException::withMessages([$exception->field => $exception->getMessage()]);
         }
 
         $incident = $queries->find($context, $incidentId);
