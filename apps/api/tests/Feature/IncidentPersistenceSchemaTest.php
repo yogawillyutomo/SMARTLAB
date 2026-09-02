@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\ManagesIncidentDatabaseTestFailures;
 use Tests\TestCase;
 
@@ -94,6 +95,53 @@ class IncidentPersistenceSchemaTest extends TestCase
         $this->assertNull($incident->device_id);
         $this->assertSame($device->id, $incident->device_id_snapshot);
         $this->assertSame('PC-HISTORY-01', $incident->device_code_snapshot);
+    }
+
+    #[DataProvider('degradedAssigneeStatusProvider')]
+    public function test_live_assignee_delete_allows_snapshot_backed_degraded_operational_state(
+        string $status,
+        bool $inProgress,
+    ): void {
+        [$context, $laboratory] = $this->contextAndLaboratory();
+        $incident = $this->createIncident($context, $laboratory);
+        $assigneeUser = User::factory()->create(['name' => 'Teknisi Snapshot']);
+        $assignee = SchoolMembership::factory()->create([
+            'school_id' => $laboratory->school_id,
+            'user_id' => $assigneeUser->id,
+            'status' => 'active',
+        ]);
+        $effectiveAt = now()->subMinute();
+
+        DB::table('incidents')->where('id', $incident->id)->update([
+            'status' => $status,
+            'triage_summary' => 'Incident sudah ditinjau.',
+            'triaged_at' => $effectiveAt,
+            'assignee_membership_id' => $assignee->id,
+            'assignee_user_id_snapshot' => $assigneeUser->id,
+            'assignee_name_snapshot' => $assigneeUser->name,
+            'assigned_at' => $effectiveAt,
+            'started_at' => $inProgress ? $effectiveAt : null,
+        ]);
+
+        $assigneeId = $assignee->id;
+        $assignee->delete();
+
+        $incident->refresh();
+        $this->assertSame($status, $incident->status->value);
+        $this->assertNull($incident->assignee_membership_id);
+        $this->assertSame($assigneeUser->id, $incident->assignee_user_id_snapshot);
+        $this->assertSame('Teknisi Snapshot', $incident->assignee_name_snapshot);
+        $this->assertNotNull($incident->assigned_at);
+        $this->assertSame($inProgress, $incident->started_at !== null);
+        $this->assertDatabaseMissing('school_memberships', ['id' => $assigneeId]);
+    }
+
+    public static function degradedAssigneeStatusProvider(): array
+    {
+        return [
+            'assigned' => ['assigned', false],
+            'in_progress' => ['in_progress', true],
+        ];
     }
 
     public function test_school_delete_and_incident_delete_are_restricted(): void

@@ -675,7 +675,7 @@ paths:
     post:
       operationId: assignIncident
       summary: Initially assign or reassign an Incident
-      description: Requires `incidents.view`, `incidents.assign`, and a current strong Incident If-Match. Initial assignment is allowed only from triaged and atomically enters assigned. Reassignment is allowed only while assigned or in_progress, preserves status and first assignment/start timestamps, and requires a 5-1000 character reason. Assigning the current membership is a version-protected effective no-op even when a reason is supplied.
+      description: Requires `incidents.view`, `incidents.assign`, and a current strong Incident If-Match. Initial assignment is allowed only from triaged and atomically enters assigned. Reassignment is allowed while assigned or in_progress, and as recovery from resolved only when canonical current-assignee snapshots already exist; resolved without those snapshots cannot be initially assigned. Resolved recovery preserves status, resolution evidence, original assignment time, and any first-start timestamp. If the old live membership reference was nulled by deletion, the previous membership ID is reconstructed from immutable assignment history. Reassignment requires a 5-1000 character reason. Assigning the same current live membership in an otherwise legal state is a version-protected effective no-op even when a reason is supplied.
       security:
         - sanctumSession: []
         - sanctumBearer: []
@@ -688,7 +688,7 @@ paths:
             schema: { $ref: '#/components/schemas/AssignIncidentRequest' }
       responses:
         '200':
-          description: Current Incident after initial assignment, reassignment, or same-assignee no-op
+          description: Current Incident after initial assignment, reassignment/recovery, or same-assignee no-op
           headers:
             ETag: { $ref: '#/components/headers/IncidentETag' }
           content:
