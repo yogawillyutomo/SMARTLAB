@@ -9,10 +9,12 @@ use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Incident\IncidentEventType;
 use App\Domain\Incident\IncidentStatus;
 use App\Models\Incident;
+use App\Models\IncidentEvent;
 use App\Models\SchoolMembership;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 final class IncidentAssignmentService
 {
@@ -76,7 +78,15 @@ final class IncidentAssignmentService
             }
 
             $isInitialAssignment = $incident->status === IncidentStatus::Triaged;
-            $isReassignment = in_array($incident->status, [IncidentStatus::Assigned, IncidentStatus::InProgress], true);
+            $hasAssigneeSnapshots = $incident->assignee_user_id_snapshot !== null
+                && $incident->assignee_name_snapshot !== null;
+            $isResolvedRecovery = $incident->status === IncidentStatus::Resolved
+                && $hasAssigneeSnapshots;
+            $isReassignment = in_array(
+                $incident->status,
+                [IncidentStatus::Assigned, IncidentStatus::InProgress],
+                true,
+            ) || $isResolvedRecovery;
             if (! $isInitialAssignment && ! $isReassignment) {
                 throw IncidentDomainException::statusConflict();
             }
@@ -108,7 +118,7 @@ final class IncidentAssignmentService
                 $eventType = IncidentEventType::Reassigned;
                 $eventPayload = [
                     'previousAssignee' => [
-                        'membershipId' => (string) $incident->assignee_membership_id,
+                        'membershipId' => $this->previousAssigneeMembershipId($incident),
                         'userId' => (string) $incident->assignee_user_id_snapshot,
                         'name' => (string) $incident->assignee_name_snapshot,
                     ],
@@ -136,6 +146,35 @@ final class IncidentAssignmentService
 
             return $incident;
         });
+    }
+
+    private function previousAssigneeMembershipId(Incident $incident): string
+    {
+        if ($incident->assignee_membership_id !== null) {
+            return (string) $incident->assignee_membership_id;
+        }
+
+        $event = IncidentEvent::query()
+            ->where('school_id', $incident->school_id)
+            ->where('incident_id_snapshot', $incident->id)
+            ->whereIn('event_type', [
+                IncidentEventType::Assigned->value,
+                IncidentEventType::Reassigned->value,
+            ])
+            ->orderByDesc('incident_version_after')
+            ->orderByDesc('id')
+            ->first();
+
+        $payloadKey = $event?->event_type === IncidentEventType::Reassigned
+            ? 'newAssignee'
+            : 'assignee';
+        $membershipId = $event?->payload[$payloadKey]['membershipId'] ?? null;
+
+        if (! is_string($membershipId) || $membershipId === '') {
+            throw new LogicException('Current Incident assignee membership cannot be reconstructed.');
+        }
+
+        return $membershipId;
     }
 
     /** @return array{membershipId: string, userId: string, name: string} */

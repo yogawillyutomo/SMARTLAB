@@ -304,6 +304,242 @@ class IncidentAssignmentApiTest extends TestCase
         $this->assertSame($startedAt, $incident->started_at?->toISOString());
     }
 
+    public function test_resolved_reassignment_preserves_resolution_assignment_and_start_evidence(): void
+    {
+        [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
+        $first = $this->candidate($school, 'Teknisi Pertama', ['incidents.update']);
+        $second = $this->candidate($school, 'Teknisi Kedua', ['incidents.update']);
+        $incident = $this->triagedIncident([$user, $membership], $school);
+        $this->setAssignedState($incident, $first, inProgress: true);
+        $this->setResolvedState($incident);
+
+        $before = $incident->fresh();
+        $assignedAt = $before->assigned_at?->toISOString();
+        $startedAt = $before->started_at?->toISOString();
+        $resolvedAt = $before->resolved_at?->toISOString();
+        $resolutionSummary = $before->resolution_summary;
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $second->id,
+            'reason' => 'Recovery penanggung jawab setelah resolusi',
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.status', 'resolved')
+            ->assertJsonPath('data.assignee.membershipId', $second->id)
+            ->assertJsonPath('data.version', 2);
+
+        $incident->refresh();
+        $this->assertSame('resolved', $incident->status->value);
+        $this->assertSame($assignedAt, $incident->assigned_at?->toISOString());
+        $this->assertSame($startedAt, $incident->started_at?->toISOString());
+        $this->assertSame($resolvedAt, $incident->resolved_at?->toISOString());
+        $this->assertSame($resolutionSummary, $incident->resolution_summary);
+
+        $event = IncidentEvent::query()
+            ->where('incident_id_snapshot', $incident->id)
+            ->where('event_type', IncidentEventType::Reassigned->value)
+            ->sole();
+        $this->assertSame($first->id, $event->payload['previousAssignee']['membershipId']);
+        $this->assertSame($second->id, $event->payload['newAssignee']['membershipId']);
+        $this->assertSame('Recovery penanggung jawab setelah resolusi', $event->payload['reason']);
+    }
+
+    public function test_resolved_without_current_assignee_snapshots_rejects_assignment(): void
+    {
+        [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
+        $incident = $this->triagedIncident([$user, $membership], $school);
+        $this->setResolvedState($incident);
+        $candidate = $this->candidate($school, 'Teknisi', ['incidents.update']);
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $candidate->id,
+            'reason' => 'Tidak boleh menjadi initial assignment',
+        ], ['If-Match' => '"1"'])
+            ->assertConflict()
+            ->assertJsonPath('code', 'INCIDENT_STATUS_CONFLICT');
+
+        $incident->refresh();
+        $this->assertSame('resolved', $incident->status->value);
+        $this->assertNull($incident->assignee_membership_id);
+        $this->assertNull($incident->assignee_user_id_snapshot);
+        $this->assertSame(1, $incident->version);
+        $this->assertDatabaseCount('incident_events', 1);
+    }
+
+    public function test_same_live_assignee_is_version_protected_no_op_while_resolved(): void
+    {
+        [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
+        $candidate = $this->candidate($school, 'Teknisi', ['incidents.update']);
+        $incident = $this->triagedIncident([$user, $membership], $school);
+        $this->setAssignedState($incident, $candidate, inProgress: true);
+        $this->setResolvedState($incident);
+
+        $before = $incident->fresh();
+        $updatedAt = $before->updated_at?->toISOString();
+        $eventCount = IncidentEvent::query()->where('incident_id_snapshot', $incident->id)->count();
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $candidate->id,
+            'reason' => 'Reason ignored for same live assignee',
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"1"')
+            ->assertJsonPath('data.status', 'resolved')
+            ->assertJsonPath('data.version', 1);
+
+        $incident->refresh();
+        $this->assertSame($updatedAt, $incident->updated_at?->toISOString());
+        $this->assertSame(
+            $eventCount,
+            IncidentEvent::query()->where('incident_id_snapshot', $incident->id)->count(),
+        );
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $candidate->id,
+        ], ['If-Match' => '"2"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'INCIDENT_VERSION_CONFLICT');
+    }
+
+    #[DataProvider('degradedAssignmentRecoveryProvider')]
+    public function test_deleted_live_assignee_can_be_recovered_before_resolution(
+        string $status,
+        bool $inProgress,
+    ): void {
+        [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
+        $first = $this->candidate($school, 'Teknisi Lama', ['incidents.update']);
+        $replacement = $this->candidate($school, 'Teknisi Pengganti', ['incidents.update']);
+        $incident = $this->triagedIncident([$user, $membership], $school);
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $first->id,
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"');
+
+        $assignedBeforeDelete = $incident->fresh();
+        $assignedAt = $assignedBeforeDelete->assigned_at?->toISOString();
+
+        if ($inProgress) {
+            $startedAt = now()->subMinute();
+            DB::table('incidents')->where('id', $incident->id)->update([
+                'status' => 'in_progress',
+                'started_at' => $startedAt,
+            ]);
+        }
+
+        $beforeDelete = $incident->fresh();
+        $startedAt = $beforeDelete->started_at?->toISOString();
+        $oldMembershipId = $first->id;
+        $oldUserId = $first->user_id;
+
+        $first->delete();
+
+        $incident->refresh();
+        $this->assertSame($status, $incident->status->value);
+        $this->assertNull($incident->assignee_membership_id);
+        $this->assertSame($oldUserId, $incident->assignee_user_id_snapshot);
+        $this->assertSame('Teknisi Lama', $incident->assignee_name_snapshot);
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $replacement->id,
+            'reason' => 'Pulihkan penanggung jawab yang sudah terhapus',
+        ], ['If-Match' => '"2"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"')
+            ->assertJsonPath('data.status', $status)
+            ->assertJsonPath('data.assignee.membershipId', $replacement->id)
+            ->assertJsonPath('data.version', 3);
+
+        $incident->refresh();
+        $this->assertSame($status, $incident->status->value);
+        $this->assertSame($assignedAt, $incident->assigned_at?->toISOString());
+        $this->assertSame($startedAt, $incident->started_at?->toISOString());
+
+        $event = IncidentEvent::query()
+            ->where('incident_id_snapshot', $incident->id)
+            ->where('event_type', IncidentEventType::Reassigned->value)
+            ->sole();
+
+        $this->assertSame(2, $event->incident_version_before);
+        $this->assertSame(3, $event->incident_version_after);
+        $this->assertSame($oldMembershipId, $event->payload['previousAssignee']['membershipId']);
+        $this->assertSame($oldUserId, $event->payload['previousAssignee']['userId']);
+        $this->assertSame('Teknisi Lama', $event->payload['previousAssignee']['name']);
+        $this->assertSame($replacement->id, $event->payload['newAssignee']['membershipId']);
+        $this->assertDatabaseCount('incident_events', 3);
+    }
+
+    public static function degradedAssignmentRecoveryProvider(): array
+    {
+        return [
+            'assigned' => ['assigned', false],
+            'in_progress' => ['in_progress', true],
+        ];
+    }
+
+    public function test_deleted_live_assignee_recovery_uses_latest_immutable_assignment_membership_id(): void
+    {
+        [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
+        $first = $this->candidate($school, 'Teknisi Pertama', ['incidents.update']);
+        $second = $this->candidate($school, 'Teknisi Kedua', ['incidents.update']);
+        $replacement = $this->candidate($school, 'Teknisi Pengganti', ['incidents.update']);
+        $incident = $this->triagedIncident([$user, $membership], $school);
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $first->id,
+        ], ['If-Match' => '"1"'])->assertOk()->assertHeader('ETag', '"2"');
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $second->id,
+            'reason' => 'Pergantian sebelum incident resolved',
+        ], ['If-Match' => '"2"'])->assertOk()->assertHeader('ETag', '"3"');
+
+        $this->setResolvedState($incident);
+        $resolvedBeforeDelete = $incident->fresh();
+        $assignedAt = $resolvedBeforeDelete->assigned_at?->toISOString();
+        $resolvedAt = $resolvedBeforeDelete->resolved_at?->toISOString();
+        $resolutionSummary = $resolvedBeforeDelete->resolution_summary;
+        $secondId = $second->id;
+        $secondUserId = $second->user_id;
+
+        $second->delete();
+
+        $incident->refresh();
+        $this->assertNull($incident->assignee_membership_id);
+        $this->assertSame($secondUserId, $incident->assignee_user_id_snapshot);
+        $this->assertSame('Teknisi Kedua', $incident->assignee_name_snapshot);
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/assignments', [
+            'assigneeMembershipId' => $replacement->id,
+            'reason' => 'Pulihkan live assignee yang sudah terhapus',
+        ], ['If-Match' => '"3"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"4"')
+            ->assertJsonPath('data.status', 'resolved')
+            ->assertJsonPath('data.assignee.membershipId', $replacement->id)
+            ->assertJsonPath('data.version', 4);
+
+        $incident->refresh();
+        $this->assertSame($assignedAt, $incident->assigned_at?->toISOString());
+        $this->assertSame($resolvedAt, $incident->resolved_at?->toISOString());
+        $this->assertSame($resolutionSummary, $incident->resolution_summary);
+
+        $event = IncidentEvent::query()
+            ->where('incident_id_snapshot', $incident->id)
+            ->where('event_type', IncidentEventType::Reassigned->value)
+            ->orderByDesc('incident_version_after')
+            ->firstOrFail();
+        $this->assertSame(3, $event->incident_version_before);
+        $this->assertSame(4, $event->incident_version_after);
+        $this->assertSame($secondId, $event->payload['previousAssignee']['membershipId']);
+        $this->assertSame($secondUserId, $event->payload['previousAssignee']['userId']);
+        $this->assertSame('Teknisi Kedua', $event->payload['previousAssignee']['name']);
+        $this->assertSame($replacement->id, $event->payload['newAssignee']['membershipId']);
+        $this->assertDatabaseCount('incident_events', 4);
+    }
+
     public function test_unknown_and_cross_school_candidates_are_safe_not_found_and_known_ineligible_candidates_are_409(): void
     {
         [$user, $school, $membership] = $this->authenticateWithPermissions($this->assignmentPermissions());
@@ -367,7 +603,7 @@ class IncidentAssignmentApiTest extends TestCase
 
     public static function nonAssignableStatusProvider(): array
     {
-        return collect(['reported', 'resolved', 'verified', 'closed', 'rejected'])
+        return collect(['reported', 'verified', 'closed', 'rejected'])
             ->mapWithKeys(fn (string $status): array => [$status => [$status]])
             ->all();
     }
@@ -607,6 +843,16 @@ class IncidentAssignmentApiTest extends TestCase
             'assignee_name_snapshot' => $user->name,
             'assigned_at' => $now,
             'started_at' => $inProgress ? $now : null,
+        ]);
+    }
+
+    private function setResolvedState(Incident $incident): void
+    {
+        $now = now()->subMinute();
+        DB::table('incidents')->where('id', $incident->id)->update([
+            'status' => 'resolved',
+            'resolution_summary' => 'Incident telah diselesaikan.',
+            'resolved_at' => $now,
         ]);
     }
 

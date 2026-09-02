@@ -43,8 +43,8 @@ final class IncidentAggregateValidator
             throw new InvalidArgumentException("{$status->value} cannot have a current assignee.");
         }
         if (in_array($status, [IncidentStatus::Assigned, IncidentStatus::InProgress], true)
-            && ! $hasAssignee) {
-            throw new InvalidArgumentException("{$status->value} requires a current assignee.");
+            && ! $hasAssigneeSnapshot) {
+            throw new InvalidArgumentException("{$status->value} requires current assignee snapshots.");
         }
         if ($status === IncidentStatus::InProgress && ($attributes['started_at'] ?? null) === null) {
             throw new InvalidArgumentException('in_progress requires started_at.');
