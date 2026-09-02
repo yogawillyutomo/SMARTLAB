@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Incident\IncidentAssigneeCandidateQueryService;
 use App\Application\Incident\IncidentAssignmentService;
+use App\Application\Incident\IncidentCommentQueryService;
+use App\Application\Incident\IncidentCommentService;
 use App\Application\Incident\IncidentCorrectionService;
 use App\Application\Incident\IncidentCreationService;
 use App\Application\Incident\IncidentListQueryService;
@@ -19,14 +21,17 @@ use App\Domain\Incident\IncidentTransitionPayloadValidationException;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Requests\AssignIncidentRequest;
+use App\Http\Requests\CreateIncidentCommentRequest;
 use App\Http\Requests\CreateIncidentRequest;
 use App\Http\Requests\ListIncidentAssigneeCandidatesRequest;
+use App\Http\Requests\ListIncidentCommentsRequest;
 use App\Http\Requests\ListIncidentReportingDevicesRequest;
 use App\Http\Requests\ListIncidentReportingLaboratoriesRequest;
 use App\Http\Requests\ListIncidentsRequest;
 use App\Http\Requests\TransitionIncidentRequest;
 use App\Http\Requests\UpdateIncidentRequest;
 use App\Http\Resources\IncidentAssigneeCandidateResource;
+use App\Http\Resources\IncidentCommentResource;
 use App\Http\Resources\IncidentReportingDeviceResource;
 use App\Http\Resources\IncidentReportingLaboratoryResource;
 use App\Http\Resources\IncidentResource;
@@ -196,6 +201,38 @@ class IncidentController extends Controller
         $incident = $queries->find($context, $incidentId);
 
         return $this->incidentResponse($incident, $request);
+    }
+
+    public function comments(
+        ListIncidentCommentsRequest $request,
+        string $incidentId,
+        IncidentCommentQueryService $comments,
+    ): JsonResponse {
+        $paginator = $comments->list($this->context($request), $incidentId, $request->validated());
+
+        return response()->json([
+            'data' => IncidentCommentResource::collection($paginator->items())->resolve($request),
+            'meta' => $this->paginationMeta($paginator),
+        ]);
+    }
+
+    public function comment(
+        CreateIncidentCommentRequest $request,
+        string $incidentId,
+        IncidentCommentService $comments,
+    ): JsonResponse {
+        $payload = $request->businessPayload();
+        $event = $comments->add(
+            $this->context($request),
+            $incidentId,
+            (int) $request->attributes->get(RequireIncidentVersionPrecondition::ATTRIBUTE),
+            $payload['text'],
+        );
+
+        return (new IncidentCommentResource($event))
+            ->response($request)
+            ->setStatusCode(201)
+            ->header('ETag', '"'.$event->incident_version_after.'"');
     }
 
     private function incidentResponse(Incident $incident, Request $request, int $status = 200): JsonResponse
