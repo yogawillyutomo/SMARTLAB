@@ -33,7 +33,7 @@ export interface NavItem {
   icon: LucideIcon;
   module?: ModuleKey;
   serverPermission?: string;
-  badgeKey?: 'pending_incidents' | 'pending_bookings' | 'overdue_loans' | 'overdue_maintenance';
+  badgeKey?: 'pending_bookings' | 'overdue_loans' | 'overdue_maintenance';
 }
 
 export interface NavGroup {
@@ -59,7 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring' },
       { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets' },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock' },
-      { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, module: 'incidents', badgeKey: 'pending_incidents' },
+      { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, serverPermission: 'incidents.view' },
       { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders' },
       { to: '/maintenance', label: 'Pemeliharaan Berkala', icon: ShieldCheck, module: 'maintenance', badgeKey: 'overdue_maintenance' },
       { to: '/loans', label: 'Peminjaman Barang', icon: HandHelping, module: 'loans', badgeKey: 'overdue_loans' },
