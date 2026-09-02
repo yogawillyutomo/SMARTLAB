@@ -14,6 +14,7 @@ use App\Models\Role;
 use App\Models\School;
 use App\Models\SchoolMembership;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -211,6 +212,37 @@ class IncidentCommentApiTest extends TestCase
             ->assertJsonPath('data.actor.userId', $user->id);
     }
 
+    public function test_identical_comments_are_append_only_and_stale_retry_does_not_duplicate(): void
+    {
+        [$user, $school, $membership] = $this->authenticateWithPermissions(['incidents.view', 'incidents.comment']);
+        $incident = $this->createIncidentFor([$user, $membership], $school);
+        $payload = ['text' => 'Komentar identik tetap merupakan append baru.'];
+
+        $first = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', $payload, ['If-Match' => '"1"'])
+            ->assertCreated()
+            ->assertHeader('ETag', '"2"');
+        $second = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', $payload, ['If-Match' => '"2"'])
+            ->assertCreated()
+            ->assertHeader('ETag', '"3"');
+
+        $this->assertNotSame($first->json('data.id'), $second->json('data.id'));
+        $this->assertSame(3, $incident->fresh()->version);
+        $events = IncidentEvent::query()
+            ->where('incident_id_snapshot', $incident->id)
+            ->where('event_type', IncidentEventType::CommentAdded->value)
+            ->orderBy('incident_version_after')
+            ->get();
+        $this->assertCount(2, $events);
+        $this->assertSame([1, 2], $events->pluck('incident_version_before')->all());
+        $this->assertSame([2, 3], $events->pluck('incident_version_after')->all());
+
+        $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', $payload, ['If-Match' => '"2"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'INCIDENT_VERSION_CONFLICT');
+        $this->assertSame(3, $incident->fresh()->version);
+        $this->assertDatabaseCount('incident_events', 3);
+    }
+
     public function test_event_failure_rolls_back_comment_version_and_event(): void
     {
         [$user, $school, $membership] = $this->authenticateWithPermissions(['incidents.view', 'incidents.comment']);
@@ -246,19 +278,21 @@ class IncidentCommentApiTest extends TestCase
         $incident = $this->createIncidentFor([$reporter, $reporterMembership], $school);
         $originalName = $reporter->name;
 
-        $first = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', [
-            'text' => 'Komentar pertama.',
-        ], ['If-Match' => '"1"'])->assertCreated();
-        $second = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', [
-            'text' => 'Komentar kedua.',
-        ], ['If-Match' => '"2"'])->assertCreated();
+        try {
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-02T10:00:00Z'));
+            $first = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', [
+                'text' => 'Komentar pertama.',
+            ], ['If-Match' => '"1"'])->assertCreated();
 
-        DB::table('incident_events')->where('id', $first->json('data.id'))->update([
-            'created_at' => now()->subMinutes(2),
-        ]);
-        DB::table('incident_events')->where('id', $second->json('data.id'))->update([
-            'created_at' => now()->subMinute(),
-        ]);
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-02T10:01:00Z'));
+            $second = $this->postJson('/api/v1/incidents/'.$incident->id.'/comments', [
+                'text' => 'Komentar kedua.',
+            ], ['If-Match' => '"2"'])->assertCreated();
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+
+        $this->assertNotSame($first->json('data.id'), $second->json('data.id'));
         $reporter->update(['name' => 'Nama Baru Tidak Boleh Mengubah Snapshot']);
         $this->setStatus($incident, 'closed', null);
 
