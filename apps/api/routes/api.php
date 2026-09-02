@@ -85,5 +85,10 @@ Route::prefix('v1')->group(function (): void {
                 'permission:incidents.assign',
                 RequireIncidentVersionPrecondition::class,
             ]);
+        Route::post('incidents/{incidentId}/transitions', [IncidentController::class, 'transition'])
+            ->middleware([
+                'permission:incidents.view',
+                RequireIncidentVersionPrecondition::class,
+            ]);
     });
 });
