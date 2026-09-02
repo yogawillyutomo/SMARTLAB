@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.9.0
+  version: 0.10.0
   description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident endpoints.
 servers:
   - url: http://localhost:8000/api/v1
@@ -798,6 +798,38 @@ paths:
         '412': { $ref: '#/components/responses/IncidentVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
+  /incidents/{incidentId}/events:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        description: Incident ULID resolved through the normal current-School reporter-own or incidents.view-all row policy.
+        schema: { type: string, format: ulid }
+    get:
+      operationId: listIncidentEvents
+      summary: List complete immutable internal Incident event history
+      description: Requires `incidents.view` and `incidents.view-history`. The history permission never widens normal Incident row visibility. Results contain every typed immutable Incident event, including participant comments, using Incident/ticket and actor User/membership snapshots as historical authority rather than nullable live foreign keys. Results are ordered by createdAt descending then event ULID descending.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Complete internal Incident event history page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentEventCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
   /laboratories/{laboratoryId}/layouts:
     parameters:
       - name: laboratoryId
@@ -1802,6 +1834,44 @@ components:
       required: [userId, name]
       properties:
         userId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
+    IncidentEventCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IncidentEvent' }
+        meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
+    IncidentEvent:
+      type: object
+      additionalProperties: false
+      required: [id, incidentId, ticketNumber, actor, eventType, incidentVersionBefore, incidentVersionAfter, payload, createdAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        incidentId: { type: string, format: ulid, readOnly: true, description: Immutable Incident identifier snapshot. }
+        ticketNumber: { type: string, pattern: '^INC-[0-9]{4}-[0-9]{6}$', readOnly: true, description: Immutable ticket-number snapshot. }
+        actor: { $ref: '#/components/schemas/IncidentEventActorSnapshot' }
+        eventType:
+          type: string
+          enum: [incident.reported, incident.updated, incident.triaged, incident.assigned, incident.reassigned, incident.started, incident.resolved, incident.reopened, incident.verified, incident.closed, incident.rejected, incident.comment_added]
+          readOnly: true
+        incidentVersionBefore: { type: integer, minimum: 0, readOnly: true }
+        incidentVersionAfter: { type: integer, minimum: 1, readOnly: true }
+        payload:
+          type: object
+          readOnly: true
+          description: Exact immutable typed payload validated against eventType when the event was written.
+          additionalProperties: true
+        createdAt: { type: string, format: date-time, readOnly: true }
+    IncidentEventActorSnapshot:
+      type: object
+      additionalProperties: false
+      required: [userId, membershipId, name]
+      properties:
+        userId: { type: string, format: ulid, readOnly: true }
+        membershipId: { type: string, format: ulid, readOnly: true }
         name: { type: string, maxLength: 255, readOnly: true }
     IncidentResponse:
       type: object
