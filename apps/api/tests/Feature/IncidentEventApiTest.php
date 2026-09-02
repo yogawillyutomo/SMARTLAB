@@ -102,7 +102,7 @@ class IncidentEventApiTest extends TestCase
         $commenterMembership->setRelation('user', $commenterUser);
 
         $comment = app(IncidentCommentService::class)->add(
-            new CurrentMembershipContext($commenterMembership, collect()),
+            new CurrentMembershipContext($commenterMembership, collect(['incidents.view-all'])),
             $incident->id,
             1,
             'Bukti internal untuk history.',
