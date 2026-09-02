@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.8.0
+  version: 0.9.0
   description: Contract for implemented SmartLab API v1 session authentication, identity, Laboratory, Device, Layout, and Incident endpoints.
 servers:
   - url: http://localhost:8000/api/v1
@@ -737,6 +737,67 @@ paths:
         '412': { $ref: '#/components/responses/IncidentVersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
+  /incidents/{incidentId}/comments:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        description: Incident ULID resolved through the normal current-School reporter-own or incidents.view-all row policy.
+        schema: { type: string, format: ulid }
+    get:
+      operationId: listIncidentComments
+      summary: List participant-visible append-only Incident comments
+      description: Requires only `incidents.view` plus normal Incident row visibility; `incidents.comment` and `incidents.view-history` are not required. Only immutable `incident.comment_added` events are projected. Actor identity comes from event snapshots, and results are ordered by createdAt descending then comment/event ULID descending.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Participant-safe Incident comment page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentCommentCollectionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentNotFound' }
+        '409': { $ref: '#/components/responses/MembershipContextConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      operationId: addIncidentComment
+      summary: Append a participant-visible Incident comment
+      description: Requires `incidents.view`, `incidents.comment`, and a current strong Incident If-Match. Query parameters and unknown body fields are rejected. Text is normalized by trimming and NFC before validation and persistence. Comments are append-only: every successful request in a non-terminal Incident increments the Incident version exactly once and appends exactly one immutable `incident.comment_added` event. Identical text submitted with a fresh version is a new comment; a stale retry returns 412. New comments are unavailable only in terminal `closed` and `rejected` states.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIncidentCommentRequest' }
+      responses:
+        '201':
+          description: Comment appended, Incident version incremented once, and one comment event committed atomically
+          headers:
+            ETag: { $ref: '#/components/headers/IncidentETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentCommentResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IncidentNotFound' }
+        '409': { $ref: '#/components/responses/IncidentCommentConflict' }
+        '412': { $ref: '#/components/responses/IncidentVersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/IncidentPreconditionRequired' }
   /laboratories/{laboratoryId}/layouts:
     parameters:
       - name: laboratoryId
@@ -1061,6 +1122,14 @@ components:
           examples:
             invalidTransition: { value: { message: The requested Incident transition is not allowed., code: INCIDENT_INVALID_TRANSITION } }
             assigneeIneligible: { value: { message: The Incident assignee is not eligible., code: INCIDENT_ASSIGNEE_INELIGIBLE } }
+    IncidentCommentConflict:
+      description: Membership context is unresolved, or the Incident is terminal and no longer accepts new participant comments.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            message: The operation is unavailable in the current Incident status.
+            code: INCIDENT_STATUS_CONFLICT
     IncidentPreconditionRequired:
       description: An Incident mutation is missing the exact strong quoted positive-integer If-Match precondition or supplies a malformed form
       content:
@@ -1692,6 +1761,48 @@ components:
           type: [string, 'null']
           maxLength: 1000
           description: Required with 5-1000 normalized characters for rejection and both path-aware reopen edges.
+    CreateIncidentCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Trimmed and NFC-normalized before validation; the normalized value must contain 1-2000 characters.
+    IncidentCommentResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/IncidentComment' }
+    IncidentCommentCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IncidentComment' }
+        meta: { $ref: '#/components/schemas/IncidentPaginationMeta' }
+    IncidentComment:
+      type: object
+      additionalProperties: false
+      required: [id, incidentId, actor, text, createdAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true, description: Immutable Incident event ULID used as the comment identifier. }
+        incidentId: { type: string, format: ulid, readOnly: true }
+        actor: { $ref: '#/components/schemas/IncidentCommentActorSnapshot' }
+        text: { type: string, minLength: 1, maxLength: 2000, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+    IncidentCommentActorSnapshot:
+      type: object
+      additionalProperties: false
+      required: [userId, name]
+      properties:
+        userId: { type: string, format: ulid, readOnly: true }
+        name: { type: string, maxLength: 255, readOnly: true }
     IncidentResponse:
       type: object
       additionalProperties: false
@@ -2377,7 +2488,7 @@ components:
           type: string
         code:
           type: string
-          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, INCIDENT_NOT_FOUND, INCIDENT_INVALID_TRANSITION, INCIDENT_ASSIGNEE_INELIGIBLE, INCIDENT_VERSION_CONFLICT, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
+          enum: [UNAUTHENTICATED, INVALID_CREDENTIALS, TOO_MANY_LOGIN_ATTEMPTS, ACTIVE_MEMBERSHIP_REQUIRED, SCHOOL_CONTEXT_REQUIRED, FORBIDDEN, LABORATORY_NOT_FOUND, DEVICE_NOT_FOUND, LAYOUT_NOT_FOUND, INCIDENT_NOT_FOUND, INCIDENT_INVALID_TRANSITION, INCIDENT_ASSIGNEE_INELIGIBLE, INCIDENT_STATUS_CONFLICT, INCIDENT_VERSION_CONFLICT, PRECONDITION_REQUIRED, DEVICE_VERSION_CONFLICT, LAYOUT_VERSION_CONFLICT, DEVICE_HOME_LABORATORY_TRANSFER_REQUIRED, DEVICE_LIFECYCLE_TRANSITION_INVALID, LAYOUT_DRAFT_ALREADY_EXISTS, LAYOUT_STATUS_CONFLICT, LAYOUT_LABORATORY_INACTIVE, LAYOUT_DEVICE_ALREADY_PLACED, LAYOUT_DEVICE_HOME_MISMATCH, LAYOUT_DEVICE_NOT_ELIGIBLE, LAYOUT_POSITION_OCCUPIED]
     ValidationError:
       type: object
       required: [message, code, errors]
