@@ -146,7 +146,6 @@ describe('Incident create presentation', () => {
       description: '  Komputer berhenti sebelum sistem operasi dimuat.  ',
       impact: '   ',
       stepsTaken: '  Kabel sudah diperiksa.  ',
-      occurredAt: '2026-09-03T00:00',
     };
     const valid = validateIncidentCreateForm(base, '00000000-0000-4000-8000-000000000001');
     expect(valid.ok).toBe(true);
