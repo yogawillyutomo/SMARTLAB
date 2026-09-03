@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Clock3,
   History,
   MessageSquare,
   Play,
@@ -339,7 +338,6 @@ export function IncidentDetailPage() {
   const [candidateSearch, setCandidateSearch] = useState('');
 
   const currentIncident = state.status === 'ready' ? state.incident : null;
-  const canViewHistory = currentIncident ? incidentActionAvailability(currentIncident, user).viewHistory : false;
 
   const loadComments = useCallback(async (page = 1) => {
     if (!incidentId) return;
