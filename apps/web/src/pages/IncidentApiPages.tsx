@@ -17,6 +17,7 @@ import {
   INCIDENT_STATUSES,
   INCIDENT_STATUS_LABELS,
   emptyIncidentCreateForm,
+  incidentCreateOutcomeIsAmbiguous,
   incidentPresentationIssue,
   incidentPriorityTone,
   incidentStatusTone,
@@ -28,6 +29,7 @@ import {
 import {
   incidentGateway,
   type IncidentCategory,
+  type IncidentDto,
   type IncidentListFilters,
   type IncidentListItem,
   type IncidentPage,
@@ -428,6 +430,8 @@ export function IncidentsPage() {
   const [deviceHasMore, setDeviceHasMore] = useState(false);
   const [deviceSearchBusy, setDeviceSearchBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const [createRecoveryPending, setCreateRecoveryPending] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [createIssue, setCreateIssue] = useState<string | null>(null);
 
   const load = useCallback(async (nextFilters: IncidentListFilterValues, page: number) => {
@@ -455,6 +459,7 @@ export function IncidentsPage() {
     setCreateIssue(null);
     setCreateErrors({});
     setCreateValues(emptyIncidentCreateForm());
+    setCreateRecoveryPending(false);
     setDevices([]);
     setDeviceSearch('');
     setDeviceHasMore(false);
@@ -469,9 +474,10 @@ export function IncidentsPage() {
   }
 
   function closeCreate() {
-    if (createBusy) return;
+    if (createBusy || recoveryBusy || createRecoveryPending) return;
     setCreateOpen(false);
     setCreateIssue(null);
+    setCreateRecoveryPending(false);
   }
 
   async function searchDevices() {
@@ -500,10 +506,27 @@ export function IncidentsPage() {
     }
     setCreateValues(next);
     setCreateErrors({});
+    if (!createRecoveryPending) setCreateIssue(null);
+  }
+
+  async function finishCreatedIncident(created: IncidentDto, recovered: boolean) {
+    toast(
+      recovered
+        ? `Tiket ${created.ticketNumber} ditemukan dari correlation pembuatan.`
+        : `Tiket ${created.ticketNumber} berhasil dibuat.`,
+      'success',
+    );
+    setCreateOpen(false);
+    setCreateRecoveryPending(false);
     setCreateIssue(null);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setFilters(DEFAULT_FILTERS);
+    await load(DEFAULT_FILTERS, 1);
+    navigate(`/incidents/${created.id}`);
   }
 
   async function submitCreate() {
+    if (createRecoveryPending) return;
     const validation = validateIncidentCreateForm(createValues, submissionId);
     if (!validation.ok) {
       setCreateErrors(validation.errors);
@@ -513,18 +536,38 @@ export function IncidentsPage() {
     setCreateIssue(null);
     try {
       const created = await incidentGateway.create(validation.value);
-      toast(`Tiket ${created.ticketNumber} berhasil dibuat.`, 'success');
-      setCreateOpen(false);
-      setAppliedFilters(DEFAULT_FILTERS);
-      setFilters(DEFAULT_FILTERS);
-      await load(DEFAULT_FILTERS, 1);
-      navigate(`/incidents/${created.id}`);
+      await finishCreatedIncident(created, false);
     } catch (error) {
       const issue = incidentPresentationIssue(error);
       setCreateErrors(issue.fieldErrors);
-      setCreateIssue(issue.message);
+      if (incidentCreateOutcomeIsAmbiguous(error)) {
+        setCreateRecoveryPending(true);
+        setCreateIssue('Hasil pembuatan tiket belum dapat dipastikan. Jangan kirim ulang. Periksa hasil pembuatan dengan correlation ID yang sama terlebih dahulu.');
+      } else {
+        setCreateIssue(issue.message);
+      }
     } finally {
       setCreateBusy(false);
+    }
+  }
+
+  async function recoverCreate() {
+    if (!createRecoveryPending || submissionId === '') return;
+    setRecoveryBusy(true);
+    try {
+      const recovered = await incidentGateway.recoverSubmission(submissionId);
+      await finishCreatedIncident(recovered, true);
+    } catch (error) {
+      const issue = incidentPresentationIssue(error);
+      if (issue.notFound) {
+        setSubmissionId(newSubmissionId());
+        setCreateRecoveryPending(false);
+        setCreateIssue('Correlation sebelumnya tidak ditemukan di server. Tidak ada Incident yang dapat dipulihkan; correlation ID baru sudah disiapkan jika Anda memilih mencoba membuat tiket lagi.');
+      } else {
+        setCreateIssue(`Hasil pembuatan masih belum dapat dipastikan. ${issue.message}`);
+      }
+    } finally {
+      setRecoveryBusy(false);
     }
   }
 
@@ -553,9 +596,26 @@ export function IncidentsPage() {
         onSubmit={() => void submitCreate()}
         submitLabel="Buat Tiket"
         loading={createBusy}
+        submitDisabled={createRecoveryPending || recoveryBusy}
         size="xl"
       >
         {createIssue && <div className="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{createIssue}</div>}
+        {createRecoveryPending && (
+          <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <p className="text-sm text-warning-foreground">POST create tidak akan diulang otomatis. Recovery hanya membaca hasil berdasarkan submissionId yang sama.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-3"
+              loading={recoveryBusy}
+              disabled={createBusy}
+              onClick={() => void recoverCreate()}
+            >
+              Periksa hasil pembuatan
+            </Button>
+          </div>
+        )}
         <IncidentCreateFormFields
           values={createValues}
           errors={createErrors}

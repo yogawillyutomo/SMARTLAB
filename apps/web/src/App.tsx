@@ -21,7 +21,8 @@ import { SessionsPage } from '@/pages/SessionsPage';
 import { JournalsPage } from '@/pages/JournalsPage';
 import { AssetsPage, AssetDetailPage } from '@/pages/AssetsPage';
 import { StockPage } from '@/pages/StockPage';
-import { IncidentsPage } from '@/pages/IncidentsPage';
+import { IncidentsPage } from '@/pages/IncidentApiPages';
+import { IncidentDetailPage } from '@/pages/IncidentDetailApiPage';
 import { WorkOrdersPage } from '@/pages/WorkOrdersPage';
 import { MaintenancePage } from '@/pages/MaintenancePage';
 import { LoansPage } from '@/pages/LoansPage';
@@ -62,8 +63,8 @@ function AppRoutes() {
         <Route path="/assets" element={<RequirePermission module="assets"><AssetsPage /></RequirePermission>} />
         <Route path="/assets/:id" element={<RequirePermission module="assets"><AssetDetailPage /></RequirePermission>} />
         <Route path="/stock" element={<RequirePermission module="stock"><StockPage /></RequirePermission>} />
-        <Route path="/incidents" element={<RequirePermission module="incidents"><IncidentsPage /></RequirePermission>} />
-        <Route path="/incidents/:id" element={<RequirePermission module="incidents"><IncidentsPage /></RequirePermission>} />
+        <Route path="/incidents" element={<RequireServerPermission permission="incidents.view"><IncidentsPage /></RequireServerPermission>} />
+        <Route path="/incidents/:incidentId" element={<RequireServerPermission permission="incidents.view"><IncidentDetailPage /></RequireServerPermission>} />
         <Route path="/work-orders" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
         <Route path="/work-orders/:id" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
         <Route path="/maintenance" element={<RequirePermission module="maintenance"><MaintenancePage /></RequirePermission>} />

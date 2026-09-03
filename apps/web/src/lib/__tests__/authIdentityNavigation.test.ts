@@ -56,7 +56,7 @@ describe('protected deep-link navigation', () => {
   });
 });
 
-describe('dynamic navigation topology with server-authoritative Laboratory access', () => {
+describe('dynamic navigation topology with server-authoritative Laboratory, Device, and Incident access', () => {
   function navigationUser(serverPermissions: string[]): AuthenticatedUser {
     return {
       ...toAuthenticatedUser(payload),
@@ -143,6 +143,35 @@ describe('dynamic navigation topology with server-authoritative Laboratory acces
     ]) {
       expect(navigation.filter(({ to }) => to === '/devices')).toHaveLength(1);
       expect(navigation.some(({ to }) => to === '/monitoring')).toBe(false);
+    }
+  });
+
+  it('hides canonical Incident navigation when only the legacy incidents module grants view', () => {
+    const permissions = createDefaultPermissionMatrix();
+    permissions['Admin Lab'].incidents = ['view'];
+    const currentUser = navigationUser([]);
+
+    for (const navigation of [
+      getVisibleNavGroupsForUser(permissions, currentUser).flatMap((group) => group.items),
+      getVisibleNavItemsForUser(permissions, currentUser),
+    ]) {
+      expect(navigation.some(({ to }) => to === '/incidents')).toBe(false);
+    }
+  });
+
+  it('shows canonical Incident navigation only from exact incidents.view permission and has no local badge', () => {
+    const permissions = createDefaultPermissionMatrix();
+    permissions['Admin Lab'].incidents = [];
+    const currentUser = navigationUser(['incidents.view']);
+
+    for (const navigation of [
+      getVisibleNavGroupsForUser(permissions, currentUser).flatMap((group) => group.items),
+      getVisibleNavItemsForUser(permissions, currentUser),
+    ]) {
+      const incidentItems = navigation.filter(({ to }) => to === '/incidents');
+      expect(incidentItems).toHaveLength(1);
+      expect(incidentItems[0].serverPermission).toBe('incidents.view');
+      expect(incidentItems[0].badgeKey).toBeUndefined();
     }
   });
 });

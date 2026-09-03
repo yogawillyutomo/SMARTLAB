@@ -10,11 +10,10 @@ import { Badge } from '@/components/ui/Badge';
 
 function useBadgeCounts() {
   const { db } = useAppData();
-  const pendingIncidents = db.incidents.filter((i) => i.status === 'Dilaporkan' || i.status === 'Diverifikasi').length;
   const pendingBookings = db.bookings.filter((b) => b.status === 'Menunggu Persetujuan' || b.status === 'Diajukan').length;
   const overdueLoans = db.loans.filter((l) => l.status === 'Terlambat' || (l.status === 'Dipinjam' && new Date(l.plannedReturn) < new Date())).length;
   const overdueMaintenance = db.maintenance.plans.filter((p) => p.status === 'active' && new Date(p.nextSchedule) < new Date()).length;
-  return { pending_incidents: pendingIncidents, pending_bookings: pendingBookings, overdue_loans: overdueLoans, overdue_maintenance: overdueMaintenance };
+  return { pending_bookings: pendingBookings, overdue_loans: overdueLoans, overdue_maintenance: overdueMaintenance };
 }
 
 export function AppSidebar() {

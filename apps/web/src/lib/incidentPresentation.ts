@@ -166,6 +166,20 @@ function firstValidationErrors(error: ApiClientError): IncidentFormErrors {
   return result;
 }
 
+/**
+ * Creation is ambiguous only when the POST may have reached the server but the client
+ * cannot prove whether the committed Incident response was received. Known 4xx
+ * responses are definitive failures and must not be routed through E4 recovery.
+ */
+export function incidentCreateOutcomeIsAmbiguous(error: unknown): boolean {
+  if (error instanceof IncidentContractError) return true;
+  if (!(error instanceof ApiClientError)) return false;
+  if (error.kind === 'network') return true;
+  if (error.status !== undefined && error.status >= 400 && error.status < 500) return false;
+  return error.kind === 'invalid_response'
+    || (error.status !== undefined && error.status >= 500);
+}
+
 export function incidentPresentationIssue(error: unknown): IncidentPresentationIssue {
   const fallback: IncidentPresentationIssue = {
     message: 'Data tiket kerusakan tidak dapat diproses. Silakan coba lagi.',
