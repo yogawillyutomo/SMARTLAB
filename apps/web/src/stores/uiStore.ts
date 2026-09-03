@@ -46,7 +46,7 @@ const defaults: PersistedUI = {
   theme: 'dark',
   accent: 'blue',
   compactTable: false,
-  activeLabId: 'lab-rpl-1',
+  activeLabId: '',
   academicYear: '2026/2027',
   semester: 'Gasal',
 };
