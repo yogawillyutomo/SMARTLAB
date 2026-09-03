@@ -8,14 +8,16 @@
 
 The school-facing administrative resource is `SchoolMembership`, not a global `User` row.
 
-- `User` is the login account and may conceptually be referenced by more than one school over time.
+- `User` is the global login account and may be referenced by more than one SchoolMembership.
 - `SchoolMembership` is the tenant-scoped relationship between a User and a School.
 - Roles are attached to `SchoolMembership` through `membership_roles`.
 - Effective permissions are derived from the membership's assigned roles.
-- Every API read/mutation in this slice is scoped to the current active School resolved by `CurrentMembershipContext`.
+- Every API read/mutation in this slice begins inside the current active School resolved by `CurrentMembershipContext`.
 - A membership from another school is indistinguishable from a missing membership and returns 404.
+- School-local membership status and role assignment may be changed for a User that is shared with another school.
+- Global User account fields may be changed from this school-scoped API only while the User has no SchoolMembership outside the current School. This prevents one tenant from changing identity/login state used by another tenant.
 
-The current authentication foundation still requires exactly one active School context. S1A does not add school selection.
+The current authentication foundation still requires exactly one active School context. S1A does not add school selection. Any future link-existing-user flow must serialize on the User row before attaching another SchoolMembership so it remains compatible with the S1A shared-user mutation guard.
 
 ## 2. Permissions
 
@@ -85,7 +87,7 @@ Effects, one transaction:
 4. append exactly one immutable `identity.membership_created` event;
 5. return 201 `MembershipProjection`.
 
-No invitation/link-existing-user behavior exists in S1A. Existing email is validation failure; S1B/future identity work may add an explicit linking contract.
+No invitation/link-existing-user behavior exists in S1A. Existing email is validation failure; future identity work may add an explicit linking contract that follows the shared User serialization rule above.
 
 ### GET `/api/v1/identity/memberships/{membershipId}`
 
@@ -109,6 +111,10 @@ Exact optional body fields:
 At least one field is required.
 
 An effective successful change appends exactly one immutable `identity.membership_updated` event and returns the fresh `MembershipProjection`. An effective no-op returns the fresh projection and appends no event. No hard delete exists.
+
+The fields `name`, `email`, `nip`, `nis`, `phone`, and `userStatus` belong to the global User account. If any of those fields would effectively change while the target User has a SchoolMembership outside the current School, the entire request returns 409 `IDENTITY_SHARED_USER_MUTATION_REQUIRES_GLOBAL_AUTHORITY`. No local role or membership-status change bundled in the same request is committed. Effective no-ops do not expose shared-user state and remain successful.
+
+`membershipStatus` and `roleKeys` are current-School state and remain mutable for shared Users, subject to the normal Super Admin safety invariant.
 
 Safety invariant: a mutation must not leave the School without at least one active membership whose User is active and whose roles include `super-admin`. Attempts return 409 `IDENTITY_LAST_SUPER_ADMIN_REQUIRED` with no partial changes.
 
@@ -162,7 +168,7 @@ Exact participant/admin-safe shape:
 }
 ```
 
-No password hash, remember token, session identifier, permission pivot data, or other tenant membership is exposed.
+No password hash, remember token, session identifier, permission pivot data, other-school membership identifier, or other tenant metadata is exposed.
 
 ## 5. Immutable identity audit events
 
@@ -196,8 +202,11 @@ No public audit-event endpoint is introduced by S1A; the later Audit Log slice m
 - Permission middleware before controller/domain reads.
 - Structural request validation before target lookup for mutation requests.
 - Tenant-scoped target lookup before any target-state disclosure.
+- Effective no-op detection occurs before the shared-user protection check.
+- Shared-user protection is evaluated only after the target current-School membership is established.
 - Unknown body/query fields are rejected with 422.
 - Cross-school membership IDs return the same 404 as nonexistent IDs.
+- The shared-user conflict does not disclose which other School owns another membership.
 
 ## 7. Role matrix policy
 
@@ -214,6 +223,7 @@ After S1A:
 - neither page imports `useAppData`, browser repositories, local permission stores for business authority, nor seeded users.
 - fake/demo reset-password action is removed.
 - navigation/page guards use `users.view` / `roles.view` server permission keys.
+- shared-user mutation conflicts are surfaced without falling back to local state.
 - UI may export the currently fetched server projection client-side; export does not create an alternate source of truth.
 
 ## 9. Required tests
@@ -228,6 +238,9 @@ Backend:
 - canonical role validation;
 - global email uniqueness behavior;
 - update/effective-no-op behavior and no hard-delete route;
+- shared User global-field mutation rejection with full transaction rollback;
+- shared User current-School membership-status/role mutation remains allowed;
+- shared User effective global no-op does not disclose sharing or emit an event;
 - last-active-Super-Admin invariant and rollback;
 - event insert failure rollback;
 - database-level identity event immutability on PostgreSQL/SQLite-compatible test paths;
@@ -249,5 +262,6 @@ Frontend:
 - Password is accepted only on account creation, is limited to 12-72 characters for the current bcrypt hashing baseline, is handled by Laravel's hashed cast, and is never returned or audited.
 - There is no default/demo password reset.
 - Membership/role mutation is tenant-scoped and permission-gated.
+- A school-scoped administrator cannot mutate global account state for a User that is already shared with another school.
 - Last-active-Super-Admin protection prevents accidental administrative lockout.
 - The server role catalog remains authoritative; browser permission matrices cannot elevate access.
