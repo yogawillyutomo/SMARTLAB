@@ -82,6 +82,7 @@ class AcademicPeriodMutationService
             }
 
             $this->assertDateRange($after['startsOn'], $after['endsOn'], 'Academic Year');
+            $this->assertAcademicYearContainsExistingSemesters($year->id, $after['startsOn'], $after['endsOn']);
             if ($after['status'] === 'active') {
                 $this->assertAcademicYearDoesNotOverlap($schoolId, $after['startsOn'], $after['endsOn'], $year->id);
             }
@@ -243,10 +244,25 @@ class AcademicPeriodMutationService
             ->where('starts_on', '<=', $endsOn)
             ->where('ends_on', '>=', $startsOn);
         if ($exceptId !== null) {
-            $query->whereKeyNot($exceptId);
+            $query->where('id', '!=', $exceptId);
         }
         if ($query->exists()) {
             throw AcademicMasterException::conflict('The active Academic Year date range overlaps another active Academic Year.');
+        }
+    }
+
+    private function assertAcademicYearContainsExistingSemesters(string $academicYearId, string $startsOn, string $endsOn): void
+    {
+        $invalidChildExists = Semester::query()
+            ->where('academic_year_id', $academicYearId)
+            ->where(function ($query) use ($startsOn, $endsOn): void {
+                $query->where('starts_on', '<', $startsOn)
+                    ->orWhere('ends_on', '>', $endsOn);
+            })
+            ->exists();
+
+        if ($invalidChildExists) {
+            throw AcademicMasterException::conflict('The Academic Year date range must continue to contain every existing Semester.');
         }
     }
 
@@ -273,7 +289,7 @@ class AcademicPeriodMutationService
             ->where('starts_on', '<=', $endsOn)
             ->where('ends_on', '>=', $startsOn);
         if ($exceptId !== null) {
-            $query->whereKeyNot($exceptId);
+            $query->where('id', '!=', $exceptId);
         }
         if ($query->exists()) {
             throw AcademicMasterException::conflict('The active Semester date range overlaps another active Semester.');
