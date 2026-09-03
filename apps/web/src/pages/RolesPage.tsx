@@ -1,161 +1,176 @@
-import { useEffect, useMemo, useState } from 'react';
-import { KeyRound, Save, Download } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { useAuthStore } from '@/stores/authStore';
-import { usePermissionStore } from '@/stores/permissionStore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, KeyRound, LockKeyhole } from 'lucide-react';
+import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { toast } from '@/stores/toastStore';
-import { cn, downloadCSV } from '@/utils';
-import { auditLog } from '@/services/repositories';
-import { usePermission } from '@/components/common/PermissionGuard';
-import { MODULES, MODULE_LABELS, PERMISSION_ACTIONS, type ModuleKey, type PermissionAction, type PermissionMatrix, type RoleName } from '@/lib/permissions';
+import { ErrorState, LoadingState } from '@/components/ui/States';
+import { downloadCSV } from '@/utils';
+import { identityAdminGateway, type IdentityRoleDto } from '@/services/identityAdminApi';
 
-const ROLES: RoleName[] = ['Super Admin', 'Admin Lab', 'Kepala Lab', 'Teknisi', 'Guru', 'Ketua Kelas', 'Siswa', 'Pimpinan'];
+function issueMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    if (error.code === 'UNAUTHENTICATED') return 'Sesi berakhir. Silakan masuk kembali.';
+    if (error.code === 'FORBIDDEN') return 'Anda tidak memiliki izin melihat Hak Akses.';
+    if (error.kind === 'network') return 'API SmartLab tidak dapat dijangkau.';
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return 'Hak akses tidak dapat dimuat.';
+}
+
+function permissionModule(permission: string): string {
+  const separator = permission.indexOf('.');
+  return separator === -1 ? permission : permission.slice(0, separator);
+}
 
 export function RolesPage() {
-  const { db, refresh } = useAppData();
-  const user = useAuthStore((s) => s.user);
-  const permissions = usePermissionStore((s) => s.permissions);
-  const setPermissions = usePermissionStore((s) => s.setPermissions);
-  const resetRole = usePermissionStore((s) => s.resetRole);
-  const resetAll = usePermissionStore((s) => s.resetAll);
-  const canUpdate = usePermission('roles', 'update');
-  const canManage = usePermission('roles', 'manage');
-  const canExport = usePermission('roles', 'export');
-  const canEdit = canUpdate || canManage;
-  const [draftPermissions, setDraftPermissions] = useState<PermissionMatrix>(permissions);
-  const [activeRole, setActiveRole] = useState<RoleName>('Admin Lab');
+  const [roles, setRoles] = useState<IdentityRoleDto[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [issue, setIssue] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setIssue(null);
+    try {
+      const result = await identityAdminGateway.listRoles();
+      setRoles(result);
+      setSelectedKey((current) => result.some((role) => role.key === current) ? current : (result[0]?.key ?? ''));
+    } catch (error) {
+      setIssue(issueMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setDraftPermissions(permissions);
-  }, [permissions]);
+    void load();
+  }, [load]);
 
-  function toggle(role: RoleName, module: ModuleKey, action: PermissionAction) {
-    if (!canEdit) return;
-    setDraftPermissions((prev) => {
-      const current = prev[role][module];
-      const next: PermissionMatrix = { ...prev, [role]: { ...prev[role] } };
-      if (current.includes(action)) {
-        next[role][module] = current.filter((a) => a !== action);
-      } else {
-        next[role][module] = [...current, action];
-      }
-      return next;
-    });
+  const selected = useMemo(
+    () => roles.find((role) => role.key === selectedKey) ?? null,
+    [roles, selectedKey],
+  );
+
+  const permissionGroups = useMemo(() => {
+    if (!selected) return [];
+    const grouped = new Map<string, string[]>();
+    for (const permission of selected.permissions) {
+      const module = permissionModule(permission);
+      const entries = grouped.get(module) ?? [];
+      entries.push(permission);
+      grouped.set(module, entries);
+    }
+    return [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [selected]);
+
+  function exportCatalog() {
+    const rows = roles.flatMap((role) => role.permissions.map((permission) => ({
+      RoleKey: role.key,
+      Role: role.name,
+      Permission: permission,
+      Membership: role.membershipCount,
+      MembershipAktif: role.activeMembershipCount,
+    })));
+    downloadCSV('hak-akses-smartlab.csv', rows);
   }
-
-  function save() {
-    if (!canEdit) return;
-    setPermissions(draftPermissions);
-    auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'update', object: 'permission-matrix', newValue: 'Role permissions updated', device: 'Web' });
-    refresh();
-    toast('Konfigurasi permission disimpan', 'success');
-  }
-
-  function reset() {
-    if (!canEdit) return;
-    resetAll();
-    auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: 'all-roles', newValue: 'All role permissions reset to defaults', device: 'Web' });
-    refresh();
-    toast('Permission direset ke default', 'info');
-  }
-
-  function resetActiveRole() {
-    if (!canEdit) return;
-    resetRole(activeRole);
-    auditLog.log({ userName: user?.name ?? 'Admin', role: user?.role ?? 'Super Admin', module: 'roles', action: 'reset', object: activeRole, newValue: `Role permissions reset to defaults: ${activeRole}`, device: 'Web' });
-    refresh();
-    toast(`Permission ${activeRole} direset ke default`, 'info');
-  }
-
-  function exportCSV() {
-    if (!canExport) return;
-    const rows: Record<string, unknown>[] = [];
-    ROLES.forEach((role) => {
-      MODULES.forEach((mod) => {
-        PERMISSION_ACTIONS.forEach((act) => {
-          rows.push({ Role: role, Module: MODULE_LABELS[mod], Action: act, Allowed: draftPermissions[role][mod].includes(act) ? 'Yes' : 'No' });
-        });
-      });
-    });
-    downloadCSV('role-permissions.csv', rows);
-  }
-
-  const roleStats = useMemo(() => {
-    return ROLES.map((role) => ({
-      role,
-      count: db.users.filter((u) => u.role === role).length,
-      modules: MODULES.filter((module) => draftPermissions[role][module].length > 0).length,
-    }));
-  }, [db.users, draftPermissions]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Hak Akses" description="Kelola hak lihat dan tindakan setiap role pada modul SmartLab." icon={<KeyRound className="h-5 w-5" />}
-        actions={<>
-          <Button variant="secondary" size="sm" onClick={reset} disabled={!canEdit}>Reset</Button>
-          <Button variant="secondary" size="sm" onClick={resetActiveRole} disabled={!canEdit}>Reset Role</Button>
-          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          <Button size="sm" icon={<Save className="h-4 w-4" />} onClick={save} disabled={!canEdit}>Simpan</Button>
-        </>}
+      <PageHeader
+        title="Hak Akses"
+        description="Katalog role dan permission canonical dari backend SmartLab."
+        icon={<KeyRound className="h-5 w-5" />}
+        actions={
+          <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCatalog} disabled={roles.length === 0}>
+            Export
+          </Button>
+        }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {roleStats.map((s) => (
-          <Card key={s.role} hover onClick={() => setActiveRole(s.role)} className={cn('cursor-pointer', activeRole === s.role && 'border-accent-content')}>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink-primary">{s.role}</p>
-                <Badge tone="accent">{s.count} user</Badge>
-              </div>
-              <p className="mt-1 text-xs text-ink-muted">{s.modules} modul diakses</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Permission Matrix — {activeRole}</CardTitle>
-          <div className="flex items-center gap-1 rounded-lg border border-base-700 p-1">
-            {ROLES.map((r) => (
-              <button key={r} onClick={() => setActiveRole(r)} className={cn('rounded-md px-2.5 py-1 text-xs font-medium', activeRole === r ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-secondary')}>{r}</button>
-            ))}
+      <Card className="border-info/30 bg-info/5">
+        <CardContent className="flex items-start gap-3">
+          <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-info" />
+          <div>
+            <p className="text-sm font-semibold text-ink-primary">Server-authoritative · read-only pada tahap S1A</p>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
+              Permission tidak lagi disimpan atau diedit di browser. Matrix backend saat ini bersifat global; editor tenant baru akan dibuka setelah kontrak override permission per sekolah dikunci agar perubahan satu sekolah tidak memengaruhi tenant lain.
+            </p>
           </div>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-base-700 text-left text-ink-muted">
-                <th className="px-3 py-2 font-medium sticky left-0 bg-base-800">Modul</th>
-                {PERMISSION_ACTIONS.map((act) => <th key={act} className="px-3 py-2 text-center font-medium capitalize">{act}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {MODULES.map((mod) => (
-                <tr key={mod} className="border-b border-base-700/40 hover:bg-base-700/20">
-                  <td className="px-3 py-2 font-medium text-ink-primary sticky left-0 bg-base-800">{MODULE_LABELS[mod]}</td>
-                  {PERMISSION_ACTIONS.map((act) => {
-                    const allowed = draftPermissions[activeRole][mod].includes(act);
-                    return (
-                      <td key={act} className="px-3 py-2 text-center">
-                        <button disabled={!canEdit} onClick={() => toggle(activeRole, mod, act)} className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50', allowed ? 'border-success bg-success/15 text-success-foreground' : 'border-base-600 text-transparent hover:border-base-600')}>
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </CardContent>
       </Card>
 
-      <p className="text-xs text-ink-muted">Catatan: Permission ini disimpan melalui abstraksi storage untuk simulasi frontend. Saat terhubung ke backend Laravel, policy server tetap menjadi batas keamanan dan sumber validasi utama.</p>
+      {loading && roles.length === 0 ? (
+        <Card><LoadingState label="Memuat katalog hak akses..." /></Card>
+      ) : issue ? (
+        <Card><ErrorState message={issue} onRetry={() => void load()} /></Card>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {roles.map((role) => (
+              <Card
+                key={role.key}
+                hover
+                onClick={() => setSelectedKey(role.key)}
+                className={`cursor-pointer ${selectedKey === role.key ? 'border-accent-content' : ''}`}
+              >
+                <CardContent>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-ink-primary">{role.name}</p>
+                      <p className="mt-0.5 text-[10px] text-ink-muted">{role.key}</p>
+                    </div>
+                    <Badge tone="accent">{role.activeMembershipCount}/{role.membershipCount}</Badge>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-ink-muted">
+                    <span>{role.permissions.length} permission</span>
+                    <span>aktif/total user</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {selected && (
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Permission — {selected.name}</CardTitle>
+                  <p className="mt-1 text-xs text-ink-muted">{selected.permissions.length} permission efektif dari katalog server.</p>
+                </div>
+                <Badge tone="muted">Read-only</Badge>
+              </CardHeader>
+              <CardContent>
+                {permissionGroups.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-ink-muted">Role ini belum memiliki permission.</p>
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {permissionGroups.map(([module, permissions]) => (
+                      <div key={module} className="rounded-xl border border-base-700 bg-base-800/40 p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="font-mono text-xs font-semibold text-ink-primary">{module}</p>
+                          <Badge tone="neutral">{permissions.length}</Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {permissions.map((permission) => (
+                            <Badge key={permission} tone="success">{permission}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      <p className="text-xs text-ink-muted">
+        Jumlah membership dihitung oleh backend untuk sekolah aktif. Permission pada halaman ini adalah data referensi server, bukan simulasi frontend.
+      </p>
     </div>
   );
 }
