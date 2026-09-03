@@ -71,7 +71,7 @@ Exact body fields:
 
 - `name`: required, trimmed, 1-255.
 - `email`: required, normalized lowercase/trimmed email, max 255, globally unique for this v1 creation flow.
-- `password`: required, minimum 12, maximum 255. Never returned or logged.
+- `password`: required, minimum 12, maximum 72. The 72-character ceiling matches the bcrypt input limit used by the current Laravel password hashing baseline. Never returned or logged.
 - `nip`: optional nullable trimmed string max 64.
 - `nis`: optional nullable trimmed string max 64.
 - `phone`: optional nullable trimmed string max 32.
@@ -246,7 +246,7 @@ Frontend:
 
 ## 10. Security notes
 
-- Password is accepted only on account creation, is handled by Laravel's hashed cast, and is never returned or audited.
+- Password is accepted only on account creation, is limited to 12-72 characters for the current bcrypt hashing baseline, is handled by Laravel's hashed cast, and is never returned or audited.
 - There is no default/demo password reset.
 - Membership/role mutation is tenant-scoped and permission-gated.
 - Last-active-Super-Admin protection prevents accidental administrative lockout.
