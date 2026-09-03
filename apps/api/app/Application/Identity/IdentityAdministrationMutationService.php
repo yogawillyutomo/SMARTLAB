@@ -75,7 +75,7 @@ class IdentityAdministrationMutationService
                 return $membership;
             }, 3);
         } catch (QueryException $exception) {
-            if ($this->isUniqueViolation($exception)) {
+            if ($this->isEmailUniqueViolation($exception)) {
                 throw ValidationException::withMessages([
                     'email' => ['The email has already been taken.'],
                 ]);
@@ -201,7 +201,7 @@ class IdentityAdministrationMutationService
                 return $membership;
             }, 3);
         } catch (QueryException $exception) {
-            if ($this->isUniqueViolation($exception)) {
+            if ($this->isEmailUniqueViolation($exception)) {
                 throw ValidationException::withMessages([
                     'email' => ['The email has already been taken.'],
                 ]);
@@ -233,7 +233,7 @@ class IdentityAdministrationMutationService
     {
         $query = User::query()->whereRaw('LOWER(email) = ?', [mb_strtolower($email)]);
         if ($exceptUserId !== null) {
-            $query->whereKeyNot($exceptUserId);
+            $query->where('id', '!=', $exceptUserId);
         }
 
         if ($query->exists()) {
@@ -313,8 +313,15 @@ class IdentityAdministrationMutationService
             ->firstOrFail();
     }
 
-    private function isUniqueViolation(QueryException $exception): bool
+    private function isEmailUniqueViolation(QueryException $exception): bool
     {
-        return in_array((string) $exception->getCode(), ['23000', '23505'], true);
+        if (! in_array((string) $exception->getCode(), ['23000', '23505'], true)) {
+            return false;
+        }
+
+        $message = mb_strtolower($exception->getMessage());
+
+        return str_contains($message, 'users_email_unique')
+            || str_contains($message, 'users.email');
     }
 }
