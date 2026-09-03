@@ -16,6 +16,8 @@ use LogicException;
 
 class IdentityAdministrationMutationService
 {
+    private const GLOBAL_USER_FIELDS = ['name', 'email', 'nip', 'nis', 'phone', 'userStatus'];
+
     public function __construct(
         private readonly IdentityChangeEventRecorder $eventRecorder,
     ) {}
@@ -108,6 +110,8 @@ class IdentityAdministrationMutationService
                     throw IdentityAdministrationException::membershipNotFound();
                 }
 
+                // User is the serialization anchor for any operation that can affect the global login account.
+                // A future link-existing-user flow must acquire this same lock before attaching another SchoolMembership.
                 $user = User::query()->whereKey($reference->user_id)->lockForUpdate()->firstOrFail();
                 $membership = SchoolMembership::query()
                     ->where('school_id', $schoolId)
@@ -143,6 +147,16 @@ class IdentityAdministrationMutationService
                     $after['roleKeys'] = $roles->pluck('key')->sort()->values()->all();
                 }
 
+                [$changedBefore, $changedAfter] = $this->changes($before, $after);
+                if ($changedBefore === []) {
+                    return $this->freshProjection($membership->id);
+                }
+
+                if ($this->changesGlobalUserState($changedAfter)
+                    && $this->hasMembershipOutsideSchool($user->id, $schoolId)) {
+                    throw IdentityAdministrationException::sharedUserMutationRequiresGlobalAuthority();
+                }
+
                 if ($after['email'] !== $before['email']) {
                     $this->assertEmailAvailable($after['email'], $user->id);
                 }
@@ -153,11 +167,6 @@ class IdentityAdministrationMutationService
                     $after['roleKeys'],
                 ) && ! $this->otherActiveSuperAdminExists($schoolId, $membership->id)) {
                     throw IdentityAdministrationException::lastSuperAdminRequired();
-                }
-
-                [$changedBefore, $changedAfter] = $this->changes($before, $after);
-                if ($changedBefore === []) {
-                    return $this->freshProjection($membership->id);
                 }
 
                 $userAttributes = [];
@@ -278,6 +287,20 @@ class IdentityAdministrationMutationService
         }
 
         return [$changedBefore, $changedAfter];
+    }
+
+    /** @param array<string, mixed> $changedAfter */
+    private function changesGlobalUserState(array $changedAfter): bool
+    {
+        return array_intersect(array_keys($changedAfter), self::GLOBAL_USER_FIELDS) !== [];
+    }
+
+    private function hasMembershipOutsideSchool(string $userId, string $schoolId): bool
+    {
+        return SchoolMembership::query()
+            ->where('user_id', $userId)
+            ->where('school_id', '!=', $schoolId)
+            ->exists();
     }
 
     /** @param list<string> $roleKeys */
