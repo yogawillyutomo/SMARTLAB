@@ -18,6 +18,7 @@ class RolePermissionSeeder extends Seeder
             'incidents.view', 'incidents.create', 'incidents.update', 'incidents.assign', 'incidents.export',
             'incidents.view-all', 'incidents.view-history', 'incidents.comment',
             'work-orders.view', 'work-orders.create', 'work-orders.update', 'work-orders.assign', 'work-orders.export',
+            'users.view', 'users.create', 'users.update', 'roles.view',
             'audit-logs.view', 'audit-logs.export',
         ],
         'kepala-lab' => [
@@ -29,6 +30,7 @@ class RolePermissionSeeder extends Seeder
             'incidents.view', 'incidents.approve', 'incidents.export',
             'incidents.view-all', 'incidents.view-history', 'incidents.comment',
             'work-orders.view', 'work-orders.approve', 'work-orders.export',
+            'users.view', 'roles.view',
             'audit-logs.view', 'audit-logs.export',
         ],
         'teknisi' => [
@@ -58,6 +60,7 @@ class RolePermissionSeeder extends Seeder
             'layouts.view',
             'incidents.view', 'incidents.export', 'incidents.view-all', 'incidents.view-history',
             'work-orders.view', 'work-orders.export',
+            'users.view', 'roles.view',
             'audit-logs.view', 'audit-logs.export',
         ],
     ];

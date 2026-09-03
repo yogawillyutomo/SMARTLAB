@@ -59,6 +59,14 @@ class PermissionSeeder extends Seeder
             'assign' => 'Tugaskan Perintah Kerja',
             'export' => 'Ekspor Perintah Kerja',
         ],
+        'users' => [
+            'view' => 'Lihat Pengguna Sekolah',
+            'create' => 'Buat Pengguna Sekolah',
+            'update' => 'Ubah Pengguna Sekolah',
+        ],
+        'roles' => [
+            'view' => 'Lihat Hak Akses',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',
@@ -79,9 +87,7 @@ class PermissionSeeder extends Seeder
         Permission::query()->whereNotIn('key', self::keys())->delete();
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function keys(): array
     {
         $keys = [];

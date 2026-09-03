@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\IdentityAdministrationController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
@@ -22,6 +23,17 @@ Route::prefix('v1')->group(function (): void {
     Route::get('me', MeController::class)->middleware('auth:sanctum');
 
     Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('identity/memberships', [IdentityAdministrationController::class, 'index'])
+            ->middleware('permission:users.view');
+        Route::post('identity/memberships', [IdentityAdministrationController::class, 'store'])
+            ->middleware('permission:users.create');
+        Route::get('identity/memberships/{membershipId}', [IdentityAdministrationController::class, 'show'])
+            ->middleware('permission:users.view');
+        Route::patch('identity/memberships/{membershipId}', [IdentityAdministrationController::class, 'update'])
+            ->middleware('permission:users.update');
+        Route::get('identity/roles', [IdentityAdministrationController::class, 'roles'])
+            ->middleware('permission:roles.view');
+
         Route::get('devices', [DeviceController::class, 'index'])
             ->middleware('permission:devices.view');
         Route::post('devices', [DeviceController::class, 'store'])
