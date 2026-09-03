@@ -82,7 +82,8 @@ Effects, one transaction:
 1. create active `User`;
 2. create active `SchoolMembership` for current School;
 3. attach the exact role set;
-4. return 201 `MembershipProjection`.
+4. append exactly one immutable `identity.membership_created` event;
+5. return 201 `MembershipProjection`.
 
 No invitation/link-existing-user behavior exists in S1A. Existing email is validation failure; S1B/future identity work may add an explicit linking contract.
 
@@ -107,7 +108,7 @@ Exact optional body fields:
 
 At least one field is required.
 
-A successful effective change returns the fresh `MembershipProjection`. No hard delete exists.
+An effective successful change appends exactly one immutable `identity.membership_updated` event and returns the fresh `MembershipProjection`. An effective no-op returns the fresh projection and appends no event. No hard delete exists.
 
 Safety invariant: a mutation must not leave the School without at least one active membership whose User is active and whose roles include `super-admin`. Attempts return 409 `IDENTITY_LAST_SUPER_ADMIN_REQUIRED` with no partial changes.
 
@@ -163,7 +164,33 @@ Exact participant/admin-safe shape:
 
 No password hash, remember token, session identifier, permission pivot data, or other tenant membership is exposed.
 
-## 5. Validation and disclosure ordering
+## 5. Immutable identity audit events
+
+Material identity administration mutations are audited in `identity_change_events`.
+
+Each event records immutable snapshots:
+
+- current `school_id`;
+- actor user id, membership id, and actor name snapshots;
+- target user id, membership id, and target name snapshots;
+- `event_type`;
+- JSON payload;
+- `created_at`.
+
+Event types in S1A:
+
+- `identity.membership_created`;
+- `identity.membership_updated`.
+
+Create payload contains only non-secret administrative state: `userStatus`, `membershipStatus`, and sorted `roleKeys`. Password, password hash, session data, remember tokens, and CSRF data are prohibited.
+
+Update payload contains exact `before` and `after` maps for fields that effectively changed. Role keys are sorted. Secret authentication fields are prohibited.
+
+Event rows are append-only at the database level on PostgreSQL and SQLite. An event insert failure rolls back the entire identity mutation transaction.
+
+No public audit-event endpoint is introduced by S1A; the later Audit Log slice may project these canonical events.
+
+## 6. Validation and disclosure ordering
 
 - Authentication first.
 - Permission middleware before controller/domain reads.
@@ -172,13 +199,13 @@ No password hash, remember token, session identifier, permission pivot data, or 
 - Unknown body/query fields are rejected with 422.
 - Cross-school membership IDs return the same 404 as nonexistent IDs.
 
-## 6. Role matrix policy
+## 7. Role matrix policy
 
 S1A intentionally does **not** allow editing `role_permissions`.
 
 The current table is global. Allowing `/roles` to mutate it would change authorization for every tenant, contradicting the multi-tenant product direction. The existing browser-local editable matrix is therefore retired from production routing and replaced with a server-authoritative read-only catalog until a future contract defines tenant-scoped permission policy/overrides.
 
-## 7. Frontend migration gate
+## 8. Frontend migration gate
 
 After S1A:
 
@@ -189,7 +216,7 @@ After S1A:
 - navigation/page guards use `users.view` / `roles.view` server permission keys.
 - UI may export the currently fetched server projection client-side; export does not create an alternate source of truth.
 
-## 8. Required tests
+## 9. Required tests
 
 Backend:
 
@@ -197,11 +224,13 @@ Backend:
 - exact query/body field rejection;
 - tenant isolation and 404 non-disclosure;
 - deterministic pagination/filtering;
-- create transaction and exact projection;
+- create transaction, exact projection, and exactly one audit event;
 - canonical role validation;
 - global email uniqueness behavior;
-- update behavior and no hard-delete route;
+- update/effective-no-op behavior and no hard-delete route;
 - last-active-Super-Admin invariant and rollback;
+- event insert failure rollback;
+- database-level identity event immutability on PostgreSQL/SQLite-compatible test paths;
 - role catalog permissions/counts/order;
 - seeder idempotency and intended role grants;
 - exact route middleware.
@@ -215,9 +244,9 @@ Frontend:
 - create/update actions refresh canonical server data;
 - role page is explicitly read-only.
 
-## 9. Security notes
+## 10. Security notes
 
-- Password is accepted only on account creation, is handled by Laravel's hashed cast, and is never returned.
+- Password is accepted only on account creation, is handled by Laravel's hashed cast, and is never returned or audited.
 - There is no default/demo password reset.
 - Membership/role mutation is tenant-scoped and permission-gated.
 - Last-active-Super-Admin protection prevents accidental administrative lockout.
