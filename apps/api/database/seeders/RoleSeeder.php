@@ -2,21 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Identity\IdentityCatalog;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
 
 class RoleSeeder extends Seeder
 {
-    public const ROLES = [
-        'super-admin' => 'Super Admin',
-        'admin-lab' => 'Admin Lab',
-        'kepala-lab' => 'Kepala Lab',
-        'teknisi' => 'Teknisi',
-        'guru' => 'Guru',
-        'ketua-kelas' => 'Ketua Kelas',
-        'siswa' => 'Siswa',
-        'pimpinan' => 'Pimpinan',
-    ];
+    public const ROLES = IdentityCatalog::ROLES;
 
     public function run(): void
     {
