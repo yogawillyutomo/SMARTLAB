@@ -5,6 +5,8 @@ namespace App\Application\Academic;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Academic\AcademicMasterException;
 use App\Models\AcademicYear;
+use App\Models\LessonPeriod;
+use App\Models\LessonPeriodSet;
 use App\Models\School;
 use App\Models\Semester;
 use App\Models\User;
@@ -217,6 +219,194 @@ class AcademicPeriodMutationService
         });
     }
 
+    /** @param array<string, mixed> $data */
+    public function createLessonPeriodSet(CurrentMembershipContext $context, User $actor, array $data): LessonPeriodSet
+    {
+        return DB::transaction(function () use ($context, $actor, $data): LessonPeriodSet {
+            $schoolId = $context->membership->school_id;
+            $this->lockSchool($schoolId);
+            $year = AcademicYear::query()->where('school_id', $schoolId)->whereKey($data['academicYearId'])->lockForUpdate()->first();
+            if ($year === null) {
+                throw ValidationException::withMessages(['academicYearId' => ['The selected Academic Year is invalid.']]);
+            }
+            if (LessonPeriodSet::query()->where('academic_year_id', $year->id)->where('code', $data['code'])->exists()) {
+                throw ValidationException::withMessages(['code' => ['The Lesson Period Set code has already been taken in this Academic Year.']]);
+            }
+
+            $set = LessonPeriodSet::query()->create([
+                'school_id' => $schoolId,
+                'academic_year_id' => $year->id,
+                'code' => $data['code'],
+                'name' => $data['name'],
+                'status' => $data['status'] ?? 'active',
+                'version' => 1,
+            ]);
+
+            $this->eventRecorder->record(
+                $context,
+                $actor,
+                $set,
+                'lesson_period_set',
+                'academic_master.created',
+                ['after' => $this->lessonPeriodSetState($set)],
+                0,
+                1,
+            );
+
+            return $set;
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    public function updateLessonPeriodSet(CurrentMembershipContext $context, User $actor, string $id, int $expectedVersion, array $data): LessonPeriodSet
+    {
+        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $data): LessonPeriodSet {
+            $schoolId = $context->membership->school_id;
+            $this->lockSchool($schoolId);
+            $set = LessonPeriodSet::query()->where('school_id', $schoolId)->whereKey($id)->lockForUpdate()->first();
+            if ($set === null) {
+                throw AcademicMasterException::notFound('Lesson Period Set');
+            }
+            if ($set->version !== $expectedVersion) {
+                throw AcademicMasterException::versionConflict('Lesson Period Set');
+            }
+
+            $before = $this->lessonPeriodSetState($set);
+            $after = $before;
+            foreach (['name', 'status'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $after[$field] = $data[$field];
+                }
+            }
+            [$changedBefore, $changedAfter] = $this->changes($before, $after);
+            if ($changedBefore === []) {
+                return $set;
+            }
+
+            $versionBefore = $set->version;
+            $set->fill([
+                'name' => $after['name'],
+                'status' => $after['status'],
+            ]);
+            $set->version++;
+            $set->save();
+
+            $this->eventRecorder->record(
+                $context,
+                $actor,
+                $set,
+                'lesson_period_set',
+                $this->eventType($before['status'], $after['status']),
+                ['before' => $changedBefore, 'after' => $changedAfter],
+                $versionBefore,
+                $set->version,
+            );
+
+            return $set->refresh();
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    public function createLessonPeriod(CurrentMembershipContext $context, User $actor, array $data): LessonPeriod
+    {
+        return DB::transaction(function () use ($context, $actor, $data): LessonPeriod {
+            $schoolId = $context->membership->school_id;
+            $this->lockSchool($schoolId);
+            $set = LessonPeriodSet::query()->where('school_id', $schoolId)->whereKey($data['lessonPeriodSetId'])->lockForUpdate()->first();
+            if ($set === null) {
+                throw ValidationException::withMessages(['lessonPeriodSetId' => ['The selected Lesson Period Set is invalid.']]);
+            }
+            if (LessonPeriod::query()->where('lesson_period_set_id', $set->id)->where('code', $data['code'])->exists()) {
+                throw ValidationException::withMessages(['code' => ['The Lesson Period code has already been taken in this Lesson Period Set.']]);
+            }
+            $this->assertLessonPeriodSequenceAvailable($set->id, $data['sequence']);
+            $this->assertTimeRange($data['startsAt'], $data['endsAt']);
+            $this->assertLessonPeriodDoesNotOverlap($set->id, $data['startsAt'], $data['endsAt']);
+
+            $period = LessonPeriod::query()->create([
+                'school_id' => $schoolId,
+                'lesson_period_set_id' => $set->id,
+                'code' => $data['code'],
+                'sequence' => $data['sequence'],
+                'starts_at' => $data['startsAt'],
+                'ends_at' => $data['endsAt'],
+                'kind' => $data['kind'],
+                'status' => $data['status'] ?? 'active',
+                'version' => 1,
+            ]);
+
+            $this->eventRecorder->record(
+                $context,
+                $actor,
+                $period,
+                'lesson_period',
+                'academic_master.created',
+                ['after' => $this->lessonPeriodState($period)],
+                0,
+                1,
+            );
+
+            return $period;
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    public function updateLessonPeriod(CurrentMembershipContext $context, User $actor, string $id, int $expectedVersion, array $data): LessonPeriod
+    {
+        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $data): LessonPeriod {
+            $schoolId = $context->membership->school_id;
+            $this->lockSchool($schoolId);
+            $period = LessonPeriod::query()->where('school_id', $schoolId)->whereKey($id)->lockForUpdate()->first();
+            if ($period === null) {
+                throw AcademicMasterException::notFound('Lesson Period');
+            }
+            if ($period->version !== $expectedVersion) {
+                throw AcademicMasterException::versionConflict('Lesson Period');
+            }
+            LessonPeriodSet::query()->where('school_id', $schoolId)->whereKey($period->lesson_period_set_id)->lockForUpdate()->firstOrFail();
+
+            $before = $this->lessonPeriodState($period);
+            $after = $before;
+            foreach (['sequence', 'startsAt', 'endsAt', 'kind', 'status'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $after[$field] = $data[$field];
+                }
+            }
+            [$changedBefore, $changedAfter] = $this->changes($before, $after);
+            if ($changedBefore === []) {
+                return $period;
+            }
+
+            $this->assertLessonPeriodSequenceAvailable($period->lesson_period_set_id, $after['sequence'], $period->id);
+            $this->assertTimeRange($after['startsAt'], $after['endsAt']);
+            $this->assertLessonPeriodDoesNotOverlap($period->lesson_period_set_id, $after['startsAt'], $after['endsAt'], $period->id);
+
+            $versionBefore = $period->version;
+            $period->fill([
+                'sequence' => $after['sequence'],
+                'starts_at' => $after['startsAt'],
+                'ends_at' => $after['endsAt'],
+                'kind' => $after['kind'],
+                'status' => $after['status'],
+            ]);
+            $period->version++;
+            $period->save();
+
+            $this->eventRecorder->record(
+                $context,
+                $actor,
+                $period,
+                'lesson_period',
+                $this->eventType($before['status'], $after['status']),
+                ['before' => $changedBefore, 'after' => $changedAfter],
+                $versionBefore,
+                $period->version,
+            );
+
+            return $period->refresh();
+        });
+    }
+
     private function lockSchool(string $schoolId): void
     {
         School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
@@ -296,6 +486,40 @@ class AcademicPeriodMutationService
         }
     }
 
+    private function assertLessonPeriodSequenceAvailable(string $lessonPeriodSetId, int $sequence, ?string $exceptId = null): void
+    {
+        $query = LessonPeriod::query()
+            ->where('lesson_period_set_id', $lessonPeriodSetId)
+            ->where('sequence', $sequence);
+        if ($exceptId !== null) {
+            $query->where('id', '!=', $exceptId);
+        }
+        if ($query->exists()) {
+            throw ValidationException::withMessages(['sequence' => ['The Lesson Period sequence has already been taken in this Lesson Period Set.']]);
+        }
+    }
+
+    private function assertTimeRange(string $startsAt, string $endsAt): void
+    {
+        if ($startsAt >= $endsAt) {
+            throw ValidationException::withMessages(['endsAt' => ['The Lesson Period end time must be after its start time.']]);
+        }
+    }
+
+    private function assertLessonPeriodDoesNotOverlap(string $lessonPeriodSetId, string $startsAt, string $endsAt, ?string $exceptId = null): void
+    {
+        $query = LessonPeriod::query()
+            ->where('lesson_period_set_id', $lessonPeriodSetId)
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt);
+        if ($exceptId !== null) {
+            $query->where('id', '!=', $exceptId);
+        }
+        if ($query->exists()) {
+            throw AcademicMasterException::conflict('Lesson Period time ranges in the same Lesson Period Set may touch but may not overlap.');
+        }
+    }
+
     /** @return array{code:string,name:string,startsOn:string,endsOn:string,status:string} */
     private function academicYearState(AcademicYear $year): array
     {
@@ -317,6 +541,29 @@ class AcademicPeriodMutationService
             'startsOn' => $semester->starts_on->format('Y-m-d'),
             'endsOn' => $semester->ends_on->format('Y-m-d'),
             'status' => $semester->status,
+        ];
+    }
+
+    /** @return array{code:string,name:string,status:string} */
+    private function lessonPeriodSetState(LessonPeriodSet $set): array
+    {
+        return [
+            'code' => $set->code,
+            'name' => $set->name,
+            'status' => $set->status,
+        ];
+    }
+
+    /** @return array{code:string,sequence:int,startsAt:string,endsAt:string,kind:string,status:string} */
+    private function lessonPeriodState(LessonPeriod $period): array
+    {
+        return [
+            'code' => $period->code,
+            'sequence' => $period->sequence,
+            'startsAt' => (string) $period->starts_at,
+            'endsAt' => (string) $period->ends_at,
+            'kind' => $period->kind,
+            'status' => $period->status,
         ];
     }
 
