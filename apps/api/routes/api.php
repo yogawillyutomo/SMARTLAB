@@ -52,6 +52,22 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:master-data.view');
         Route::patch('master-data/semesters/{semesterId}', [AcademicPeriodMasterController::class, 'updateSemester'])
             ->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+        Route::get('master-data/lesson-period-sets', [AcademicPeriodMasterController::class, 'lessonPeriodSets'])
+            ->middleware('permission:master-data.view');
+        Route::post('master-data/lesson-period-sets', [AcademicPeriodMasterController::class, 'storeLessonPeriodSet'])
+            ->middleware('permission:master-data.create');
+        Route::get('master-data/lesson-period-sets/{lessonPeriodSetId}', [AcademicPeriodMasterController::class, 'showLessonPeriodSet'])
+            ->middleware('permission:master-data.view');
+        Route::patch('master-data/lesson-period-sets/{lessonPeriodSetId}', [AcademicPeriodMasterController::class, 'updateLessonPeriodSet'])
+            ->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+        Route::get('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'lessonPeriods'])
+            ->middleware('permission:master-data.view');
+        Route::post('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'storeLessonPeriod'])
+            ->middleware('permission:master-data.create');
+        Route::get('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'showLessonPeriod'])
+            ->middleware('permission:master-data.view');
+        Route::patch('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'updateLessonPeriod'])
+            ->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
 
         Route::get('devices', [DeviceController::class, 'index'])
             ->middleware('permission:devices.view');
