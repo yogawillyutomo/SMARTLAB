@@ -72,8 +72,8 @@ function AppRoutes() {
         <Route path="/calendar" element={<RequirePermission module="calendar"><CalendarPage /></RequirePermission>} />
         <Route path="/reports" element={<RequirePermission module="reports"><ReportsPage /></RequirePermission>} />
         <Route path="/notifications" element={<RequirePermission module="notifications"><NotificationsPage /></RequirePermission>} />
-        <Route path="/users" element={<RequirePermission module="users"><UsersPage /></RequirePermission>} />
-        <Route path="/roles" element={<RequirePermission module="roles"><RolesPage /></RequirePermission>} />
+        <Route path="/users" element={<RequireServerPermission permission="users.view"><UsersPage /></RequireServerPermission>} />
+        <Route path="/roles" element={<RequireServerPermission permission="roles.view"><RolesPage /></RequireServerPermission>} />
         <Route path="/master-data" element={<RequirePermission module="master-data"><MasterDataPage /></RequirePermission>} />
         <Route path="/audit-logs" element={<RequirePermission module="audit-logs"><AuditLogsPage /></RequirePermission>} />
         <Route path="/settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
