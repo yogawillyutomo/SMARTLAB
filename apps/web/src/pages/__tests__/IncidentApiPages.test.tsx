@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { hasServerPermission } from '@/lib/authIdentity';
+import { ApiClientError } from '@/lib/apiClient';
 import {
   INCIDENT_STATUS_LABELS,
   emptyIncidentCreateForm,
+  incidentCreateOutcomeIsAmbiguous,
   validateIncidentCreateForm,
 } from '@/lib/incidentPresentation';
 import {
@@ -11,7 +13,7 @@ import {
   IncidentListView,
   type IncidentListState,
 } from '@/pages/IncidentApiPages';
-import type { IncidentListItem, IncidentReportingLaboratoryDto } from '@/services/incidentApi';
+import { IncidentContractError, type IncidentListItem, type IncidentReportingLaboratoryDto } from '@/services/incidentApi';
 import type { AuthenticatedUser } from '@/types';
 
 const incident: IncidentListItem = {
@@ -169,5 +171,16 @@ describe('Incident create presentation', () => {
       expect(invalid.errors.occurredAt).toBeTruthy();
       expect(invalid.errors.request).toBeTruthy();
     }
+  });
+
+  it('enters E4 recovery only for ambiguous POST outcomes', () => {
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('network', { kind: 'network' }))).toBe(true);
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('invalid response', { kind: 'invalid_response', status: 200 }))).toBe(true);
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('server failure', { kind: 'api', status: 503 }))).toBe(true);
+    expect(incidentCreateOutcomeIsAmbiguous(new IncidentContractError())).toBe(true);
+
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('validation', { kind: 'api', status: 422, code: 'VALIDATION_FAILED' }))).toBe(false);
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('forbidden', { kind: 'api', status: 403, code: 'FORBIDDEN' }))).toBe(false);
+    expect(incidentCreateOutcomeIsAmbiguous(new ApiClientError('configuration', { kind: 'configuration' }))).toBe(false);
   });
 });
