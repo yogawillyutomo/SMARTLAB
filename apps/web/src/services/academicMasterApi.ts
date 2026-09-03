@@ -152,7 +152,7 @@ function nonNegativeInt(value: unknown): number {
 }
 
 function enumValue<T extends readonly string[]>(value: unknown, allowed: T): T[number] {
-  if (typeof value !== 'string' || !allowed.includes(value)) throw new AcademicMasterContractError();
+  if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) throw new AcademicMasterContractError();
   return value as T[number];
 }
 
