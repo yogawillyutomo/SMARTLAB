@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -66,6 +66,8 @@ export interface IncidentActionAvailability {
   viewHistory: boolean;
 }
 
+// Exported for focused workflow permission regression coverage.
+// eslint-disable-next-line react-refresh/only-export-components
 export function incidentActionAvailability(incident: IncidentDto, user: AuthenticatedUser | null): IncidentActionAvailability {
   const canUpdate = hasServerPermission(user, 'incidents.update');
   const canAssign = hasServerPermission(user, 'incidents.assign');
@@ -95,6 +97,8 @@ export function incidentActionAvailability(incident: IncidentDto, user: Authenti
   };
 }
 
+// Exported for focused snapshot-aware reopen regression coverage.
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolvedReopenTarget(incident: IncidentDto): 'in_progress' | 'triaged' {
   return incident.assignee ? 'in_progress' : 'triaged';
 }
@@ -233,7 +237,7 @@ export function IncidentDetailView({
 
       <Card><CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <div><h2 className="flex items-center gap-2 font-semibold text-ink-primary"><MessageSquare className="h-4 w-4" /> Komentar</h2><p className="mt-1 text-xs text-ink-muted">Percakapan participant-safe. Bukti internal tetap terpisah di Riwayat Internal.</p></div>
+          <div><h2 className="flex items-center gap-2 font-semibold text-ink-primary"><MessageSquare className="h-4 w-4" /> Komentar</h2><p className="mt-1 text-xs text-ink-muted">Percakapan participant-safe. Bukti audit internal memiliki izin akses terpisah.</p></div>
           {comments && <span className="text-xs text-ink-muted">{comments.meta.total} komentar</span>}
         </div>
         {actions.comment && (
@@ -336,34 +340,52 @@ export function IncidentDetailPage() {
   const [actionIssue, setActionIssue] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<IncidentAssigneeCandidateDto[]>([]);
   const [candidateSearch, setCandidateSearch] = useState('');
+  const requestGeneration = useRef(0);
 
   const currentIncident = state.status === 'ready' ? state.incident : null;
 
-  const loadComments = useCallback(async (page = 1) => {
+  const loadComments = useCallback(async (page = 1, generation = requestGeneration.current) => {
     if (!incidentId) return;
     setCommentsLoading(true);
-    try { setComments(await incidentGateway.comments(incidentId, { page, perPage: 25 })); }
-    catch (error) { toast(incidentPresentationIssue(error).message, 'error'); }
-    finally { setCommentsLoading(false); }
+    try {
+      const next = await incidentGateway.comments(incidentId, { page, perPage: 25 });
+      if (generation === requestGeneration.current) setComments(next);
+    } catch (error) {
+      if (generation === requestGeneration.current) toast(incidentPresentationIssue(error).message, 'error');
+    } finally {
+      if (generation === requestGeneration.current) setCommentsLoading(false);
+    }
   }, [incidentId]);
 
-  const loadEvents = useCallback(async (page = 1) => {
+  const loadEvents = useCallback(async (page = 1, generation = requestGeneration.current) => {
     if (!incidentId || !hasServerPermission(user, 'incidents.view-history')) return;
     setEventsLoading(true);
-    try { setEvents(await incidentGateway.events(incidentId, { page, perPage: 25 })); }
-    catch (error) { toast(incidentPresentationIssue(error).message, 'error'); }
-    finally { setEventsLoading(false); }
+    try {
+      const next = await incidentGateway.events(incidentId, { page, perPage: 25 });
+      if (generation === requestGeneration.current) setEvents(next);
+    } catch (error) {
+      if (generation === requestGeneration.current) toast(incidentPresentationIssue(error).message, 'error');
+    } finally {
+      if (generation === requestGeneration.current) setEventsLoading(false);
+    }
   }, [incidentId, user]);
 
   const load = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    setComments(null);
+    setEvents(null);
+    setCommentsLoading(false);
+    setEventsLoading(false);
     if (!incidentId) { setState({ status: 'not_found' }); return; }
     setState({ status: 'loading' });
     try {
       const incident = await incidentGateway.show(incidentId);
+      if (generation !== requestGeneration.current) return;
       setState({ status: 'ready', incident });
-      void loadComments(1);
-      if (hasServerPermission(user, 'incidents.view-history')) void loadEvents(1);
+      void loadComments(1, generation);
+      if (hasServerPermission(user, 'incidents.view-history')) void loadEvents(1, generation);
     } catch (error) {
+      if (generation !== requestGeneration.current) return;
       const issue = incidentPresentationIssue(error);
       setState(issue.notFound ? { status: 'not_found' } : { status: 'error', message: issue.message, retryable: issue.retryable });
     }
@@ -393,9 +415,10 @@ export function IncidentDetailPage() {
     } finally { setMutationBusy(false); }
   }
 
-  async function searchCandidates() {
+  async function searchCandidates(search = candidateSearch) {
+    const normalizedSearch = search.trim();
     try {
-      const result = await incidentGateway.assigneeCandidates({ ...(candidateSearch.trim().length >= 2 ? { search: candidateSearch.trim() } : {}), page: 1, perPage: 100 });
+      const result = await incidentGateway.assigneeCandidates({ ...(normalizedSearch.length >= 2 ? { search: normalizedSearch } : {}), page: 1, perPage: 100 });
       setCandidates(result.data);
     } catch (error) { setActionIssue(incidentPresentationIssue(error).message); }
   }
@@ -409,7 +432,11 @@ export function IncidentDetailPage() {
     setActionIssue(null);
     setActionFields(actionFieldsFromIncident(currentIncident));
     setAction(kind);
-    if (kind === 'assign') { setCandidateSearch(''); void searchCandidates(); }
+    if (kind === 'assign') {
+      setCandidateSearch('');
+      setCandidates([]);
+      void searchCandidates('');
+    }
   }
 
   async function submitAction() {
