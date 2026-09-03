@@ -6,6 +6,8 @@ class AcademicMasterCatalog
 {
     public const STATUSES = ['active', 'inactive'];
 
+    public const ACADEMIC_UNIT_TYPES = ['department', 'program', 'concentration', 'other'];
+
     public const LESSON_PERIOD_KINDS = ['instruction', 'break'];
 
     public const ENTITY_TYPES = [
