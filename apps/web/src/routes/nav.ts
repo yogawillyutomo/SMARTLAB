@@ -41,6 +41,12 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
+  laboratories: 'laboratories.view',
+  users: 'users.view',
+  roles: 'roles.view',
+};
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Operasional',
@@ -76,8 +82,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Administrasi',
     items: [
-      { to: '/users', label: 'Pengguna', icon: Users, module: 'users' },
-      { to: '/roles', label: 'Hak Akses', icon: KeyRound, module: 'roles' },
+      { to: '/users', label: 'Pengguna', icon: Users, module: 'users', serverPermission: 'users.view' },
+      { to: '/roles', label: 'Hak Akses', icon: KeyRound, module: 'roles', serverPermission: 'roles.view' },
       { to: '/master-data', label: 'Master Data', icon: Database, module: 'master-data' },
       { to: '/audit-logs', label: 'Audit Log', icon: ScrollText, module: 'audit-logs' },
       { to: '/settings', label: 'Pengaturan', icon: Settings, module: 'settings' },
@@ -102,8 +108,9 @@ export function canViewNavigationModule(
   module: ModuleKey,
 ): boolean {
   if (!user) return false;
-  return module === 'laboratories'
-    ? hasServerPermission(user, 'laboratories.view')
+  const serverPermission = SERVER_VIEW_PERMISSIONS[module];
+  return serverPermission
+    ? hasServerPermission(user, serverPermission)
     : canView(permissions, user.role, module);
 }
 
