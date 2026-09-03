@@ -165,7 +165,7 @@ class IncidentEventApiTest extends TestCase
         );
     }
 
-    public function test_event_history_paginates_and_uses_created_at_then_ulid_desc_order(): void
+    public function test_event_history_paginates_and_keeps_same_timestamp_events_stable(): void
     {
         [$user, $school, $membership] = $this->authenticateWithPermissions([
             'incidents.view',
@@ -183,16 +183,19 @@ class IncidentEventApiTest extends TestCase
             CarbonImmutable::setTestNow();
         }
 
-        $expected = collect([$first->id, $second->id])->sortDesc()->values()->all();
-
-        $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
+        $pageOne = $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $expected[0])
-            ->assertJsonPath('data.1.id', $expected[1])
             ->assertJsonPath('meta.page', 1)
             ->assertJsonPath('meta.perPage', 2)
             ->assertJsonPath('meta.total', 3)
             ->assertJsonPath('meta.lastPage', 2);
+
+        $pageOneIds = $pageOne->json('data.*.id');
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $pageOneIds);
+
+        $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
+            ->assertOk()
+            ->assertSame($pageOneIds, $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')->json('data.*.id'));
 
         $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=2')
             ->assertOk()
