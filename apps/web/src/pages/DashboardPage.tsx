@@ -1,506 +1,302 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-import {
-  FlaskConical,
-  Monitor,
-  MonitorX,
-  BookOpen,
   AlertTriangle,
-  ShieldCheck,
+  BookOpen,
+  Boxes,
+  FlaskConical,
   HandHelping,
+  Monitor,
   Package,
-  RefreshCw,
-  Download,
   Plus,
-  Wrench,
-  AlertCircle,
+  RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
-import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { StatusBadge, Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { LoadingState, EmptyState } from '@/components/ui/States';
-import { ActivityTimeline } from '@/components/common/ActivityTimeline';
-import { relativeTime, cn, downloadCSV } from '@/utils';
-import { useChartTheme } from '@/hooks/useChartTheme';
-import { activeRegularSchedules, regularScheduleAppliesOnDate, regularScheduleDistribution } from '@/lib/scheduleView';
+import { EmptyState, LoadingState } from '@/components/ui/States';
+import { downloadCSV } from '@/utils';
+import { hasServerPermission } from '@/lib/authIdentity';
+import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
+import { deviceGateway } from '@/services/deviceApi';
+import { incidentGateway, type IncidentListItem } from '@/services/incidentApi';
+import { INCIDENT_PRIORITY_LABELS, INCIDENT_STATUS_LABELS, incidentPriorityTone, incidentStatusTone } from '@/lib/incidentPresentation';
+
+interface DashboardCanonicalState {
+  laboratories: LaboratoryDto[];
+  deviceTotal: number;
+  incidentTotal: number;
+  recentIncidents: IncidentListItem[];
+}
+
+const EMPTY_STATE: DashboardCanonicalState = {
+  laboratories: [],
+  deviceTotal: 0,
+  incidentTotal: 0,
+  recentIncidents: [],
+};
+
+const PENDING_SERVER_DOMAINS = [
+  'Jadwal Reguler & Ketersediaan',
+  'Reservasi Lab',
+  'Pelaksanaan Lab & Jurnal',
+  'Monitoring Telemetri',
+  'Aset Tetap',
+  'Stok & Spare Part',
+  'Tugas Perbaikan',
+  'Pemeliharaan Berkala',
+  'Peminjaman Barang',
+  'Kalender Akademik',
+  'Notifikasi',
+  'Laporan & Analitik',
+  'Pengguna / Hak Akses Admin',
+  'Master Data',
+  'Audit Log',
+  'Pengaturan Tenant',
+] as const;
+
 export function DashboardPage() {
-  const { db, ready, refresh } = useAppData();
-  const user = useAuthStore((s) => s.user);
-  const { activeLabId } = useUIStore();
-  const canExport = usePermission('dashboard', 'export');
-  const canCreateIncident = usePermission('incidents', 'create');
-  const chartTheme = useChartTheme();
-  const operationalSchedules = useMemo(() => activeRegularSchedules(db.schedules), [db.schedules]);
+  const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const [state, setState] = useState<DashboardCanonicalState>(EMPTY_STATE);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const stats = useMemo(() => {
-    const activeLabs = db.labs.filter((l) => l.status === 'active').length;
-    const labDevices = db.devices.filter((d) => d.laboratoryId === activeLabId);
-    const onlinePCs = labDevices.filter((d) => d.status === 'Online').length;
-    const problemPCs = labDevices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
-    const today = new Date();
-    const todaySchedules = operationalSchedules.filter((schedule) => regularScheduleAppliesOnDate(schedule, today));
-    const openIncidents = db.incidents.filter((i) => !['Ditutup', 'Selesai', 'Ditolak'].includes(i.status)).length;
-    const overdueMaintenance = db.maintenance.plans.filter((p) => p.status === 'active' && new Date(p.nextSchedule) < new Date()).length;
-    const activeLoans = db.loans.filter((l) => ['Dipinjam', 'Diserahkan', 'Terlambat'].includes(l.status)).length;
-    const lowStock = db.stock.items.filter((s) => s.quantity <= s.minStock).length;
-    return { activeLabs, onlinePCs, problemPCs, todaySchedules: todaySchedules.length, openIncidents, overdueMaintenance, activeLoans, lowStock, totalPCs: labDevices.length };
-  }, [db, activeLabId, operationalSchedules]);
+  const canCreateIncident = hasServerPermission(user, 'incidents.create');
+  const canViewDevices = hasServerPermission(user, 'devices.view');
+  const canViewIncidents = hasServerPermission(user, 'incidents.view');
+  const canViewLaboratories = hasServerPermission(user, 'laboratories.view');
 
-  const scheduleDistribution = useMemo(() => regularScheduleDistribution(operationalSchedules), [operationalSchedules]);
-  const hasScheduleDistribution = scheduleDistribution.some((entry) => entry.scheduleCount > 0);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-  const assetConditionData = useMemo(() => {
-    const conds = ['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'];
-    return conds
-      .map((c) => ({
-        name: c,
-        value: db.assets.filter((a) => a.condition === c).length,
-        color: c === 'Baik' ? chartTheme.success : c === 'Rusak Ringan' ? chartTheme.warning : c === 'Rusak Sedang' ? chartTheme.orange : c === 'Rusak Berat' ? chartTheme.danger : chartTheme.axis,
-      }))
-      .filter((x) => x.value > 0);
-  }, [chartTheme, db.assets]);
+    try {
+      const laboratories = canViewLaboratories ? await laboratoryGateway.list() : [];
+      const selectedLaboratoryId = laboratories.some((laboratory) => laboratory.id === activeLabId)
+        ? activeLabId
+        : undefined;
 
-  const today = new Date();
-  const labStatuses = db.labs.map((lab) => {
-    const devices = db.devices.filter((d) => d.laboratoryId === lab.id);
-    const online = devices.filter((d) => d.status === 'Online').length;
-    const problem = devices.filter((d) => ['Critical', 'Warning', 'Offline'].includes(d.status)).length;
-    const todaySchedule = operationalSchedules
-      .filter((schedule) => schedule.laboratoryId === lab.id && regularScheduleAppliesOnDate(schedule, today))
-      .sort((left, right) => left.startTime.localeCompare(right.startTime))[0];
-    const inUse = db.sessions.some((s) => s.laboratoryId === lab.id && s.status === 'Berlangsung');
-    return { lab, online, problem, total: devices.length, inUse, todaySchedule };
-  });
+      const [devicePage, incidentPage] = await Promise.all([
+        canViewDevices
+          ? deviceGateway.list({
+              page: 1,
+              perPage: 1,
+              ...(selectedLaboratoryId ? { homeLaboratoryId: selectedLaboratoryId } : {}),
+            })
+          : Promise.resolve(null),
+        canViewIncidents
+          ? incidentGateway.list({
+              page: 1,
+              perPage: 5,
+              ...(selectedLaboratoryId ? { laboratoryId: selectedLaboratoryId } : {}),
+            })
+          : Promise.resolve(null),
+      ]);
 
-  const recentActivity = db.auditLogs.slice(0, 8).map((log) => ({
-    label: `${log.action} · ${log.module}`,
-    by: log.userName,
-    at: relativeTime(log.at),
-    tone: (log.action === 'create' ? 'success' : log.action === 'delete' ? 'danger' : log.action === 'update' ? 'warning' : 'neutral') as 'success' | 'danger' | 'warning' | 'neutral',
-  }));
+      setState({
+        laboratories,
+        deviceTotal: devicePage?.meta.total ?? 0,
+        incidentTotal: incidentPage?.meta.total ?? 0,
+        recentIncidents: incidentPage?.data ?? [],
+      });
+    } catch {
+      setState(EMPTY_STATE);
+      setError('Ringkasan server tidak dapat dimuat. Coba muat ulang setelah memastikan API aktif.');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeLabId, canViewDevices, canViewIncidents, canViewLaboratories]);
 
-  const upcomingMaintenance = db.maintenance.plans.filter((p) => p.status === 'active').slice(0, 4);
-  const criticalNotifications = db.notifications.filter((n) => !n.read).slice(0, 4);
-  const pendingJournals = db.journals.filter((j) => j.status === 'Draft' || j.status === 'Perlu Perbaikan');
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const activeLaboratories = useMemo(
+    () => state.laboratories.filter((laboratory) => laboratory.status === 'active'),
+    [state.laboratories],
+  );
+
+  const selectedLaboratory = state.laboratories.find((laboratory) => laboratory.id === activeLabId) ?? null;
 
   function handleExport() {
-    if (!canExport) return;
-    downloadCSV('dashboard-stats.csv', [
-      { metric: 'Laboratorium Aktif', value: stats.activeLabs },
-      { metric: 'PC Online', value: stats.onlinePCs },
-      { metric: 'PC Bermasalah', value: stats.problemPCs },
-      { metric: 'Jadwal Reguler Hari Ini', value: stats.todaySchedules },
-      { metric: 'Tiket Kerusakan Terbuka', value: stats.openIncidents },
-      { metric: 'Pemeliharaan Jatuh Tempo', value: stats.overdueMaintenance },
-      { metric: 'Barang Dipinjam', value: stats.activeLoans },
-      { metric: 'Stok Hampir Habis', value: stats.lowStock },
+    downloadCSV('dashboard-canonical-stats.csv', [
+      { metric: 'Laboratorium Aktif', value: activeLaboratories.length },
+      { metric: selectedLaboratory ? `Perangkat Terkelola - ${selectedLaboratory.name}` : 'Perangkat Terkelola', value: state.deviceTotal },
+      { metric: selectedLaboratory ? `Tiket Kerusakan - ${selectedLaboratory.name}` : 'Tiket Kerusakan', value: state.incidentTotal },
     ]);
   }
 
   const hour = new Date().getHours();
   const greeting = hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
-  const activeLab = db.labs.find((l) => l.id === activeLabId);
+  const scopeLabel = selectedLaboratory?.name ?? 'Semua Laboratorium';
 
-  if (!ready) return <LoadingState />;
+  if (loading && state === EMPTY_STATE) return <LoadingState />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${greeting}, ${user?.name?.split(' ').slice(0, 2).join(' ') ?? ''}`}
-        description={`${activeLab?.name ?? 'Semua Lab'} · ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+        description={`${scopeLabel} · ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
         icon={<FlaskConical className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={refresh}>
-              Muat Ulang Data
+            <Button variant="secondary" size="sm" icon={<RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />} onClick={() => void load()} disabled={loading}>
+              Muat Ulang
             </Button>
-            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleExport}>
-              Export
-            </Button>}
-            {canCreateIncident && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
-              Buat Tiket
-            </Button>}
+            <Button variant="secondary" size="sm" onClick={handleExport} disabled={loading || Boolean(error)}>
+              Export Ringkasan
+            </Button>
+            {canCreateIncident && (
+              <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/incidents')}>
+                Buat Tiket
+              </Button>
+            )}
           </>
         }
       />
 
-      {/* Stat cards */}
+      {error && (
+        <Card className="border-danger/40 bg-danger/5">
+          <CardContent className="flex items-center gap-3 py-4 text-sm text-danger">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Laboratorium Aktif" value={stats.activeLabs} icon={<FlaskConical className="h-5 w-5" />} tone="accent" to="/laboratories" />
-        <StatCard label="PC Online (Lab ini)" value={`${stats.onlinePCs}/${stats.totalPCs}`} icon={<Monitor className="h-5 w-5" />} tone="success" to="/monitoring" />
-        <StatCard label="PC Bermasalah" value={stats.problemPCs} icon={<MonitorX className="h-5 w-5" />} tone="danger" to="/monitoring" />
-        <StatCard label="Jadwal Reguler Hari Ini" value={stats.todaySchedules} icon={<BookOpen className="h-5 w-5" />} tone="info" to="/schedules" />
-        <StatCard label="Tiket Kerusakan" value={stats.openIncidents} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" to="/incidents" />
-        <StatCard label="Pemeliharaan Jatuh Tempo" value={stats.overdueMaintenance} icon={<ShieldCheck className="h-5 w-5" />} tone="orange" to="/maintenance" />
-        <StatCard label="Barang Dipinjam" value={stats.activeLoans} icon={<HandHelping className="h-5 w-5" />} tone="accent" to="/loans" />
-        <StatCard label="Stok Hampir Habis" value={stats.lowStock} icon={<Package className="h-5 w-5" />} tone="danger" to="/stock" />
+        <StatCard
+          label="Laboratorium Aktif"
+          value={canViewLaboratories && !error ? activeLaboratories.length : '—'}
+          icon={<FlaskConical className="h-5 w-5" />}
+          tone="accent"
+          to={canViewLaboratories ? '/laboratories' : undefined}
+        />
+        <StatCard
+          label={selectedLaboratory ? 'Perangkat Terkelola (Lab ini)' : 'Perangkat Terkelola'}
+          value={canViewDevices && !error ? state.deviceTotal : '—'}
+          icon={<Boxes className="h-5 w-5" />}
+          tone="success"
+          to={canViewDevices ? '/devices' : undefined}
+        />
+        <StatCard
+          label={selectedLaboratory ? 'Tiket Kerusakan (Lab ini)' : 'Tiket Kerusakan'}
+          value={canViewIncidents && !error ? state.incidentTotal : '—'}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          tone="warning"
+          to={canViewIncidents ? '/incidents' : undefined}
+        />
+        <StatCard label="Monitoring Realtime" value="—" icon={<Monitor className="h-5 w-5" />} tone="neutral" />
+        <StatCard label="Jadwal Reguler Hari Ini" value="—" icon={<BookOpen className="h-5 w-5" />} tone="neutral" />
+        <StatCard label="Pemeliharaan Jatuh Tempo" value="—" icon={<ShieldCheck className="h-5 w-5" />} tone="neutral" />
+        <StatCard label="Barang Dipinjam" value="—" icon={<HandHelping className="h-5 w-5" />} tone="neutral" />
+        <StatCard label="Stok Hampir Habis" value="—" icon={<Package className="h-5 w-5" />} tone="neutral" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Lab statuses */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Status Laboratorium</CardTitle>
-              <Link to="/laboratories" className="text-xs text-accent-content hover:underline">Lihat semua</Link>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-3">
-              {labStatuses.length === 0 ? (
-                <EmptyState title="Belum ada laboratorium" description="Status laboratorium akan tampil setelah data laboratorium tersedia." className="py-8 sm:col-span-3" />
-              ) : labStatuses.map(({ lab, online, problem, total, inUse, todaySchedule }) => (
-                <div
-                  key={lab.id}
-                  className="rounded-xl border border-base-700/70 bg-base-800/60 p-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-ink-primary">{lab.name}</p>
-                      <p className="text-xs text-ink-muted">{lab.location}</p>
-                    </div>
-                    {inUse ? (
-                      <Badge tone="success" withIcon>Sedang Dipakai</Badge>
-                    ) : (
-                      <Badge tone="muted">Tersedia</Badge>
-                    )}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs">
-                    <span className="text-ink-muted">PC Online</span>
-                    <span className="font-semibold text-ink-primary">{online}/{total}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-base-700">
-                    <div className={cn('h-full rounded-full', problem > 0 ? 'bg-warning' : 'bg-success')} style={{ width: `${total ? (online / total) * 100 : 0}%` }} />
-                  </div>
-                  {todaySchedule ? (
-                    <p className="mt-2 truncate text-[10px] text-ink-muted">{todaySchedule.startTime} · {todaySchedule.className}</p>
-                  ) : (
-                    <p className="mt-2 text-[10px] text-ink-muted">Tidak ada jadwal</p>
-                  )}
-                  <p className="mt-2 text-[10px] text-ink-muted">Data operasional lokal · belum terhubung ke Laboratory API</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Persisted regular schedule distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribusi Jadwal Reguler</CardTitle>
-              <Badge tone="accent">Senin–Jumat</Badge>
-            </CardHeader>
-            <CardContent>
-              {hasScheduleDistribution ? (
-                <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart data={scheduleDistribution}>
-                    <defs>
-                      <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={chartTheme.primary} stopOpacity={0.4} />
-                        <stop offset="100%" stopColor={chartTheme.primary} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={chartTheme.secondary} stopOpacity={0.3} />
-                        <stop offset="100%" stopColor={chartTheme.secondary} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                    <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={11} />
-                    <YAxis stroke={chartTheme.axis} fontSize={11} allowDecimals={false} />
-                    <Tooltip contentStyle={chartTheme.tooltip} />
-                    <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
-                    <Area type="monotone" dataKey="scheduleCount" stroke={chartTheme.primary} strokeWidth={2} fill="url(#g1)" name="Jumlah Jadwal" />
-                    <Area type="monotone" dataKey="lessonHours" stroke={chartTheme.secondary} strokeWidth={2} fill="url(#g2)" name="Total JP" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState title="Belum ada jadwal reguler" description="Distribusi hari dan JP akan tampil setelah jadwal reguler tersimpan." className="py-8" />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Today sessions & work orders */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sesi Berlangsung</CardTitle>
-              <Link to="/sessions" className="text-xs text-accent-content hover:underline">Lihat</Link>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {db.sessions.filter((s) => s.status === 'Berlangsung' || s.status === 'Belum Dimulai').slice(0, 3).map((s) => {
-                  const lab = db.labs.find((l) => l.id === s.laboratoryId);
-                  return (
-                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-base-700/60 bg-base-800/40 p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink-primary">{s.subject}</p>
-                        <p className="truncate text-xs text-ink-muted">{lab?.name} · {s.className} · {s.teacherName}</p>
-                      </div>
-                      <StatusBadge status={s.status} />
-                    </div>
-                  );
-                })}
-                {db.sessions.filter((s) => s.status === 'Berlangsung' || s.status === 'Belum Dimulai').length === 0 && (
-                  <EmptyState title="Tidak ada sesi aktif" className="py-6" />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Tugas Perbaikan Teknisi</CardTitle>
-              <Link to="/work-orders" className="text-xs text-accent-content hover:underline">Lihat</Link>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {db.workOrders.filter((w) => w.status === 'In Progress' || w.status === 'Assigned' || w.status === 'Waiting Part').slice(0, 3).map((w) => {
-                  const lab = db.labs.find((l) => l.id === w.laboratoryId);
-                  return (
-                    <Link key={w.id} to="/work-orders" className="flex items-center justify-between gap-2 rounded-lg border border-base-700/60 bg-base-800/40 p-3 transition-colors hover:border-base-600">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink-primary">{w.woNumber}</p>
-                        <p className="truncate text-xs text-ink-muted">{lab?.name} · {w.technician}</p>
-                      </div>
-                      <StatusBadge status={w.status} />
-                    </Link>
-                  );
-                })}
-                {db.workOrders.filter((w) => w.status === 'In Progress' || w.status === 'Assigned').length === 0 && (
-                  <EmptyState title="Tidak ada work order aktif" className="py-6" />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-6">
-          {/* Asset condition distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribusi Kondisi Aset</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {assetConditionData.length === 0 ? (
-                <EmptyState title="Belum ada data aset" className="py-8" />
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie data={assetConditionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
-                      {assetConditionData.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={chartTheme.tooltip} />
-                    <Legend wrapperStyle={chartTheme.legend} iconType="circle" />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Incident summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Ringkasan Tiket Kerusakan</CardTitle>
-              <Link to="/incidents" className="text-xs text-accent-content hover:underline">Lihat</Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {db.incidents.slice(0, 4).map((inc) => (
-                <Link key={inc.id} to="/incidents" className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                  <div className="min-w-0 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-warning-foreground" />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-ink-primary">{inc.title}</p>
-                      <p className="truncate text-[10px] text-ink-muted">{inc.ticketNumber}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={inc.status} />
-                </Link>
-              ))}
-              {db.incidents.length === 0 && <EmptyState title="Belum ada tiket kerusakan" className="py-6" />}
-            </CardContent>
-          </Card>
-
-          {/* Upcoming maintenance */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Maintenance Mendatang</CardTitle>
-              <Link to="/maintenance" className="text-xs text-accent-content hover:underline">Lihat</Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {upcomingMaintenance.map((m) => {
-                const lab = db.labs.find((l) => l.id === m.laboratoryId);
-                const overdue = new Date(m.nextSchedule) < new Date();
-                return (
-                  <Link key={m.id} to="/maintenance" className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <Wrench className={cn('h-4 w-4 shrink-0', overdue ? 'text-danger' : 'text-ink-muted')} />
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-ink-primary">{m.name}</p>
-                        <p className="truncate text-[10px] text-ink-muted">{lab?.name} · {m.nextSchedule}</p>
-                      </div>
-                    </div>
-                    {overdue && <Badge tone="danger">Lewat Jatuh Tempo</Badge>}
-                  </Link>
-                );
-              })}
-              {upcomingMaintenance.length === 0 && <EmptyState title="Belum ada maintenance aktif" className="py-6" />}
-            </CardContent>
-          </Card>
-
-          {/* Critical stock */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Stok Kritis</CardTitle>
-              <Link to="/stock" className="text-xs text-accent-content hover:underline">Lihat</Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {db.stock.items.filter((s) => s.quantity <= s.minStock).slice(0, 3).map((s) => (
-                <Link key={s.id} to="/stock" className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                  <div className="min-w-0 flex items-center gap-2">
-                    <Package className="h-4 w-4 shrink-0 text-danger" />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-ink-primary">{s.name}</p>
-                      <p className="truncate text-[10px] text-ink-muted">Min: {s.minStock} {s.unit}</p>
-                    </div>
-                  </div>
-                  <Badge tone="danger">{s.quantity} {s.unit}</Badge>
-                </Link>
-              ))}
-              {db.stock.items.filter((s) => s.quantity <= s.minStock).length === 0 && (
-                <EmptyState title="Stok aman" className="py-6" />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Recent activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Aktivitas Terbaru</CardTitle>
-              <Link to="/audit-logs" className="text-xs text-accent-content hover:underline">Lihat</Link>
-            </CardHeader>
-            <CardContent>
-              <ActivityTimeline items={recentActivity} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Bottom row: mini calendar + pending journals + notifications */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>Kalender Mini</CardTitle>
-            <Link to="/calendar" className="text-xs text-accent-content hover:underline">Lihat</Link>
+            <CardTitle>Status Laboratorium</CardTitle>
+            {canViewLaboratories && <Link to="/laboratories" className="text-xs text-accent-content hover:underline">Lihat semua</Link>}
           </CardHeader>
           <CardContent>
-            <MiniCalendar events={db.calendarEvents} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Jurnal Belum Dilengkapi</CardTitle>
-            <Link to="/journals" className="text-xs text-accent-content hover:underline">Lihat</Link>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {pendingJournals.slice(0, 4).map((j) => (
-              <Link key={j.id} to="/journals" className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-ink-primary">{j.material}</p>
-                  <p className="truncate text-[10px] text-ink-muted">{j.journalNumber} · {j.date}</p>
-                </div>
-                <StatusBadge status={j.status} />
-              </Link>
-            ))}
-            {pendingJournals.length === 0 && <EmptyState title="Semua jurnal lengkap" className="py-6" />}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Notifikasi Penting</CardTitle>
-            <Link to="/notifications" className="text-xs text-accent-content hover:underline">Lihat</Link>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {criticalNotifications.map((n) => (
-              <Link key={n.id} to={n.link ?? '/notifications'} className="flex gap-2 rounded-lg p-2 transition-colors hover:bg-base-700/40">
-                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-content" />}
-                <div className={cn('min-w-0', n.read && 'pl-4')}>
-                  <p className="truncate text-xs font-medium text-ink-primary">{n.title}</p>
-                  <p className="truncate text-[10px] text-ink-muted">{n.message}</p>
-                </div>
-              </Link>
-            ))}
-            {criticalNotifications.length === 0 && <EmptyState title="Tidak ada notifikasi penting" className="py-6" />}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function MiniCalendar({ events }: { events: { id: string; title: string; date: string; category: string }[] }) {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayDate = today.getDate();
-
-  const eventDates = new Set(
-    events
-      .filter((e) => {
-        const d = new Date(e.date);
-        return d.getFullYear() === year && d.getMonth() === month;
-      })
-      .map((e) => new Date(e.date).getDate())
-  );
-
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-
-  return (
-    <div>
-      <p className="mb-3 text-sm font-semibold text-ink-primary">
-        {today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-      </p>
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-ink-muted">
-        {['M', 'S', 'S', 'R', 'K', 'J', 'S'].map((d, i) => (
-          <div key={i} className="py-1">{d}</div>
-        ))}
-      </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
-        {cells.map((d, i) => (
-          <div
-            key={i}
-            className={cn(
-              'flex h-7 items-center justify-center rounded-md text-[10px]',
-              d === null ? '' : d === todayDate ? 'bg-accent-primary font-bold text-accent-foreground' : eventDates.has(d) ? 'bg-accent-primary/20 text-accent-content' : 'text-ink-secondary hover:bg-base-700'
+            {!canViewLaboratories ? (
+              <EmptyState title="Akses Laboratorium tidak tersedia" description="Ringkasan mengikuti permission server pada membership aktif." className="py-8" />
+            ) : state.laboratories.length === 0 ? (
+              <EmptyState title="Belum ada laboratorium" description="Dashboard dan halaman Laboratorium membaca sumber PostgreSQL yang sama." className="py-8" />
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {state.laboratories.map((laboratory) => (
+                  <Link
+                    key={laboratory.id}
+                    to={`/laboratories/${laboratory.id}`}
+                    className="rounded-xl border border-base-700/70 bg-base-800/60 p-4 transition-colors hover:border-base-600"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink-primary">{laboratory.name}</p>
+                        <p className="truncate text-xs text-ink-muted">{laboratory.code} · {laboratory.location}</p>
+                      </div>
+                      <Badge tone={laboratory.status === 'active' ? 'success' : 'muted'}>
+                        {laboratory.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-xs text-ink-muted">Kapasitas <span className="font-semibold text-ink-secondary">{laboratory.capacity}</span></p>
+                  </Link>
+                ))}
+              </div>
             )}
-          >
-            {d}
-          </div>
-        ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Source of Truth</CardTitle>
+            <Badge tone="success">Server</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs text-ink-muted">
+            <p>Laboratorium, perangkat, dan tiket pada Dashboard berasal dari API Laravel + PostgreSQL.</p>
+            <p>Angka `—` berarti domain tersebut belum memiliki API canonical; Dashboard tidak lagi mengambil nilai seed/browser untuk mengisi kekosongan.</p>
+          </CardContent>
+        </Card>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-[10px] text-ink-muted">
-        <span className="h-2 w-2 rounded-full bg-accent-content/40" /> Hari dengan event
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tiket Kerusakan Terbaru</CardTitle>
+            {canViewIncidents && <Link to="/incidents" className="text-xs text-accent-content hover:underline">Lihat semua</Link>}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!canViewIncidents ? (
+              <EmptyState title="Akses Incident tidak tersedia" className="py-8" />
+            ) : state.recentIncidents.length === 0 ? (
+              <EmptyState title="Belum ada tiket kerusakan" description="Tiket baru akan tampil dari Incident API." className="py-8" />
+            ) : (
+              state.recentIncidents.map((incident) => (
+                <Link
+                  key={incident.id}
+                  to={`/incidents/${incident.id}`}
+                  className="block rounded-lg border border-base-700/60 bg-base-800/40 p-3 transition-colors hover:border-base-600"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-ink-primary">{incident.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-ink-muted">{incident.ticketNumber} · {incident.laboratory.name}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      <Badge tone={incidentPriorityTone(incident.priority)}>{INCIDENT_PRIORITY_LABELS[incident.priority]}</Badge>
+                      <Badge tone={incidentStatusTone(incident.status)}>{INCIDENT_STATUS_LABELS[incident.status]}</Badge>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Domain Dalam Migrasi API</CardTitle>
+            <Badge tone="warning">Bertahap</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PENDING_SERVER_DOMAINS.map((domain) => (
+                <div key={domain} className="flex items-center justify-between gap-2 rounded-lg border border-base-700/60 bg-base-800/40 px-3 py-2">
+                  <span className="text-xs text-ink-secondary">{domain}</span>
+                  <Badge tone="muted">Belum API</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
