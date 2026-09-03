@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AcademicPeriodMasterController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
+use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
@@ -33,6 +35,23 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:users.update');
         Route::get('identity/roles', [IdentityAdministrationController::class, 'roles'])
             ->middleware('permission:roles.view');
+
+        Route::get('master-data/academic-years', [AcademicPeriodMasterController::class, 'academicYears'])
+            ->middleware('permission:master-data.view');
+        Route::post('master-data/academic-years', [AcademicPeriodMasterController::class, 'storeAcademicYear'])
+            ->middleware('permission:master-data.create');
+        Route::get('master-data/academic-years/{academicYearId}', [AcademicPeriodMasterController::class, 'showAcademicYear'])
+            ->middleware('permission:master-data.view');
+        Route::patch('master-data/academic-years/{academicYearId}', [AcademicPeriodMasterController::class, 'updateAcademicYear'])
+            ->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+        Route::get('master-data/semesters', [AcademicPeriodMasterController::class, 'semesters'])
+            ->middleware('permission:master-data.view');
+        Route::post('master-data/semesters', [AcademicPeriodMasterController::class, 'storeSemester'])
+            ->middleware('permission:master-data.create');
+        Route::get('master-data/semesters/{semesterId}', [AcademicPeriodMasterController::class, 'showSemester'])
+            ->middleware('permission:master-data.view');
+        Route::patch('master-data/semesters/{semesterId}', [AcademicPeriodMasterController::class, 'updateSemester'])
+            ->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
 
         Route::get('devices', [DeviceController::class, 'index'])
             ->middleware('permission:devices.view');
