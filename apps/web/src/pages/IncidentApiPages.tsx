@@ -474,7 +474,7 @@ export function IncidentsPage() {
   }
 
   function closeCreate() {
-    if (createBusy || recoveryBusy) return;
+    if (createBusy || recoveryBusy || createRecoveryPending) return;
     setCreateOpen(false);
     setCreateIssue(null);
     setCreateRecoveryPending(false);
