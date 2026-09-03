@@ -171,17 +171,21 @@ class IncidentEventApiTest extends TestCase
             'incidents.view',
             'incidents.view-history',
         ]);
-        $incident = $this->createIncidentFor([$user, $membership], $school);
         $membership->setRelation('user', $user);
         $context = new CurrentMembershipContext($membership, collect());
 
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T12:00:00Z'));
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T11:59:00Z'));
         try {
+            $incident = $this->createIncidentFor([$user, $membership], $school);
+
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T12:00:00Z'));
             $first = app(IncidentCommentService::class)->add($context, $incident->id, 1, 'Komentar pertama.');
             $second = app(IncidentCommentService::class)->add($context, $incident->id, 2, 'Komentar kedua.');
         } finally {
             CarbonImmutable::setTestNow();
         }
+
+        $this->assertSame($first->created_at?->toISOString(), $second->created_at?->toISOString());
 
         $pageOne = $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
             ->assertOk()
@@ -193,9 +197,10 @@ class IncidentEventApiTest extends TestCase
         $pageOneIds = $pageOne->json('data.*.id');
         $this->assertEqualsCanonicalizing([$first->id, $second->id], $pageOneIds);
 
-        $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
+        $repeatPageOneIds = $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
             ->assertOk()
-            ->assertSame($pageOneIds, $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')->json('data.*.id'));
+            ->json('data.*.id');
+        $this->assertSame($pageOneIds, $repeatPageOneIds);
 
         $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=2')
             ->assertOk()
