@@ -31,4 +31,13 @@ class IdentityAdministrationException extends RuntimeException
             409,
         );
     }
+
+    public static function sharedUserMutationRequiresGlobalAuthority(): self
+    {
+        return new self(
+            'Shared user account fields cannot be changed from a school-scoped administration context.',
+            'IDENTITY_SHARED_USER_MUTATION_REQUIRES_GLOBAL_AUTHORITY',
+            409,
+        );
+    }
 }
