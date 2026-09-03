@@ -1,6 +1,7 @@
 <?php
 
 use App\Application\Identity\SpaAuthenticationException;
+use App\Domain\Academic\AcademicMasterException;
 use App\Domain\Device\DeviceDomainException;
 use App\Domain\DeviceTransfer\TransferDomainException;
 use App\Domain\Identity\IdentityAdministrationException;
@@ -69,6 +70,16 @@ return Application::configure(basePath: dirname(__DIR__))
             return $response;
         });
         $exceptions->render(function (IdentityAdministrationException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+        });
+        $exceptions->render(function (AcademicMasterException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
