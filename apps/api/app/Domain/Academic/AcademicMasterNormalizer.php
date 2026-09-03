@@ -11,6 +11,13 @@ class AcademicMasterNormalizer
         return AcademicMasterCatalog::normalizeCode($value);
     }
 
+    public static function nullableCode(?string $value): ?string
+    {
+        $normalized = self::nullableText($value);
+
+        return $normalized === null ? null : self::code($normalized);
+    }
+
     public static function text(string $value): string
     {
         $trimmed = trim($value);
@@ -28,5 +35,12 @@ class AcademicMasterNormalizer
         $normalized = self::text($value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    public static function nullableEmail(?string $value): ?string
+    {
+        $normalized = self::nullableText($value);
+
+        return $normalized === null ? null : mb_strtolower($normalized);
     }
 }
