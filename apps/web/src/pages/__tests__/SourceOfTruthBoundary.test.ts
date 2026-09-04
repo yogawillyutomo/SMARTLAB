@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import appSource from '@/App.tsx?raw';
 import dashboardSource from '@/pages/DashboardPage.tsx?raw';
 import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
+import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -53,6 +54,22 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="master-data.view"');
     expect(navSource).toContain("'master-data': 'master-data.view'");
     expect(navSource).toContain("serverPermission: 'master-data.view'");
+  });
+
+
+  it('keeps the schedule route server-authoritative and removes browser-local schedule CRUD', () => {
+    expect(schedulesSource).not.toContain('useAppData');
+    expect(schedulesSource).not.toContain('db.schedules');
+    expect(schedulesSource).not.toContain('services/repositories');
+    expect(schedulesSource).not.toContain('Tambah Jadwal Reguler');
+    expect(schedulesSource).not.toContain('Edit Jadwal Reguler');
+    expect(schedulesSource).not.toContain('ConfirmDialog');
+    expect(schedulesSource).toContain("from '@/services/scheduleOccurrenceApi'");
+    expect(schedulesSource).toContain('scheduleOccurrenceGateway.listAll');
+    expect(schedulesSource).toContain('SmartLab tidak mengedit atau memecahkan ulang jadwal sumber');
+    expect(appSource).toContain('RequireServerPermission permission="schedules.view"');
+    expect(navSource).toContain("schedules: 'schedules.view'");
+    expect(navSource).toContain("serverPermission: 'schedules.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
