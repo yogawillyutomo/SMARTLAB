@@ -80,9 +80,9 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | MD-01 Master akademik stable ID | selesai | Guru, kelas, mapel, JP, tahun, semester. | Menjadi entry dependency untuk schedule integration. |
 | IMP-01 Fondasi import Excel | belum | Template, mapping, preview, validasi, audit. | Ownership sudah dikunci oleh ADR-001; implementasi tetap perlu contract import terfokus. |
 | IMP-02 Import Master Data | belum | Referensi sederhana, akademik, laboratorium. | Sesudah IMP-01; academic authority mengikuti ADR-001 dan Laboratory tetap domain SmartLab. |
-| IMP-03 Integrasi published timetable | kontrak selesai, implementasi belum | Full snapshot TESSELA, stable refs, version/hash/idempotency, occurrence materialization. | S2.1 locked; S2.2 backend berikutnya. Excel/file bila diperlukan hanya adapter, bukan authority. |
+| IMP-03 Integrasi published timetable | backend selesai, frontend pending | Full snapshot TESSELA, stable refs, version/hash/idempotency, occurrence materialization, activation/audit. | S2.2 backend delivered; S2.3 read API + `/schedules` cutover berikutnya. Excel/file bila diperlukan hanya adapter, bukan authority. |
 | AV-01 Unified availability | belum | Published occurrences, reservasi, prioritas, closure, exception. | Sesudah S2.2–S2.4 canonical schedule/closure foundation. |
 | OV-01 Override kegiatan prioritas | belum | Exception bertanggal non-destruktif. | Sesudah AV-01 dan kebijakan approver. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | belum | Satu UX, dua entitas terkait, laporan wajib. | Phase S3 sesudah occurrence/availability. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership sudah dikunci oleh ADR-001 dan kontrak S2.1 published timetable sudah dikunci; pekerjaan berikutnya adalah backend S2.2, bukan solver dan bukan CRUD jadwal browser-local baru.
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership dan kontrak S2.1 sudah terkunci, S2.2 backend sudah delivered; pekerjaan berikutnya adalah S2.3 occurrence read API + frontend `/schedules` cutover, bukan solver dan bukan CRUD jadwal browser-local baru.
