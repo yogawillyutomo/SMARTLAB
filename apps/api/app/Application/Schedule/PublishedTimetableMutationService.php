@@ -77,6 +77,7 @@ class PublishedTimetableMutationService
                         'publication' => $existing->refresh(),
                         'replayed' => true,
                         'integrityConflict' => false,
+                        'familyConflict' => false,
                     ];
                 }
 
@@ -92,6 +93,7 @@ class PublishedTimetableMutationService
                     'publication' => $existing->refresh(),
                     'replayed' => false,
                     'integrityConflict' => true,
+                    'familyConflict' => false,
                 ];
             }
 
@@ -116,10 +118,12 @@ class PublishedTimetableMutationService
                     ],
                 );
 
-                throw PublishedTimetableException::conflict(
-                    'The timetable publication family identifier changed for the same Semester scope.',
-                    'TIMETABLE_PUBLICATION_FAMILY_CONFLICT',
-                );
+                return [
+                    'publication' => $familyConflict->refresh(),
+                    'replayed' => false,
+                    'integrityConflict' => false,
+                    'familyConflict' => true,
+                ];
             }
 
             $publication = TimetablePublication::query()->create([
@@ -165,6 +169,7 @@ class PublishedTimetableMutationService
                 'publication' => $publication->refresh(),
                 'replayed' => false,
                 'integrityConflict' => false,
+                'familyConflict' => false,
             ];
         });
 
@@ -172,6 +177,13 @@ class PublishedTimetableMutationService
             throw PublishedTimetableException::conflict(
                 'The same timetable publication version was received with different content.',
                 'TIMETABLE_PUBLICATION_INTEGRITY_CONFLICT',
+            );
+        }
+
+        if ($initial['familyConflict']) {
+            throw PublishedTimetableException::conflict(
+                'The timetable publication family identifier changed for the same Semester scope.',
+                'TIMETABLE_PUBLICATION_FAMILY_CONFLICT',
             );
         }
 
