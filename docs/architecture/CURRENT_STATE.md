@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** `main@82f2b0bc0c6530aeabedb781c38cc12d1b53894a`
+**Baseline:** repository state including S2.2 Published Timetable Backend
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -20,13 +20,14 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Users / school memberships | Identity Administration API |
 | Role/permission catalog | Server catalog; UI currently read-only for catalog editing |
 | Academic master | Academic Master API with stable IDs |
+| Published timetable backend | TimetablePublication/TimetableEntry/ScheduleOccurrence persistence, validation, hash replay protection, audit, activation/supersession API |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
 
 These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
 
-- regular schedules;
+- `/schedules` frontend/read model (published timetable backend is canonical, but the route still reads browser-local schedule data);
 - laboratory reservations;
 - laboratory sessions/execution;
 - journals;
@@ -49,15 +50,14 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. S2.2: implement published timetable persistence, validation, materialization, activation, audit, and OpenAPI.
-2. S2.3: canonical schedule read model + frontend cutover.
-3. S2.4–S2.6+: closures, unified availability, reservations, dated exceptions, and priority events.
-4. Phase S3: Laboratory Session + Journal.
-5. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-6. Phase S5: Corrective Work Orders.
-7. Phase S6: PC monitoring telemetry.
-8. Phase S7: Notifications, Reporting, final Dashboard/global search.
-9. Phase S8: remove browser-local business persistence and compatibility layers.
+1. S2.3: canonical schedule occurrence read API + frontend `/schedules` cutover.
+2. S2.4–S2.8: closures, unified availability, reservations, dated exceptions, priority events, and integration UAT.
+3. Phase S3: Laboratory Session + Journal.
+4. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+5. Phase S5: Corrective Work Orders.
+6. Phase S6: PC monitoring telemetry.
+7. Phase S7: Notifications, Reporting, final Dashboard/global search.
+8. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -85,6 +85,7 @@ The locked target boundary is:
 - the existing SmartLab Academic Master implementation is preserved and may become a synchronized projection/adapter when shared BP Master Data is introduced;
 - published timetable versions are immutable and activated atomically after validation.
 - S2.1 further locks full School+Semester snapshot semantics, immutable TimetableEntry rows, materialized ScheduleOccurrence IDs, hash-based idempotency, and one active publication per School+Semester.
+- S2.2 implements that contract in Laravel/PostgreSQL with server permissions, tenant isolation, append-oriented audit, validation/rejection, occurrence materialization, replay protection, and atomic activation/supersession.
 
 ## Validation contract
 

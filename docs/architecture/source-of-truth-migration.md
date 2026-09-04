@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** `main@82f2b0bc0c6530aeabedb781c38cc12d1b53894a`
+**Baseline:** repository state including S2.2 Published Timetable Backend
 
 ## Goal
 
@@ -23,6 +23,8 @@ This roadmap follows the approved operational workflow specification and the rep
 | Identity administration | PostgreSQL / users + school memberships | `identityAdminGateway`, `UsersPage.tsx` | canonical |
 | Role / permission catalog | Laravel authorization catalog | `identityAdminGateway`, `RolesPage.tsx` | canonical read-only catalog |
 | Academic master | PostgreSQL / academic master API | `academicMasterGateway`, `MasterDataPage.tsx` | canonical |
+| Published timetable ingestion/activation | PostgreSQL / Timetable Publication API | frontend schedule route not cut over yet | canonical backend |
+| Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | read API/frontend pending S2.3 | canonical backend |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -33,7 +35,7 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/schedules` | regular schedules | schedule domain + academic integration |
+| `/schedules` | schedule presentation/read model | occurrence read API + frontend cutover; backend publication source is already canonical |
 | `/bookings` | laboratory reservations | availability + reservation domain |
 | `/sessions` | laboratory execution | occurrence/session domain |
 | `/journals` | execution report/journal | session/report domain |
@@ -123,10 +125,23 @@ Locked foundations:
 - exactly one active publication per School + Semester;
 - structural source conflicts are rejected, never solved by SmartLab.
 
+Delivered in S2.2:
+
+- PostgreSQL persistence for TimetablePublication, TimetableEntry, ScheduleOccurrence, and publication audit events;
+- tenant-scoped ingestion/list/detail/activation APIs;
+- stable source-version + canonical SHA-256 replay/integrity protection;
+- reference validation against current SmartLab Academic Master and Laboratory domains;
+- deterministic weekly/single-date occurrence materialization;
+- Teacher/Class/planned-Laboratory collision rejection without solving;
+- capacity diagnostics as non-blocking warnings;
+- rejected publications retained without partial entry/occurrence writes;
+- server permissions for view/ingest/activate;
+- atomic activation and supersession with old-version/future-effective protections;
+- OpenAPI 0.13 contract and portable/PostgreSQL CI coverage.
+
 Next implementation slices:
 
-- S2.2 published timetable persistence, validation, occurrence materialization, activation, audit, and OpenAPI;
-- S2.3 canonical schedule read model + frontend cutover;
+- S2.3 canonical occurrence read API + frontend `/schedules` cutover;
 - S2.4 academic calendar / closures;
 - S2.5 unified Laboratory availability;
 - S2.6 reservations and approval;

@@ -1,0 +1,334 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Published Timetable API module
+  version: 0.13.0
+  description: S2.2 server-authoritative published timetable ingestion, validation, immutable occurrence materialization, and activation.
+paths:
+  /timetable-publications:
+    get:
+      operationId: listTimetablePublications
+      summary: List current-School timetable publications
+      description: Requires `schedules.view`. Does not expose the raw source payload.
+      security: &auth
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: semesterId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/PublicationStatus' }
+        - name: sourcePublicationId
+          in: query
+          schema: { type: string, maxLength: 128 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200': { $ref: '#/components/responses/PublicationCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: ingestTimetablePublication
+      summary: Ingest and fully validate one TESSELA timetable snapshot
+      description: |
+        Requires `schedules.ingest`. S2.2 accepts `sourceSystem=tessela`,
+        `schemaVersion=1.0`, and the transitional `academicReferenceSource=smartlab`.
+        An unseen immutable version returns 201 after full validation/materialization.
+        An identical replay returns 200 with `X-Timetable-Replayed: true`.
+        The same source version with different canonical content is rejected.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTimetablePublicationRequest' }
+      responses:
+        '200':
+          description: Idempotent replay of an existing immutable version.
+          headers:
+            X-Timetable-Replayed:
+              schema: { type: string, enum: ['true'] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationEnvelope' }
+        '201':
+          description: Publication staged, validated, and occurrences materialized.
+          headers:
+            X-Timetable-Replayed:
+              schema: { type: string, enum: ['false'] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationEnvelope' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/PublicationConflict' }
+        '422': { $ref: '#/components/responses/PublicationInvalid' }
+
+  /timetable-publications/{publicationId}:
+    parameters:
+      - $ref: '#/components/parameters/PublicationId'
+    get:
+      operationId: getTimetablePublication
+      summary: Read one current-School timetable publication
+      description: Requires `schedules.view`.
+      security: *auth
+      responses:
+        '200':
+          description: Publication detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationEnvelope' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/PublicationNotFound' }
+
+  /timetable-publications/{publicationId}/activate:
+    parameters:
+      - $ref: '#/components/parameters/PublicationId'
+    post:
+      operationId: activateTimetablePublication
+      summary: Atomically activate one fully validated timetable publication
+      description: |
+        Requires `schedules.activate`. Activation may supersede the current active
+        publication for the same School + Semester. Future-effective and expired
+        publications cannot be activated. Old source versions cannot roll back a newer
+        active source version.
+      security: *auth
+      responses:
+        '200':
+          description: Active publication.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationEnvelope' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/PublicationNotFound' }
+        '409': { $ref: '#/components/responses/PublicationConflict' }
+
+components:
+  parameters:
+    PublicationId:
+      name: publicationId
+      in: path
+      required: true
+      schema: { type: string, format: ulid }
+
+  schemas:
+    PublicationStatus:
+      type: string
+      enum: [staged, validated, active, superseded, rejected]
+
+    ActivityType:
+      type: string
+      enum: [practical, theory, exam, other]
+
+    RecurrenceKind:
+      type: string
+      enum: [weekly, single_date]
+
+    SourceSnapshots:
+      type: object
+      additionalProperties: false
+      properties:
+        teacherCode: { type: [string, 'null'], maxLength: 255 }
+        teacherName: { type: [string, 'null'], maxLength: 255 }
+        classCode: { type: [string, 'null'], maxLength: 255 }
+        className: { type: [string, 'null'], maxLength: 255 }
+        subjectCode: { type: [string, 'null'], maxLength: 255 }
+        subjectName: { type: [string, 'null'], maxLength: 255 }
+        laboratoryCode: { type: [string, 'null'], maxLength: 255 }
+        laboratoryName: { type: [string, 'null'], maxLength: 255 }
+
+    TimetableEntryInput:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceScheduleId
+        - teacherSourceId
+        - academicClassSourceId
+        - subjectSourceId
+        - lessonPeriodSetSourceId
+        - startLessonPeriodSourceId
+        - endLessonPeriodSourceId
+        - activityType
+        - recurrenceKind
+      properties:
+        sourceScheduleId: { type: string, minLength: 1, maxLength: 128 }
+        teacherSourceId: { type: string, minLength: 1, maxLength: 128 }
+        academicClassSourceId: { type: string, minLength: 1, maxLength: 128 }
+        subjectSourceId: { type: string, minLength: 1, maxLength: 128 }
+        lessonPeriodSetSourceId: { type: string, minLength: 1, maxLength: 128 }
+        startLessonPeriodSourceId: { type: string, minLength: 1, maxLength: 128 }
+        endLessonPeriodSourceId: { type: string, minLength: 1, maxLength: 128 }
+        plannedLaboratoryId: { type: [string, 'null'], maxLength: 128 }
+        activityType: { $ref: '#/components/schemas/ActivityType' }
+        recurrenceKind: { $ref: '#/components/schemas/RecurrenceKind' }
+        weekday:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 7
+          description: ISO weekday, required for weekly recurrence.
+        entryEffectiveFrom: { type: [string, 'null'], format: date }
+        entryEffectiveTo: { type: [string, 'null'], format: date }
+        occursOn: { type: [string, 'null'], format: date }
+        sourceSnapshots: { oneOf: [{ $ref: '#/components/schemas/SourceSnapshots' }, { type: 'null' }] }
+
+    CreateTimetablePublicationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - sourceSystem
+        - sourcePublicationId
+        - sourceVersion
+        - academicReferenceSource
+        - schoolSourceId
+        - academicYearSourceId
+        - semesterSourceId
+        - publishedAt
+        - effectiveFrom
+        - effectiveTo
+        - entries
+      properties:
+        schemaVersion: { type: string, enum: ['1.0'] }
+        sourceSystem: { type: string, enum: [tessela] }
+        sourcePublicationId: { type: string, minLength: 1, maxLength: 128 }
+        sourceVersion: { type: integer, minimum: 1 }
+        academicReferenceSource:
+          type: string
+          enum: [smartlab]
+          description: S2.2 transitional namespace. BP Master Data mapping is a later slice.
+        schoolSourceId: { type: string, minLength: 1, maxLength: 128 }
+        academicYearSourceId: { type: string, minLength: 1, maxLength: 128 }
+        semesterSourceId: { type: string, minLength: 1, maxLength: 128 }
+        publishedAt: { type: string, format: date-time }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date }
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items: { $ref: '#/components/schemas/TimetableEntryInput' }
+
+    ValidationSummary:
+      type: object
+      additionalProperties: true
+      required: [entriesReceived, entriesNormalized, occurrencesMaterialized, errors, warnings]
+      properties:
+        entriesReceived: { type: integer, minimum: 0 }
+        entriesNormalized: { type: integer, minimum: 0 }
+        occurrencesMaterialized: { type: integer, minimum: 0 }
+        errors: { type: integer, minimum: 0 }
+        warnings: { type: integer, minimum: 0 }
+        diagnostics: { type: object, additionalProperties: true }
+
+    TimetablePublication:
+      type: object
+      required:
+        - id
+        - schoolId
+        - sourceSystem
+        - sourcePublicationId
+        - sourceVersion
+        - schemaVersion
+        - academicReferenceSource
+        - sourceSchoolId
+        - sourceAcademicYearId
+        - sourceSemesterId
+        - publishedAt
+        - effectiveFrom
+        - effectiveTo
+        - payloadSha256
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: ulid }
+        schoolId: { type: string, format: ulid }
+        sourceSystem: { type: string, enum: [tessela] }
+        sourcePublicationId: { type: string }
+        sourceVersion: { type: integer, minimum: 1 }
+        schemaVersion: { type: string }
+        academicReferenceSource: { type: string }
+        sourceSchoolId: { type: string }
+        sourceAcademicYearId: { type: string }
+        sourceSemesterId: { type: string }
+        academicYearId: { type: [string, 'null'], format: ulid }
+        semesterId: { type: [string, 'null'], format: ulid }
+        publishedAt: { type: string, format: date-time }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date }
+        payloadSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        status: { $ref: '#/components/schemas/PublicationStatus' }
+        validationSummary: { oneOf: [{ $ref: '#/components/schemas/ValidationSummary' }, { type: 'null' }] }
+        validatedAt: { type: [string, 'null'], format: date-time }
+        activatedAt: { type: [string, 'null'], format: date-time }
+        supersededAt: { type: [string, 'null'], format: date-time }
+        supersededById: { type: [string, 'null'], format: ulid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PublicationEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/TimetablePublication' }
+
+    PaginationMeta:
+      type: object
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer }
+        perPage: { type: integer }
+        total: { type: integer }
+        lastPage: { type: integer }
+
+    PublicationCollectionEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TimetablePublication' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+    DomainError:
+      type: object
+      required: [message, code]
+      properties:
+        message: { type: string }
+        code: { type: string }
+        errors: { type: object, additionalProperties: true }
+        details: { type: object, additionalProperties: true }
+
+  responses:
+    PublicationCollection:
+      description: Paginated current-School publication list.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PublicationCollectionEnvelope' }
+
+    PublicationNotFound:
+      description: Unknown or cross-School publication.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
+
+    PublicationConflict:
+      description: Immutable-version, family, or activation conflict.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
+
+    PublicationInvalid:
+      description: Publication failed SmartLab semantic validation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }

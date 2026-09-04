@@ -7,6 +7,7 @@ use App\Domain\DeviceTransfer\TransferDomainException;
 use App\Domain\Identity\IdentityAdministrationException;
 use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Layout\LayoutDomainException;
+use App\Domain\Schedule\PublishedTimetableException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -128,5 +129,24 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => $exception->getMessage(),
                 'code' => $exception->errorCode,
             ], $exception->status);
+        });
+        $exceptions->render(function (PublishedTimetableException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->errors !== []) {
+                $body['errors'] = $exception->errors;
+            }
+            if ($exception->details !== []) {
+                $body['details'] = $exception->details;
+            }
+
+            return response()->json($body, $exception->status);
         });
     })->create();
