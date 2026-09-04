@@ -305,7 +305,7 @@ export function SchedulesPage() {
                 <Badge tone={activePublicationCount > 0 ? 'success' : 'muted'}>
                   {activePublicationCount > 0
                     ? `${activePublicationCount} publikasi aktif`
-                    : 'Belum ada publikasi aktif'}
+                    : 'Tidak ada current plan pada minggu ini'}
                 </Badge>
               </div>
               <p className="mt-1 max-w-3xl text-xs leading-5 text-ink-muted">
@@ -436,8 +436,8 @@ export function SchedulesPage() {
         <Card>
           <EmptyState
             icon={<CalendarDays className="h-7 w-7" />}
-            title="Belum ada publikasi jadwal aktif"
-            description="Aktifkan publikasi TESSELA yang sudah tervalidasi sebelum halaman ini dapat menampilkan current plan."
+            title="Tidak ada current plan aktif pada minggu ini"
+            description="Tidak ada publikasi TESSELA aktif yang mencakup rentang minggu ini. Pilih minggu lain atau aktifkan publikasi yang sesuai."
           />
         </Card>
       ) : filtered.length === 0 ? (
