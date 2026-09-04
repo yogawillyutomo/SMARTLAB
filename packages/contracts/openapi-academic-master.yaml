@@ -1,0 +1,895 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Academic Master API module
+  version: 0.12.0
+  description: Server-authoritative S1B Academic Master Data path items and schemas.
+paths:
+  /master-data/academic-units:
+    get:
+      operationId: listAcademicUnits
+      summary: List current-School Academic Units
+      description: Requires `master-data.view`. Ordered by canonical code then ULID.
+      security: &auth
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/AcademicUnitType' }
+        - name: parentId
+          in: query
+          schema: { type: string, format: ulid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/AcademicUnitCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createAcademicUnit
+      summary: Create an Academic Unit
+      description: Requires `master-data.create`. Code is normalized to uppercase and becomes immutable.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAcademicUnitRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AcademicUnitCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/academic-units/{academicUnitId}:
+    parameters:
+      - $ref: '#/components/parameters/AcademicUnitId'
+    get:
+      operationId: getAcademicUnit
+      summary: Read one current-School Academic Unit
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/AcademicUnitDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateAcademicUnit
+      summary: Update mutable Academic Unit fields
+      description: Requires `master-data.update` and strong `If-Match`. Code is immutable. Canonical no-op preserves version, timestamp, ETag, and audit history.
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAcademicUnitRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AcademicUnitDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/teachers:
+    get:
+      operationId: listTeachers
+      summary: List current-School Teachers
+      description: Requires `master-data.view`. Teacher is a School-owned academic reference, not a User account.
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: academicUnitId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: membershipId
+          in: query
+          schema: { type: string, format: ulid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/TeacherCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createTeacher
+      summary: Create a Teacher master record
+      description: Requires `master-data.create`. Optional membership link must belong to the same School and never mutates User data.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTeacherRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/TeacherCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/teachers/{teacherId}:
+    parameters:
+      - $ref: '#/components/parameters/TeacherId'
+    get:
+      operationId: getTeacher
+      summary: Read one current-School Teacher
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/TeacherDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateTeacher
+      summary: Update mutable Teacher fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTeacherRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/TeacherDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/classes:
+    get:
+      operationId: listAcademicClasses
+      summary: List current-School class groups / rombel
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: academicUnitId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: homeroomTeacherId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: gradeLevel
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20 }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/AcademicClassCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createAcademicClass
+      summary: Create an Academic Class / rombel
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAcademicClassRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AcademicClassCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/classes/{academicClassId}:
+    parameters:
+      - $ref: '#/components/parameters/AcademicClassId'
+    get:
+      operationId: getAcademicClass
+      summary: Read one current-School Academic Class
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/AcademicClassDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateAcademicClass
+      summary: Update mutable Academic Class fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAcademicClassRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AcademicClassDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/subjects:
+    get:
+      operationId: listSubjects
+      summary: List current-School Subjects
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: academicUnitId
+          in: query
+          schema: { type: string, format: ulid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/SubjectCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createSubject
+      summary: Create a Subject master record
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSubjectRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/SubjectCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/subjects/{subjectId}:
+    parameters:
+      - $ref: '#/components/parameters/SubjectId'
+    get:
+      operationId: getSubject
+      summary: Read one current-School Subject
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/SubjectDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateSubject
+      summary: Update mutable Subject fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSubjectRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/SubjectDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/academic-years:
+    get:
+      operationId: listAcademicYears
+      summary: List current-School Academic Years
+      description: Active Academic Years may not overlap by date.
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/AcademicYearCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createAcademicYear
+      summary: Create an Academic Year
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAcademicYearRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AcademicYearCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/academic-years/{academicYearId}:
+    parameters:
+      - $ref: '#/components/parameters/AcademicYearId'
+    get:
+      operationId: getAcademicYear
+      summary: Read one current-School Academic Year
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/AcademicYearDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateAcademicYear
+      summary: Update mutable Academic Year fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAcademicYearRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AcademicYearDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/semesters:
+    get:
+      operationId: listSemesters
+      summary: List current-School Semesters
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: academicYearId
+          in: query
+          schema: { type: string, format: ulid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/SemesterCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createSemester
+      summary: Create a Semester inside an Academic Year
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSemesterRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/SemesterCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/semesters/{semesterId}:
+    parameters:
+      - $ref: '#/components/parameters/SemesterId'
+    get:
+      operationId: getSemester
+      summary: Read one current-School Semester
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/SemesterDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateSemester
+      summary: Update mutable Semester fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSemesterRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/SemesterDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/lesson-period-sets:
+    get:
+      operationId: listLessonPeriodSets
+      summary: List year-scoped Bell Schedule / Lesson Period Sets
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: academicYearId
+          in: query
+          schema: { type: string, format: ulid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodSetCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createLessonPeriodSet
+      summary: Create a year-scoped Lesson Period Set
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLessonPeriodSetRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/LessonPeriodSetCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/lesson-period-sets/{lessonPeriodSetId}:
+    parameters:
+      - $ref: '#/components/parameters/LessonPeriodSetId'
+    get:
+      operationId: getLessonPeriodSet
+      summary: Read one Lesson Period Set
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodSetDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateLessonPeriodSet
+      summary: Update mutable Lesson Period Set fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateLessonPeriodSetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodSetDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+  /master-data/lesson-periods:
+    get:
+      operationId: listLessonPeriods
+      summary: List Lesson Periods inside current-School sets
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - name: lessonPeriodSetId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/LessonPeriodKind' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createLessonPeriod
+      summary: Create a Lesson Period inside a stable set
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLessonPeriodRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/LessonPeriodCreated' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+  /master-data/lesson-periods/{lessonPeriodId}:
+    parameters:
+      - $ref: '#/components/parameters/LessonPeriodId'
+    get:
+      operationId: getLessonPeriod
+      summary: Read one Lesson Period
+      security: *auth
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+    patch:
+      operationId: updateLessonPeriod
+      summary: Update mutable Lesson Period fields
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateLessonPeriodRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/LessonPeriodDetail' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AcademicMasterNotFound' }
+        '409': { $ref: '#/components/responses/AcademicMasterConflict' }
+        '412': { $ref: '#/components/responses/AcademicMasterVersionConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/AcademicMasterPreconditionRequired' }
+
+components:
+  parameters:
+    Search:
+      name: search
+      in: query
+      schema: { type: string, minLength: 1, maxLength: 100 }
+    Status:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/AcademicMasterStatus' }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: perPage
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong Academic Master version precondition.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+    AcademicUnitId: { name: academicUnitId, in: path, required: true, schema: { type: string, format: ulid } }
+    TeacherId: { name: teacherId, in: path, required: true, schema: { type: string, format: ulid } }
+    AcademicClassId: { name: academicClassId, in: path, required: true, schema: { type: string, format: ulid } }
+    SubjectId: { name: subjectId, in: path, required: true, schema: { type: string, format: ulid } }
+    AcademicYearId: { name: academicYearId, in: path, required: true, schema: { type: string, format: ulid } }
+    SemesterId: { name: semesterId, in: path, required: true, schema: { type: string, format: ulid } }
+    LessonPeriodSetId: { name: lessonPeriodSetId, in: path, required: true, schema: { type: string, format: ulid } }
+    LessonPeriodId: { name: lessonPeriodId, in: path, required: true, schema: { type: string, format: ulid } }
+  headers:
+    ETag:
+      description: Strong version ETag for the returned Academic Master entity.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+  responses:
+    AcademicMasterNotFound:
+      description: Unknown or cross-School Academic Master identifier
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AcademicMasterError' }
+          example: { message: Academic master data not found., code: ACADEMIC_MASTER_NOT_FOUND }
+    AcademicMasterConflict:
+      description: Current invariant would be violated
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AcademicMasterError' }
+          example: { message: Academic master data conflicts with an existing record., code: ACADEMIC_MASTER_CONFLICT }
+    AcademicMasterVersionConflict:
+      description: If-Match version is syntactically valid but stale
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AcademicMasterError' }
+          example: { message: Academic master data has changed since it was loaded., code: ACADEMIC_MASTER_VERSION_CONFLICT }
+    AcademicMasterPreconditionRequired:
+      description: Missing or malformed strong If-Match version
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AcademicMasterError' }
+          example: { message: A valid If-Match Academic Master version is required., code: PRECONDITION_REQUIRED }
+    AcademicUnitCollection: { description: Academic Unit page, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicUnitCollectionResponse' } } } }
+    AcademicUnitCreated: { description: Academic Unit created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicUnitResponse' } } } }
+    AcademicUnitDetail: { description: Academic Unit projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicUnitResponse' } } } }
+    TeacherCollection: { description: Teacher page, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherCollectionResponse' } } } }
+    TeacherCreated: { description: Teacher created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherResponse' } } } }
+    TeacherDetail: { description: Teacher projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherResponse' } } } }
+    AcademicClassCollection: { description: Academic Class page, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicClassCollectionResponse' } } } }
+    AcademicClassCreated: { description: Academic Class created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicClassResponse' } } } }
+    AcademicClassDetail: { description: Academic Class projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicClassResponse' } } } }
+    SubjectCollection: { description: Subject page, content: { application/json: { schema: { $ref: '#/components/schemas/SubjectCollectionResponse' } } } }
+    SubjectCreated: { description: Subject created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SubjectResponse' } } } }
+    SubjectDetail: { description: Subject projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SubjectResponse' } } } }
+    AcademicYearCollection: { description: Academic Year page, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicYearCollectionResponse' } } } }
+    AcademicYearCreated: { description: Academic Year created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicYearResponse' } } } }
+    AcademicYearDetail: { description: Academic Year projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AcademicYearResponse' } } } }
+    SemesterCollection: { description: Semester page, content: { application/json: { schema: { $ref: '#/components/schemas/SemesterCollectionResponse' } } } }
+    SemesterCreated: { description: Semester created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SemesterResponse' } } } }
+    SemesterDetail: { description: Semester projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SemesterResponse' } } } }
+    LessonPeriodSetCollection: { description: Lesson Period Set page, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodSetCollectionResponse' } } } }
+    LessonPeriodSetCreated: { description: Lesson Period Set created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodSetResponse' } } } }
+    LessonPeriodSetDetail: { description: Lesson Period Set projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodSetResponse' } } } }
+    LessonPeriodCollection: { description: Lesson Period page, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodCollectionResponse' } } } }
+    LessonPeriodCreated: { description: Lesson Period created and audited, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodResponse' } } } }
+    LessonPeriodDetail: { description: Lesson Period projection, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/LessonPeriodResponse' } } } }
+  schemas:
+    AcademicMasterStatus: { type: string, enum: [active, inactive] }
+    AcademicUnitType: { type: string, enum: [department, program, concentration, other] }
+    LessonPeriodKind: { type: string, enum: [instruction, break] }
+    StableCode: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Z0-9][A-Z0-9._/-]{0,63}$' }
+    NullableUlid: { type: [string, 'null'], format: ulid }
+    PaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+    AcademicMasterError:
+      type: object
+      additionalProperties: false
+      required: [message, code]
+      properties:
+        message: { type: string }
+        code: { type: string, enum: [ACADEMIC_MASTER_NOT_FOUND, ACADEMIC_MASTER_CONFLICT, ACADEMIC_MASTER_VERSION_CONFLICT, PRECONDITION_REQUIRED] }
+
+    AcademicUnit:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, code, name, type, parentId, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        type: { $ref: '#/components/schemas/AcademicUnitType' }
+        parentId: { $ref: '#/components/schemas/NullableUlid' }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Teacher:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, code, personnelNumber, name, email, phone, academicUnitId, membershipId, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        personnelNumber: { type: [string, 'null'], maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        email: { type: [string, 'null'], format: email, maxLength: 255 }
+        phone: { type: [string, 'null'], maxLength: 32 }
+        academicUnitId: { $ref: '#/components/schemas/NullableUlid' }
+        membershipId: { $ref: '#/components/schemas/NullableUlid' }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    AcademicClass:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, code, name, gradeLevel, academicUnitId, homeroomTeacherId, studentCount, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        gradeLevel: { type: integer, minimum: 1, maximum: 20 }
+        academicUnitId: { $ref: '#/components/schemas/NullableUlid' }
+        homeroomTeacherId: { $ref: '#/components/schemas/NullableUlid' }
+        studentCount: { type: integer, minimum: 0 }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Subject:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, code, name, groupName, academicUnitId, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        groupName: { type: [string, 'null'], maxLength: 255 }
+        academicUnitId: { $ref: '#/components/schemas/NullableUlid' }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    AcademicYear:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, code, name, startsOn, endsOn, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Semester:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, academicYearId, code, name, startsOn, endsOn, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        academicYearId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    LessonPeriodSet:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, academicYearId, code, name, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        academicYearId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    LessonPeriod:
+      type: object
+      additionalProperties: false
+      required: [id, schoolId, lessonPeriodSetId, code, sequence, startsAt, endsAt, kind, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        schoolId: { type: string, format: ulid, readOnly: true }
+        lessonPeriodSetId: { type: string, format: ulid, readOnly: true }
+        code: { $ref: '#/components/schemas/StableCode' }
+        sequence: { type: integer, minimum: 1 }
+        startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }
+        endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }
+        kind: { $ref: '#/components/schemas/LessonPeriodKind' }
+        status: { $ref: '#/components/schemas/AcademicMasterStatus' }
+        version: { type: integer, minimum: 1, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+
+    AcademicUnitResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/AcademicUnit' } } }
+    TeacherResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/Teacher' } } }
+    AcademicClassResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/AcademicClass' } } }
+    SubjectResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/Subject' } } }
+    AcademicYearResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/AcademicYear' } } }
+    SemesterResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/Semester' } } }
+    LessonPeriodSetResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/LessonPeriodSet' } } }
+    LessonPeriodResponse: { type: object, additionalProperties: false, required: [data], properties: { data: { $ref: '#/components/schemas/LessonPeriod' } } }
+    AcademicUnitCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/AcademicUnit' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    TeacherCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Teacher' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    AcademicClassCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/AcademicClass' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    SubjectCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Subject' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    AcademicYearCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/AcademicYear' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    SemesterCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Semester' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    LessonPeriodSetCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/LessonPeriodSet' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+    LessonPeriodCollectionResponse: { type: object, additionalProperties: false, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/LessonPeriod' } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } }
+
+    CreateAcademicUnitRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, type]
+      properties: { code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, type: { $ref: '#/components/schemas/AcademicUnitType' }, parentId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateAcademicUnitRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, type: { $ref: '#/components/schemas/AcademicUnitType' }, parentId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateTeacherRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties: { code: { $ref: '#/components/schemas/StableCode' }, personnelNumber: { type: [string, 'null'], maxLength: 64 }, name: { type: string, minLength: 1, maxLength: 255 }, email: { type: [string, 'null'], format: email, maxLength: 255 }, phone: { type: [string, 'null'], maxLength: 32 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, membershipId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateTeacherRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { personnelNumber: { type: [string, 'null'], maxLength: 64 }, name: { type: string, minLength: 1, maxLength: 255 }, email: { type: [string, 'null'], format: email, maxLength: 255 }, phone: { type: [string, 'null'], maxLength: 32 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, membershipId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateAcademicClassRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, gradeLevel]
+      properties: { code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, gradeLevel: { type: integer, minimum: 1, maximum: 20 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, homeroomTeacherId: { $ref: '#/components/schemas/NullableUlid' }, studentCount: { type: integer, minimum: 0 }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateAcademicClassRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, gradeLevel: { type: integer, minimum: 1, maximum: 20 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, homeroomTeacherId: { $ref: '#/components/schemas/NullableUlid' }, studentCount: { type: integer, minimum: 0 }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateSubjectRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties: { code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, groupName: { type: [string, 'null'], maxLength: 255 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateSubjectRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, groupName: { type: [string, 'null'], maxLength: 255 }, academicUnitId: { $ref: '#/components/schemas/NullableUlid' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateAcademicYearRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, startsOn, endsOn]
+      properties: { code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, startsOn: { type: string, format: date }, endsOn: { type: string, format: date }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateAcademicYearRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, startsOn: { type: string, format: date }, endsOn: { type: string, format: date }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateSemesterRequest:
+      type: object
+      additionalProperties: false
+      required: [academicYearId, code, name, startsOn, endsOn]
+      properties: { academicYearId: { type: string, format: ulid }, code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, startsOn: { type: string, format: date }, endsOn: { type: string, format: date }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateSemesterRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, startsOn: { type: string, format: date }, endsOn: { type: string, format: date }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateLessonPeriodSetRequest:
+      type: object
+      additionalProperties: false
+      required: [academicYearId, code, name]
+      properties: { academicYearId: { type: string, format: ulid }, code: { $ref: '#/components/schemas/StableCode' }, name: { type: string, minLength: 1, maxLength: 255 }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateLessonPeriodSetRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { name: { type: string, minLength: 1, maxLength: 255 }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    CreateLessonPeriodRequest:
+      type: object
+      additionalProperties: false
+      required: [lessonPeriodSetId, code, sequence, startsAt, endsAt, kind]
+      properties: { lessonPeriodSetId: { type: string, format: ulid }, code: { $ref: '#/components/schemas/StableCode' }, sequence: { type: integer, minimum: 1 }, startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }, endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }, kind: { $ref: '#/components/schemas/LessonPeriodKind' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
+    UpdateLessonPeriodRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: { sequence: { type: integer, minimum: 1 }, startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }, endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }, kind: { $ref: '#/components/schemas/LessonPeriodKind' }, status: { $ref: '#/components/schemas/AcademicMasterStatus' } }
