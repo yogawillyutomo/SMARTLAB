@@ -105,20 +105,39 @@ Still pending or intentionally deferred:
 - tenant-specific permission override editor/contract;
 - canonical audit query UI/API completion.
 
-### Phase S2 - Scheduling and availability — next major product slice
+### Phase S2 - Scheduling and availability — active
 
-Build canonical domains for:
+**S2.1 contract locked:** [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-- academic calendar / closures;
-- regular schedules;
-- schedule occurrences/exceptions;
-- unified availability;
-- laboratory reservations and approval;
-- priority event overrides.
+Locked foundations:
+
+- complete School + Semester TESSELA publication snapshots;
+- immutable source publication identity/version;
+- SHA-256 replay/integrity semantics;
+- normalized immutable TimetableEntry rows;
+- stable academic references rather than display text;
+- nullable planned SmartLab Laboratory assignment;
+- deterministic weekly/single-date recurrence;
+- materialized immutable ScheduleOccurrence rows;
+- full validation before activation;
+- exactly one active publication per School + Semester;
+- structural source conflicts are rejected, never solved by SmartLab.
+
+Next implementation slices:
+
+- S2.2 published timetable persistence, validation, occurrence materialization, activation, audit, and OpenAPI;
+- S2.3 canonical schedule read model + frontend cutover;
+- S2.4 academic calendar / closures;
+- S2.5 unified Laboratory availability;
+- S2.6 reservations and approval;
+- S2.7 dated schedule exceptions;
+- S2.8 priority event override/integration UAT.
 
 No recurring schedule is destructively rewritten for a one-date exception.
 
-**Entry gate satisfied:** ownership and integration responsibilities are locked by ADR-001. S2 implementation must begin from published timetable integration and operational availability, not a solver.
+Excel/file schedule ingestion, if later required, must be an adapter into the same canonical publication contract and must not create an alternate schedule authority.
+
+**Entry gate satisfied:** ownership is locked by ADR-001 and S2.1 semantics are locked by the published timetable contract.
 
 ### Phase S3 - Laboratory execution and reporting
 
