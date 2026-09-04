@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab Published Timetable API module
-  version: 0.13.0
-  description: S2.2 server-authoritative published timetable ingestion, validation, immutable occurrence materialization, and activation.
+  version: 0.14.0
+  description: S2.2 published timetable ingestion/activation plus the S2.3 current-plan Schedule Occurrence read model.
 paths:
   /timetable-publications:
     get:
@@ -112,6 +112,53 @@ paths:
         '404': { $ref: '#/components/responses/PublicationNotFound' }
         '409': { $ref: '#/components/responses/PublicationConflict' }
 
+  /schedule-occurrences:
+    get:
+      operationId: listScheduleOccurrences
+      summary: List current-plan Schedule Occurrences for a bounded date range
+      description: |
+        Requires schedules.view. Returns only occurrences belonging to timetable
+        publications that are currently active for the authenticated School.
+        This is a current-plan projection, not a historical reconstruction of which
+        publication was active on a past date. Date ranges are inclusive and limited
+        to 14 calendar days.
+      security: *auth
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: laboratoryId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: teacherId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: academicClassId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: subjectId
+          in: query
+          schema: { type: string, format: ulid }
+        - name: activityType
+          in: query
+          schema: { $ref: '#/components/schemas/ActivityType' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 250 }
+      responses:
+        '200': { $ref: '#/components/responses/ScheduleOccurrenceCollection' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
 components:
   parameters:
     PublicationId:
@@ -121,6 +168,82 @@ components:
       schema: { type: string, format: ulid }
 
   schemas:
+    ScheduleReference:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: ulid }
+        code: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+
+    ScheduleOccurrence:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - schoolId
+        - publicationId
+        - sourcePublicationId
+        - sourceVersion
+        - sourceScheduleId
+        - occursOn
+        - activityType
+        - teacher
+        - academicClass
+        - subject
+        - plannedLaboratory
+        - lessonPeriodSetId
+        - startLessonPeriodId
+        - endLessonPeriodId
+        - startTime
+        - endTime
+        - instructionPeriodCount
+      properties:
+        id: { type: string, format: ulid }
+        schoolId: { type: string, format: ulid }
+        publicationId: { type: string, format: ulid }
+        sourcePublicationId: { type: string, minLength: 1 }
+        sourceVersion: { type: integer, minimum: 1 }
+        sourceScheduleId: { type: string, minLength: 1 }
+        occursOn: { type: string, format: date }
+        activityType: { $ref: '#/components/schemas/ActivityType' }
+        teacher: { $ref: '#/components/schemas/ScheduleReference' }
+        academicClass: { $ref: '#/components/schemas/ScheduleReference' }
+        subject: { $ref: '#/components/schemas/ScheduleReference' }
+        plannedLaboratory:
+          oneOf:
+            - { $ref: '#/components/schemas/ScheduleReference' }
+            - { type: 'null' }
+        lessonPeriodSetId: { type: string, format: ulid }
+        startLessonPeriodId: { type: string, format: ulid }
+        endLessonPeriodId: { type: string, format: ulid }
+        startTime: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }
+        endTime: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$' }
+        instructionPeriodCount: { type: integer, minimum: 1 }
+
+    ScheduleOccurrenceMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage, from, to, activePublicationCount]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 1000 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        activePublicationCount: { type: integer, minimum: 0 }
+
+    ScheduleOccurrenceCollectionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ScheduleOccurrence' }
+        meta: { $ref: '#/components/schemas/ScheduleOccurrenceMeta' }
     PublicationStatus:
       type: string
       enum: [staged, validated, active, superseded, rejected]
@@ -309,6 +432,11 @@ components:
         details: { type: object, additionalProperties: true }
 
   responses:
+    ScheduleOccurrenceCollection:
+      description: Paginated current-plan Schedule Occurrences for the authenticated School.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ScheduleOccurrenceCollectionEnvelope' }
     PublicationCollection:
       description: Paginated current-School publication list.
       content:

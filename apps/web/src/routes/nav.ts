@@ -46,6 +46,7 @@ const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
   users: 'users.view',
   roles: 'roles.view',
   'master-data': 'master-data.view',
+  schedules: 'schedules.view',
 };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -54,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' },
       { to: '/laboratories', label: 'Laboratorium', icon: FlaskConical, module: 'laboratories', serverPermission: 'laboratories.view' },
-      { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules' },
+      { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules', serverPermission: 'schedules.view' },
       { to: '/bookings', label: 'Reservasi Lab', icon: CalendarClock, module: 'bookings', badgeKey: 'pending_bookings' },
       { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions' },
     ],

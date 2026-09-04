@@ -52,7 +52,7 @@ function AppRoutes() {
         <Route path="/laboratories/:laboratoryId/layout" element={<RequireServerPermission permission="layouts.view"><LaboratoryLayoutApiPage /></RequireServerPermission>} />
         <Route path="/devices" element={<RequireServerPermission permission="devices.view"><DevicesPage /></RequireServerPermission>} />
         <Route path="/devices/:id" element={<RequireServerPermission permission="devices.view"><DeviceDetailPage /></RequireServerPermission>} />
-        <Route path="/schedules" element={<RequirePermission module="schedules"><SchedulesPage /></RequirePermission>} />
+        <Route path="/schedules" element={<RequireServerPermission permission="schedules.view"><SchedulesPage /></RequireServerPermission>} />
         <Route path="/bookings" element={<RequirePermission module="bookings"><BookingsPage /></RequirePermission>} />
         <Route path="/sessions" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />
         <Route path="/sessions/:id" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />

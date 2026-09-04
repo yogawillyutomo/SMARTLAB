@@ -421,6 +421,150 @@ class PublishedTimetableApiTest extends TestCase
         }
     }
 
+    public function test_schedule_occurrence_read_requires_server_permission_before_query_validation(): void
+    {
+        $this->getJson('/api/v1/schedule-occurrences?unexpected=true')
+            ->assertUnauthorized()
+            ->assertJsonPath('code', 'UNAUTHENTICATED');
+
+        $school = School::factory()->create();
+        $this->actingAsRole($school, 'siswa');
+
+        $this->getJson('/api/v1/schedule-occurrences?unexpected=true')
+            ->assertForbidden()
+            ->assertJsonPath('code', 'FORBIDDEN');
+
+        $this->actingAsRole($school, 'admin-lab');
+
+        $this->getJson('/api/v1/schedule-occurrences?unexpected=true')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['from', 'to', 'unexpected']);
+    }
+
+    public function test_schedule_occurrence_read_returns_only_active_current_plan_with_canonical_labels(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 09:00:00', 'Asia/Jakarta'));
+
+        try {
+            [, $school] = $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');
+            $fixture = $this->fixture($school);
+
+            $publication = $this->postJson('/api/v1/timetable-publications', $this->payload($school, $fixture))
+                ->assertCreated()
+                ->json('data');
+
+            $this->postJson('/api/v1/timetable-publications/'.$publication['id'].'/activate')
+                ->assertOk();
+
+            $response = $this->getJson('/api/v1/schedule-occurrences?from=2026-09-07&to=2026-09-13&perPage=1000')
+                ->assertOk()
+                ->assertJsonPath('meta.page', 1)
+                ->assertJsonPath('meta.perPage', 1000)
+                ->assertJsonPath('meta.total', 1)
+                ->assertJsonPath('meta.lastPage', 1)
+                ->assertJsonPath('meta.from', '2026-09-07')
+                ->assertJsonPath('meta.to', '2026-09-13')
+                ->assertJsonPath('meta.activePublicationCount', 1)
+                ->assertJsonPath('data.0.publicationId', $publication['id'])
+                ->assertJsonPath('data.0.sourceVersion', 1)
+                ->assertJsonPath('data.0.sourceScheduleId', 'SCH-XIPPLG1-WEB-MON-01')
+                ->assertJsonPath('data.0.occursOn', '2026-09-07')
+                ->assertJsonPath('data.0.activityType', 'practical')
+                ->assertJsonPath('data.0.teacher.id', $fixture['teacherA']->id)
+                ->assertJsonPath('data.0.teacher.code', 'T-A')
+                ->assertJsonPath('data.0.teacher.name', 'Guru A')
+                ->assertJsonPath('data.0.academicClass.id', $fixture['classA']->id)
+                ->assertJsonPath('data.0.academicClass.code', 'XI-PPLG-1')
+                ->assertJsonPath('data.0.academicClass.name', 'XI PPLG 1')
+                ->assertJsonPath('data.0.subject.id', $fixture['subjectA']->id)
+                ->assertJsonPath('data.0.subject.code', 'WEB')
+                ->assertJsonPath('data.0.subject.name', 'Pemrograman Web')
+                ->assertJsonPath('data.0.plannedLaboratory.id', $fixture['labA']->id)
+                ->assertJsonPath('data.0.plannedLaboratory.code', 'LAB-RPL-1')
+                ->assertJsonPath('data.0.plannedLaboratory.name', 'Lab RPL 1')
+                ->assertJsonPath('data.0.startTime', '07:00:00')
+                ->assertJsonPath('data.0.endTime', '08:45:00')
+                ->assertJsonPath('data.0.instructionPeriodCount', 2);
+
+            $this->assertSame($school->id, $response->json('data.0.schoolId'));
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_schedule_occurrence_read_filters_current_plan_and_hides_superseded_occurrences(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 09:00:00', 'Asia/Jakarta'));
+
+        try {
+            [, $school] = $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');
+            $fixture = $this->fixture($school);
+
+            $v1Payload = $this->payload($school, $fixture);
+            $v1 = $this->postJson('/api/v1/timetable-publications', $v1Payload)
+                ->assertCreated()
+                ->json('data');
+            $this->postJson('/api/v1/timetable-publications/'.$v1['id'].'/activate')->assertOk();
+
+            $v2Payload = $v1Payload;
+            $v2Payload['sourceVersion'] = 2;
+            $v2Payload['publishedAt'] = '2026-09-09T12:00:00+07:00';
+            $v2Payload['entries'][0]['sourceSnapshots'] = [
+                'teacherCode' => 'T-A',
+                'teacherName' => 'Guru Snapshot',
+                'classCode' => 'XI-PPLG-1',
+                'className' => 'XI PPLG 1 Snapshot',
+                'subjectCode' => 'WEB',
+                'subjectName' => 'Web Snapshot v2',
+                'laboratoryCode' => 'LAB-RPL-1',
+                'laboratoryName' => 'Lab Snapshot',
+            ];
+
+            $v2 = $this->postJson('/api/v1/timetable-publications', $v2Payload)
+                ->assertCreated()
+                ->json('data');
+            $this->postJson('/api/v1/timetable-publications/'.$v2['id'].'/activate')->assertOk();
+
+            $this->getJson(
+                '/api/v1/schedule-occurrences?from=2026-09-07&to=2026-09-13'.
+                '&laboratoryId='.$fixture['labA']->id.
+                '&teacherId='.$fixture['teacherA']->id.
+                '&academicClassId='.$fixture['classA']->id.
+                '&subjectId='.$fixture['subjectA']->id.
+                '&activityType=practical'
+            )
+                ->assertOk()
+                ->assertJsonPath('meta.total', 1)
+                ->assertJsonPath('meta.activePublicationCount', 1)
+                ->assertJsonPath('data.0.publicationId', $v2['id'])
+                ->assertJsonPath('data.0.sourceVersion', 2)
+                ->assertJsonPath('data.0.teacher.name', 'Guru Snapshot')
+                ->assertJsonPath('data.0.academicClass.name', 'XI PPLG 1 Snapshot')
+                ->assertJsonPath('data.0.subject.name', 'Web Snapshot v2')
+                ->assertJsonPath('data.0.plannedLaboratory.name', 'Lab Snapshot');
+
+            $this->assertDatabaseHas('timetable_publications', [
+                'id' => $v1['id'],
+                'status' => 'superseded',
+            ]);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_schedule_occurrence_read_rejects_oversized_ranges_and_unknown_query_fields(): void
+    {
+        [, $school] = $this->actingAsRole(School::factory()->create(), 'admin-lab');
+
+        $this->getJson('/api/v1/schedule-occurrences?from=2026-09-01&to=2026-09-15')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['to']);
+
+        $this->getJson('/api/v1/schedule-occurrences?from=2026-09-01&to=2026-09-07&sort=teacher')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['sort']);
+    }
+
     /**
      * @return array{
      *   year: AcademicYear,

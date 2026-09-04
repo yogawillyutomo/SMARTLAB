@@ -44,6 +44,26 @@ class TimetableEntry extends Model
         return $this->hasMany(ScheduleOccurrence::class, 'entry_id');
     }
 
+    public function teacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class);
+    }
+
+    public function academicClass(): BelongsTo
+    {
+        return $this->belongsTo(AcademicClass::class);
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
+    }
+
+    public function plannedLaboratory(): BelongsTo
+    {
+        return $this->belongsTo(Laboratory::class, 'planned_laboratory_id');
+    }
+
     protected function casts(): array
     {
         return [

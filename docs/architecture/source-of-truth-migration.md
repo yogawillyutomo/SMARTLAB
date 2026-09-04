@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.2 Published Timetable Backend
+**Baseline:** repository state including S2.3 Schedule Read Model Cutover
 
 ## Goal
 
@@ -23,8 +23,9 @@ This roadmap follows the approved operational workflow specification and the rep
 | Identity administration | PostgreSQL / users + school memberships | `identityAdminGateway`, `UsersPage.tsx` | canonical |
 | Role / permission catalog | Laravel authorization catalog | `identityAdminGateway`, `RolesPage.tsx` | canonical read-only catalog |
 | Academic master | PostgreSQL / academic master API | `academicMasterGateway`, `MasterDataPage.tsx` | canonical |
-| Published timetable ingestion/activation | PostgreSQL / Timetable Publication API | frontend schedule route not cut over yet | canonical backend |
-| Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | read API/frontend pending S2.3 | canonical backend |
+| Published timetable ingestion/activation | PostgreSQL / Timetable Publication API | source publication administration remains API-first | canonical backend |
+| Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
+| Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -35,7 +36,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/schedules` | schedule presentation/read model | occurrence read API + frontend cutover; backend publication source is already canonical |
 | `/bookings` | laboratory reservations | availability + reservation domain |
 | `/sessions` | laboratory execution | occurrence/session domain |
 | `/journals` | execution report/journal | session/report domain |
@@ -139,9 +139,21 @@ Delivered in S2.2:
 - atomic activation and supersession with old-version/future-effective protections;
 - OpenAPI 0.13 contract and portable/PostgreSQL CI coverage.
 
+Delivered in S2.3:
+
+- tenant-scoped `GET /schedule-occurrences` current-plan read API;
+- inclusive date-range queries bounded to 14 days;
+- filters for planned Laboratory, Teacher, Academic Class, Subject, and activity type;
+- active-publication-only projection, excluding superseded occurrence rows from ordinary schedule views;
+- snapshot-aware canonical labels and stable server IDs;
+- `schedules.view` route/navigation authorization;
+- `/schedules` cut over from `useAppData().db.schedules` to `scheduleOccurrenceGateway`;
+- browser-local add/edit/duplicate/delete structural schedule actions removed from the production schedule route;
+- week/day/list views cover Monday through Sunday without hiding weekend occurrences;
+- OpenAPI 0.14 and regression tests locking the source-of-truth boundary.
+
 Next implementation slices:
 
-- S2.3 canonical occurrence read API + frontend `/schedules` cutover;
 - S2.4 academic calendar / closures;
 - S2.5 unified Laboratory availability;
 - S2.6 reservations and approval;

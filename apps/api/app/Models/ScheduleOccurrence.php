@@ -37,6 +37,41 @@ class ScheduleOccurrence extends Model
         return $this->belongsTo(TimetableEntry::class, 'entry_id');
     }
 
+    public function teacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class);
+    }
+
+    public function academicClass(): BelongsTo
+    {
+        return $this->belongsTo(AcademicClass::class);
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
+    }
+
+    public function plannedLaboratory(): BelongsTo
+    {
+        return $this->belongsTo(Laboratory::class, 'planned_laboratory_id');
+    }
+
+    public function lessonPeriodSet(): BelongsTo
+    {
+        return $this->belongsTo(LessonPeriodSet::class);
+    }
+
+    public function startLessonPeriod(): BelongsTo
+    {
+        return $this->belongsTo(LessonPeriod::class, 'start_lesson_period_id');
+    }
+
+    public function endLessonPeriod(): BelongsTo
+    {
+        return $this->belongsTo(LessonPeriod::class, 'end_lesson_period_id');
+    }
+
     protected function casts(): array
     {
         return ['occurs_on' => 'date:Y-m-d'];
