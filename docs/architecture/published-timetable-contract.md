@@ -1,8 +1,8 @@
 # Published Timetable and Schedule Occurrence Contract
 
-**Status:** LOCKED FOR S2.1 IMPLEMENTATION
+**Status:** LOCKED — S2.2 BACKEND IMPLEMENTED
 
-**Branch:** `docs/published-timetable-contract`
+**Implementation:** `feat/published-timetable-backend` / PR #62
 
 **Baseline:** `main@80e01c59bbf23faef9196db66e1cebd9cdebab5b`
 
@@ -929,18 +929,24 @@ This contract is considered locked when:
 
 After this contract:
 
-### S2.2 — Published timetable backend
+### S2.2 — Published timetable backend — implemented
 
-Implement:
+Delivered:
 
-- persistence;
-- normalization;
-- validation;
-- materialization;
-- activation;
-- audit;
-- OpenAPI;
-- server tests.
+- relational persistence for publication/entry/occurrence/event records;
+- payload normalization/hash replay protection;
+- current SmartLab-reference validation;
+- recurrence materialization;
+- collision diagnostics/rejection;
+- capacity warnings;
+- rejected-publication evidence without partial normalized rows;
+- atomic activation/supersession;
+- tenant-scoped list/detail endpoints;
+- server permissions;
+- OpenAPI 0.13;
+- PostgreSQL migration/seeder validation and portable feature tests.
+
+The implementation intentionally keeps `academicReferenceSource=smartlab` for this slice. Shared BP Master Data external-ID mapping and service-to-service transport remain deferred decisions.
 
 ### S2.3 — Schedule read model and frontend cutover
 
