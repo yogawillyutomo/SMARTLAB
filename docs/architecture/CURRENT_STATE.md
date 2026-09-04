@@ -47,15 +47,17 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 ## Planned next
 
-The Master Data ↔ TESSELA ↔ SmartLab scheduling boundary is now locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md).
+The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S2: Scheduling & Availability.
-2. Phase S3: Laboratory Session + Journal.
-3. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-4. Phase S5: Corrective Work Orders.
-5. Phase S6: PC monitoring telemetry.
-6. Phase S7: Notifications, Reporting, final Dashboard/global search.
-7. Phase S8: remove browser-local business persistence and compatibility layers.
+1. S2.2: implement published timetable persistence, validation, materialization, activation, audit, and OpenAPI.
+2. S2.3: canonical schedule read model + frontend cutover.
+3. S2.4–S2.6+: closures, unified availability, reservations, dated exceptions, and priority events.
+4. Phase S3: Laboratory Session + Journal.
+5. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+6. Phase S5: Corrective Work Orders.
+7. Phase S6: PC monitoring telemetry.
+8. Phase S7: Notifications, Reporting, final Dashboard/global search.
+9. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -82,6 +84,7 @@ The locked target boundary is:
 - TESSELA may publish a planned Laboratory reference, while SmartLab owns date-specific operational relocation/closure;
 - the existing SmartLab Academic Master implementation is preserved and may become a synchronized projection/adapter when shared BP Master Data is introduced;
 - published timetable versions are immutable and activated atomically after validation.
+- S2.1 further locks full School+Semester snapshot semantics, immutable TimetableEntry rows, materialized ScheduleOccurrence IDs, hash-based idempotency, and one active publication per School+Semester.
 
 ## Validation contract
 
