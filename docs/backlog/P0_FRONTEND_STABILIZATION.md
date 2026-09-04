@@ -79,7 +79,7 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | LAYOUT-02 Editor denah multi-template | selesai | Template fisik, custom layout, properties, advanced geometry. | LAYOUT-01. |
 | MD-01 Master akademik stable ID | selesai | Guru, kelas, mapel, JP, tahun, semester. | Menjadi entry dependency untuk schedule integration. |
 | IMP-01 Fondasi import Excel | belum | Template, mapping, preview, validasi, audit. | Ownership sudah dikunci oleh ADR-001; implementasi tetap perlu contract import terfokus. |
-| IMP-02 Import Master Data | belum | Referensi sederhana, akademik, laboratorium. | Sesudah IMP-01 dan ownership eksternal jelas. |
+| IMP-02 Import Master Data | belum | Referensi sederhana, akademik, laboratorium. | Sesudah IMP-01; academic authority mengikuti ADR-001 dan Laboratory tetap domain SmartLab. |
 | IMP-03 Import jadwal | belum | Kode stabil, validasi konflik. | Sesudah MD-01/IMP-01; boundary TESSELA sudah dikunci oleh ADR-001. |
 | AV-01 Unified availability | belum | Jadwal, reservasi, prioritas, closure, exception. | Phase S2. |
 | OV-01 Override kegiatan prioritas | belum | Exception bertanggal non-destruktif. | Sesudah AV-01 dan kebijakan approver. |
