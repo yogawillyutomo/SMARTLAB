@@ -397,7 +397,7 @@ Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 | DEC-008 | Elemen non-PC tidak auto-swap. | Disetujui | Peralatan/struktur tidak setara dengan PC siswa. | Target terisi ditolak. | Tahap 3–4. |
 | DEC-009 | Tema mendukung Light, Dark, System. | Disetujui | Preferensi dan aksesibilitas. | Bootstrap tidak boleh memaksa Dark. | Tahap 2. |
 | DEC-010 | Import Excel membutuhkan preview, validasi, audit, dan kode stabil. | Disetujui | Data sekolah harus terlindungi. | Idempotensi, laporan hasil, dan rollback policy diperlukan. | Tahap 6–7. |
-| DEC-011 | Import jadwal menunggu identifier akademik stabil. | Disetujui | Jadwal tidak boleh menaut ke teks ambigu. | Master akademik didahulukan. | Tahap 5 lalu 8. |
+| DEC-011 | Published timetable ingestion membutuhkan identifier akademik stabil. | Disetujui; prasyarat terpenuhi | Jadwal tidak boleh menaut ke teks ambigu. | Master akademik stable-ID sudah tersedia; ingestion wajib memakai stable references. | Tahap 5 lalu 8. |
 | DEC-012 | Laravel Policies adalah batas keamanan otoritatif. | Disetujui | Guard frontend dapat dilewati. | Backend memvalidasi permission dan perubahan. | Tahap 12. |
 | DEC-013 | TESSELA adalah satu-satunya solver jadwal; SmartLab mengonsumsi published timetable dan mengelola operasional lab. | Disetujui | Mencegah dual source of truth dan solver ganda. | BP Master Data menjadi target authority referensi akademik; Laboratory tetap milik SmartLab; exception bertanggal tidak mengubah recurring timetable. | ADR-001, Tahap 8–10. |
 | DEC-014 | Published timetable adalah full School+Semester snapshot berversi; SmartLab materialize immutable ScheduleOccurrence sebelum atomic activation. | Disetujui | Idempotensi, history, availability, dan exception membutuhkan source version serta occurrence ID stabil. | Tidak ada partial activation; Excel/file hanya adapter; struktur jadwal diubah melalui publikasi TESSELA baru. | Kontrak S2.1, Tahap 8. |
@@ -409,6 +409,6 @@ Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 3. Pengingat/SLA laporan yang dapat dikonfigurasi dan kebutuhan verifikasi menurut jenis laporan.
 4. Model induk kegiatan khusus yang memakai lebih dari satu laboratorium.
 5. Workflow publikasi/versioning denah aktif.
-7. Retensi rollback dan hasil import.
-8. Nama akhir permission-key yang masih proposed.
-9. Kebijakan arsip tahun ajaran serta laporan lama.
+6. Retensi rollback dan hasil import.
+7. Nama akhir permission-key yang masih proposed.
+8. Kebijakan arsip tahun ajaran serta laporan lama.
