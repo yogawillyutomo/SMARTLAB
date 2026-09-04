@@ -219,13 +219,14 @@ class PublishedTimetableApiTest extends TestCase
         $payload = $this->payload($school, $fixture);
         $payload['entries'][0]['teacherSourceId'] = $foreignFixture['teacherA']->id;
 
-        $this->postJson('/api/v1/timetable-publications', $payload)
+        $response = $this->postJson('/api/v1/timetable-publications', $payload)
             ->assertStatus(422)
-            ->assertJsonPath('code', 'TIMETABLE_PUBLICATION_INVALID')
-            ->assertJsonPath(
-                'errors.entries.0.teacherSourceId.0',
-                'The Teacher reference is unknown in the active School.',
-            );
+            ->assertJsonPath('code', 'TIMETABLE_PUBLICATION_INVALID');
+
+        $this->assertSame(
+            'The Teacher reference is unknown in the active School.',
+            $response->json('errors')['entries.0.teacherSourceId'][0] ?? null,
+        );
 
         $this->assertSame('rejected', TimetablePublication::query()->sole()->status);
         $this->assertDatabaseCount('timetable_entries', 0);
