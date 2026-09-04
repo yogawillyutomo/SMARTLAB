@@ -74,7 +74,7 @@ function AppRoutes() {
         <Route path="/notifications" element={<RequirePermission module="notifications"><NotificationsPage /></RequirePermission>} />
         <Route path="/users" element={<RequireServerPermission permission="users.view"><UsersPage /></RequireServerPermission>} />
         <Route path="/roles" element={<RequireServerPermission permission="roles.view"><RolesPage /></RequireServerPermission>} />
-        <Route path="/master-data" element={<RequirePermission module="master-data"><MasterDataPage /></RequirePermission>} />
+        <Route path="/master-data" element={<RequireServerPermission permission="master-data.view"><MasterDataPage /></RequireServerPermission>} />
         <Route path="/audit-logs" element={<RequirePermission module="audit-logs"><AuditLogsPage /></RequirePermission>} />
         <Route path="/settings" element={<RequirePermission module="settings"><SettingsPage /></RequirePermission>} />
       </Route>
