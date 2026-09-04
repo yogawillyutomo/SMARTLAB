@@ -273,9 +273,9 @@ Master referensi sederhana: **Kategori Aset, Model Aset, Kondisi Aset, Status As
 | Semester | tahun ajaran, nama, tanggal mulai, tanggal selesai, status aktif |
 | Laboratorium | kode, nama, lokasi, kapasitas, kepala lab, teknisi, jumlah PC, tipe denah, baris, kolom, status |
 
-Bidang import jadwal: tahun ajaran, semester, hari, tanggal occurrence opsional, JP mulai, JP selesai, jam mulai, jam selesai, kode lab, kode kelas, kode/NIP guru, kode mapel, jenis kegiatan, dan status jadwal.
+Bidang ingestion jadwal yang dibutuhkan secara semantik: tahun ajaran, semester, stable source schedule ID, recurrence mingguan/tanggal tunggal, JP mulai, JP selesai, lab terencana opsional, stable teacher/class/subject references, jenis kegiatan, source publication ID, dan source version.
 
-**Prasyarat dikunci:** import jadwal tidak boleh diimplementasikan sampai master akademik memiliki identifier/kode stabil.
+**Prasyarat stable ID sudah terpenuhi.** ADR-001 menetapkan TESSELA sebagai authority published timetable, dan kontrak S2.1 menetapkan full-snapshot publication + materialized occurrence. Import Excel/file jadwal, bila tetap dibutuhkan, hanya boleh menjadi adapter terkontrol ke kontrak yang sama; ia tidak boleh menulis canonical regular schedule sebagai authority kedua.
 
 ### 8.2 Workflow import Excel
 
@@ -359,7 +359,7 @@ Tidak semua tahap adalah P0. Setiap tahap memerlukan scope, acceptance criteria,
 | 5. Master akademik dengan stable ID | Menetapkan guru/kelas/mapel/JP/tahun/semester. | Pemilik data akademik. | **Selesai di SmartLab:** kode dan referensi stabil; target cross-product mengikuti ADR-001. | Identitas ganda saat migrasi authority lintas produk. | `feat/academic-master-stable-ids` |
 | 6. Fondasi import Excel | Template, preview, validasi, audit. | Tahap 5 untuk referensi. | Mesin import yang dapat diulang aman. | Overwrite data. | `feat/excel-import-foundation` |
 | 7. Import Master Data | Memuat master sederhana/akademik/lab. | Tahap 5–6. | Template dan hasil import. | Referensi salah. | `feat/master-data-import` |
-| 8. Import jadwal dan unified availability | Import jadwal setelah kode stabil, cek semua sumber. | Tahap 5–7. | Schedule import dan layanan availability. | Bentrok/konkurensi. | `feat/schedule-import-availability` |
+| 8. Published timetable dan unified availability | Konsumsi full-snapshot timetable TESSELA, materialize occurrence, lalu cek semua sumber operasional. | Tahap 5, ADR-001, kontrak S2.1. | Publication/version lifecycle, occurrence, availability; file/Excel hanya adapter bila diperlukan. | Mapping, activation, bentrok/konkurensi. | `feat/published-timetable-foundation` |
 | 9. Override kegiatan prioritas | Exception bertanggal yang disetujui. | Tahap 8, kebijakan approver. | Preview, resolusi, audit/notifikasi. | Otoritas tidak jelas. | `feat/priority-event-override` |
 | 10. Unified Pelaksanaan Lab dan laporan | Satu flow dan varian laporan. | Tahap 8–9. | Session/ActivityReport terpaut. | Data legacy ganda. | `feat/unified-lab-execution` |
 | 11. Integritas Device–Asset–Incident–Work Order | Tautan stabil dan perbaikan tertelusur. | Tahap 3, aset/stok. | Alur korektif end-to-end. | Riwayat ambigu. | `feat/device-asset-incident-integrity` |
@@ -397,9 +397,10 @@ Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 | DEC-008 | Elemen non-PC tidak auto-swap. | Disetujui | Peralatan/struktur tidak setara dengan PC siswa. | Target terisi ditolak. | Tahap 3–4. |
 | DEC-009 | Tema mendukung Light, Dark, System. | Disetujui | Preferensi dan aksesibilitas. | Bootstrap tidak boleh memaksa Dark. | Tahap 2. |
 | DEC-010 | Import Excel membutuhkan preview, validasi, audit, dan kode stabil. | Disetujui | Data sekolah harus terlindungi. | Idempotensi, laporan hasil, dan rollback policy diperlukan. | Tahap 6–7. |
-| DEC-011 | Import jadwal menunggu identifier akademik stabil. | Disetujui | Jadwal tidak boleh menaut ke teks ambigu. | Master akademik didahulukan. | Tahap 5 lalu 8. |
+| DEC-011 | Published timetable ingestion membutuhkan identifier akademik stabil. | Disetujui; prasyarat terpenuhi | Jadwal tidak boleh menaut ke teks ambigu. | Master akademik stable-ID sudah tersedia; ingestion wajib memakai stable references. | Tahap 5 lalu 8. |
 | DEC-012 | Laravel Policies adalah batas keamanan otoritatif. | Disetujui | Guard frontend dapat dilewati. | Backend memvalidasi permission dan perubahan. | Tahap 12. |
 | DEC-013 | TESSELA adalah satu-satunya solver jadwal; SmartLab mengonsumsi published timetable dan mengelola operasional lab. | Disetujui | Mencegah dual source of truth dan solver ganda. | BP Master Data menjadi target authority referensi akademik; Laboratory tetap milik SmartLab; exception bertanggal tidak mengubah recurring timetable. | ADR-001, Tahap 8–10. |
+| DEC-014 | Published timetable adalah full School+Semester snapshot berversi; SmartLab materialize immutable ScheduleOccurrence sebelum atomic activation. | Disetujui | Idempotensi, history, availability, dan exception membutuhkan source version serta occurrence ID stabil. | Tidak ada partial activation; Excel/file hanya adapter; struktur jadwal diubah melalui publikasi TESSELA baru. | Kontrak S2.1, Tahap 8. |
 
 ## 14. Pertanyaan terbuka
 
@@ -408,7 +409,6 @@ Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 3. Pengingat/SLA laporan yang dapat dikonfigurasi dan kebutuhan verifikasi menurut jenis laporan.
 4. Model induk kegiatan khusus yang memakai lebih dari satu laboratorium.
 5. Workflow publikasi/versioning denah aktif.
-6. Apakah Jam Pelajaran bersifat global atau spesifik pada versi jadwal/tahun ajaran.
-7. Retensi rollback dan hasil import.
-8. Nama akhir permission-key yang masih proposed.
-9. Kebijakan arsip tahun ajaran serta laporan lama.
+6. Retensi rollback dan hasil import.
+7. Nama akhir permission-key yang masih proposed.
+8. Kebijakan arsip tahun ajaran serta laporan lama.
