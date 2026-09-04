@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
+use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
@@ -64,6 +65,11 @@ Route::prefix('v1')->group(function (): void {
         Route::post('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'storeLessonPeriod'])->middleware('permission:master-data.create');
         Route::get('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'showLessonPeriod'])->middleware('permission:master-data.view');
         Route::patch('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'updateLessonPeriod'])->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+
+        Route::get('timetable-publications', [TimetablePublicationController::class, 'index'])->middleware('permission:schedules.view');
+        Route::post('timetable-publications', [TimetablePublicationController::class, 'store'])->middleware('permission:schedules.ingest');
+        Route::get('timetable-publications/{publicationId}', [TimetablePublicationController::class, 'show'])->middleware('permission:schedules.view');
+        Route::post('timetable-publications/{publicationId}/activate', [TimetablePublicationController::class, 'activate'])->middleware('permission:schedules.activate');
 
         Route::get('devices', [DeviceController::class, 'index'])->middleware('permission:devices.view');
         Route::post('devices', [DeviceController::class, 'store'])->middleware('permission:devices.create');
