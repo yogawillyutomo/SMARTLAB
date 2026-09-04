@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** `main@9245583a1a3acbca7dad3cc7fccf9df597a413a0`
+**Baseline:** `main@82f2b0bc0c6530aeabedb781c38cc12d1b53894a`
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -47,14 +47,15 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 ## Planned next
 
-1. Lock shared Master Data ↔ TESSELA ↔ SmartLab ownership and integration semantics.
-2. Phase S2: Scheduling & Availability.
-3. Phase S3: Laboratory Session + Journal.
-4. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-5. Phase S5: Corrective Work Orders.
-6. Phase S6: PC monitoring telemetry.
-7. Phase S7: Notifications, Reporting, final Dashboard/global search.
-8. Phase S8: remove browser-local business persistence and compatibility layers.
+The Master Data ↔ TESSELA ↔ SmartLab scheduling boundary is now locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md).
+
+1. Phase S2: Scheduling & Availability.
+2. Phase S3: Laboratory Session + Journal.
+3. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+4. Phase S5: Corrective Work Orders.
+5. Phase S6: PC monitoring telemetry.
+6. Phase S7: Notifications, Reporting, final Dashboard/global search.
+7. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -68,19 +69,19 @@ Approved future telemetry is limited to device identity, heartbeat, CPU, RAM, di
 
 `infrastructure/docker`, `infrastructure/nginx`, and `infrastructure/deployment` are placeholders. Production container topology, reverse proxy, queue/Redis operations, backup/restore, rollback, observability, and deployment hardening remain future work.
 
-## Known architecture decision required before S2
+## Locked scheduling ownership boundary
 
-SmartLab currently owns a working academic-master API for its local product boundary. The broader Bakaran Project plan also calls for shared Master Data, while TESSELA owns timetable generation.
+[ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md) is accepted.
 
-Before Scheduling & Availability expands, lock:
+The locked target boundary is:
 
-- who is authoritative for school, teacher, class, subject, academic year, semester, and academic structure;
-- how SmartLab references or synchronizes those IDs;
-- how TESSELA publishes timetable versions/occurrences;
-- what SmartLab owns locally: laboratory availability, closures/exceptions relevant to lab use, reservations, execution, and journals;
-- retry/conflict/failure behavior when shared services are unavailable.
-
-Do not discard the current stable-ID implementation. Prefer an adapter/projection strategy if authority moves outward.
+- BP Master Data: cross-product academic reference authority;
+- TESSELA: sole timetable-generation / constraint-solving authority;
+- SmartLab: Laboratory authority plus operational availability, reservations, dated exceptions, sessions, and journals;
+- SmartLab does not implement a TESSELA-equivalent solver;
+- TESSELA may publish a planned Laboratory reference, while SmartLab owns date-specific operational relocation/closure;
+- the existing SmartLab Academic Master implementation is preserved and may become a synchronized projection/adapter when shared BP Master Data is introduced;
+- published timetable versions are immutable and activated atomically after validation.
 
 ## Validation contract
 

@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** `main@9245583a1a3acbca7dad3cc7fccf9df597a413a0`
+**Baseline:** `main@82f2b0bc0c6530aeabedb781c38cc12d1b53894a`
 
 ## Goal
 
@@ -65,16 +65,19 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 ## Cross-product authority boundary
 
-SmartLab currently hosts a canonical academic-master API for SmartLab itself. Before Phase S2, the broader Bakaran Project ownership boundary between shared Master Data, TESSELA, and SmartLab must be locked.
+The boundary is locked by [ADR-001: Master Data, TESSELA, and SmartLab Scheduling Boundary](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md).
 
-Until that architecture decision is made:
+Target ownership:
 
-- do not rewrite the stable-ID academic work already delivered;
-- do not introduce a second timetable solver into SmartLab;
-- treat the current academic API as the SmartLab authority boundary that may later become a synchronized projection/adapter of shared Master Data;
-- preserve stable identifiers and integration-friendly contracts.
+- shared BP Master Data is the cross-product authority for school-wide academic references;
+- TESSELA is the sole timetable-generation and constraint-solving authority;
+- SmartLab remains authoritative for Laboratory resources and laboratory operations;
+- TESSELA may assign a planned SmartLab Laboratory reference in a published timetable;
+- SmartLab owns dated availability, reservations, closures, maintenance unavailability, priority events, operational schedule exceptions, sessions, and journals;
+- a one-date SmartLab exception never destructively rewrites the recurring TESSELA timetable;
+- the current SmartLab Academic Master implementation is preserved and evolves into a projection/adapter when shared Master Data is introduced.
 
-A dedicated architecture decision must define external authority, synchronization, failure behavior, and ownership before schedule integration expands.
+Published timetable versions are immutable integration artifacts. SmartLab validates and atomically activates them; SmartLab does not silently optimize or repair them.
 
 ## Migration order
 
@@ -115,7 +118,7 @@ Build canonical domains for:
 
 No recurring schedule is destructively rewritten for a one-date exception.
 
-**Entry gate:** lock shared Master Data ↔ TESSELA ↔ SmartLab authority and integration responsibilities.
+**Entry gate satisfied:** ownership and integration responsibilities are locked by ADR-001. S2 implementation must begin from published timetable integration and operational availability, not a solver.
 
 ### Phase S3 - Laboratory execution and reporting
 
