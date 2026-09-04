@@ -9,6 +9,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $driver = DB::connection()->getDriverName();
+
         Schema::create('timetable_publications', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('school_id')->constrained('schools')->restrictOnDelete();
@@ -44,11 +46,16 @@ return new class extends Migration
                 ['school_id', 'source_system', 'source_publication_id', 'source_version'],
                 'timetable_publications_source_family_idx',
             );
-            $table->foreign('superseded_by_id')
-                ->references('id')
-                ->on('timetable_publications')
-                ->restrictOnDelete();
         });
+
+        if ($driver === 'pgsql') {
+            Schema::table('timetable_publications', function (Blueprint $table): void {
+                $table->foreign('superseded_by_id', 'timetable_publications_superseded_by_id_foreign')
+                    ->references('id')
+                    ->on('timetable_publications')
+                    ->restrictOnDelete();
+            });
+        }
 
         Schema::create('timetable_entries', function (Blueprint $table): void {
             $table->ulid('id')->primary();
@@ -157,6 +164,9 @@ return new class extends Migration
         }
 
         if ($driver === 'sqlite') {
+            DB::unprepared("CREATE TRIGGER timetable_publications_superseded_by_insert BEFORE INSERT ON timetable_publications WHEN NEW.superseded_by_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM timetable_publications WHERE id = NEW.superseded_by_id) BEGIN SELECT RAISE(ABORT, 'Timetable publication superseded_by foreign key constraint failed'); END");
+            DB::unprepared("CREATE TRIGGER timetable_publications_superseded_by_update BEFORE UPDATE OF superseded_by_id ON timetable_publications WHEN NEW.superseded_by_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM timetable_publications WHERE id = NEW.superseded_by_id) BEGIN SELECT RAISE(ABORT, 'Timetable publication superseded_by foreign key constraint failed'); END");
+            DB::unprepared("CREATE TRIGGER timetable_publications_superseded_by_delete BEFORE DELETE ON timetable_publications WHEN EXISTS (SELECT 1 FROM timetable_publications WHERE superseded_by_id = OLD.id) BEGIN SELECT RAISE(ABORT, 'Timetable publication superseded_by restrict delete constraint failed'); END");
             DB::unprepared("CREATE TRIGGER timetable_publications_integrity_insert BEFORE INSERT ON timetable_publications WHEN NEW.source_version < 1 OR NEW.effective_from > NEW.effective_to OR (NEW.status NOT IN ('staged', 'rejected') AND (NEW.academic_year_id IS NULL OR NEW.semester_id IS NULL)) BEGIN SELECT RAISE(ABORT, 'Timetable publication integrity constraint failed'); END");
             DB::unprepared("CREATE TRIGGER timetable_publications_integrity_update BEFORE UPDATE ON timetable_publications WHEN NEW.source_version < 1 OR NEW.effective_from > NEW.effective_to OR (NEW.status NOT IN ('staged', 'rejected') AND (NEW.academic_year_id IS NULL OR NEW.semester_id IS NULL)) BEGIN SELECT RAISE(ABORT, 'Timetable publication integrity constraint failed'); END");
             DB::unprepared("CREATE TRIGGER timetable_entries_integrity_insert BEFORE INSERT ON timetable_entries WHEN (NEW.weekday IS NOT NULL AND (NEW.weekday < 1 OR NEW.weekday > 7)) OR NEW.start_time_snapshot >= NEW.end_time_snapshot OR NEW.instruction_period_count < 1 OR NOT ((NEW.recurrence_kind = 'weekly' AND NEW.weekday IS NOT NULL AND NEW.entry_effective_from IS NOT NULL AND NEW.entry_effective_to IS NOT NULL AND NEW.occurs_on IS NULL AND NEW.entry_effective_from <= NEW.entry_effective_to) OR (NEW.recurrence_kind = 'single_date' AND NEW.weekday IS NULL AND NEW.entry_effective_from IS NULL AND NEW.entry_effective_to IS NULL AND NEW.occurs_on IS NOT NULL)) BEGIN SELECT RAISE(ABORT, 'Timetable entry integrity constraint failed'); END");
