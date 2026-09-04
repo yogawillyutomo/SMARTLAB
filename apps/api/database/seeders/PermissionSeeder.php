@@ -72,6 +72,11 @@ class PermissionSeeder extends Seeder
             'create' => 'Buat Master Data',
             'update' => 'Ubah Master Data',
         ],
+        'schedules' => [
+            'view' => 'Lihat Jadwal',
+            'ingest' => 'Terima Publikasi Jadwal',
+            'activate' => 'Aktifkan Publikasi Jadwal',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',
