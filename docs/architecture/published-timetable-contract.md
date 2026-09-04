@@ -948,15 +948,20 @@ Delivered:
 
 The implementation intentionally keeps `academicReferenceSource=smartlab` for this slice. Shared BP Master Data external-ID mapping and service-to-service transport remain deferred decisions.
 
-### S2.3 — Schedule read model and frontend cutover
+### S2.3 — Schedule read model and frontend cutover — implemented
 
-Implement:
+Delivered:
 
-- active publication queries;
-- occurrence list/range queries;
-- canonical `/schedules` frontend;
-- server permissions;
-- remove browser schedule source-of-truth behavior.
+- active-publication current-plan queries;
+- bounded occurrence list/range endpoint with tenant isolation and filters;
+- stable occurrence/source/publication provenance in the read DTO;
+- canonical `/schedules` week/day/list frontend;
+- `schedules.view` route and navigation authorization from the server permission catalog;
+- removal of browser-local structural schedule CRUD from the production schedule page;
+- explicit TESSELA source/read-only messaging;
+- OpenAPI 0.14 and frontend/backend regression coverage.
+
+This endpoint intentionally represents the **current plan**. It is not a historical reconstruction of which publication happened to be active on an arbitrary past date. Historical workflow records must continue to follow their stored occurrence/publication lineage.
 
 ### S2.4 — Calendar / closures
 
