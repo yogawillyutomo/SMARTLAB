@@ -46,11 +46,12 @@ The application is in a staged source-of-truth migration.
 - identity administration for users and school memberships;
 - server role/permission catalog;
 - academic master data with stable IDs;
+- published timetable ingestion/validation/activation and materialized schedule occurrences;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Scheduling, reservations, laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, calendar/closures, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered.
+The `/schedules` frontend/read model is still transitional even though the published-timetable backend is now server-authoritative. Reservations, laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, calendar/closures, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries also remain transitional until their Laravel API slices are delivered.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
