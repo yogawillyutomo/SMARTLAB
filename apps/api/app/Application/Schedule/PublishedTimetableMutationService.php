@@ -19,7 +19,7 @@ use App\Models\TimetableEntry;
 use App\Models\TimetablePublication;
 use App\Models\User;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\CarbonImmutable;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
