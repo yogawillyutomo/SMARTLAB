@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.12.0
-  description: Canonical SmartLab API v1 contract. Version 0.12 preserves the complete 0.11 surface and adds server-authoritative S1B Academic Master Data.
+  version: 0.13.0
+  description: Canonical SmartLab API v1 contract. Version 0.13 preserves the complete 0.12 surface and adds server-authoritative S2.2 published timetable ingestion and activation.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -33,6 +33,9 @@ paths:
   /identity/memberships: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships' }
   /identity/memberships/{membershipId}: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships~1{membershipId}' }
   /identity/roles: { $ref: './openapi-0.11.yaml#/paths/~1identity~1roles' }
+  /timetable-publications: { $ref: './openapi-published-timetable.yaml#/paths/~1timetable-publications' }
+  /timetable-publications/{publicationId}: { $ref: './openapi-published-timetable.yaml#/paths/~1timetable-publications~1{publicationId}' }
+  /timetable-publications/{publicationId}/activate: { $ref: './openapi-published-timetable.yaml#/paths/~1timetable-publications~1{publicationId}~1activate' }
   /master-data/academic-units: { $ref: './openapi-academic-master.yaml#/paths/~1master-data~1academic-units' }
   /master-data/academic-units/{academicUnitId}: { $ref: './openapi-academic-master.yaml#/paths/~1master-data~1academic-units~1{academicUnitId}' }
   /master-data/teachers: { $ref: './openapi-academic-master.yaml#/paths/~1master-data~1teachers' }
