@@ -279,20 +279,22 @@ export function buildScheduleOccurrenceListPath(filters: ScheduleOccurrenceFilte
 }
 
 export function createScheduleOccurrenceGateway(client: ApiClient): ScheduleOccurrenceGateway {
+  const list: ScheduleOccurrenceGateway['list'] = async (filters) => (
+    parseScheduleOccurrencePage(await client.get<unknown>(buildScheduleOccurrenceListPath(filters)))
+  );
+
   return {
-    async list(filters) {
-      return parseScheduleOccurrencePage(await client.get<unknown>(buildScheduleOccurrenceListPath(filters)));
-    },
+    list,
 
     async listAll(filters) {
-      const first = await this.list({ ...filters, page: 1, perPage: 1000 });
+      const first = await list({ ...filters, page: 1, perPage: 1000 });
       const pages = [first];
       if (first.meta.lastPage > 20) {
         throw new ScheduleOccurrenceContractError('Rentang jadwal terlalu besar untuk ditampilkan dengan aman.');
       }
 
       for (let page = 2; page <= first.meta.lastPage; page += 1) {
-        const next = await this.list({ ...filters, page, perPage: 1000 });
+        const next = await list({ ...filters, page, perPage: 1000 });
         if (next.meta.from !== first.meta.from
           || next.meta.to !== first.meta.to
           || next.meta.total !== first.meta.total
