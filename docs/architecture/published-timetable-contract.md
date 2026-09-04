@@ -119,16 +119,18 @@ The local model remains a prototype until S2 cutover. It is not a migration sour
 
 ## 5. Publication scope: full School + Semester snapshot
 
-S2.1 accepts only **complete School + Semester timetable snapshots**.
+S2.1 accepts only **complete timetable snapshots for one School + Semester scope and one declared effective window**.
 
 A publication is not a patch/delta.
 
-One publication version represents the complete known academic timetable for:
+One publication version represents the complete known academic timetable applicable to:
 
 - exactly one School;
 - exactly one Academic Year;
 - exactly one Semester;
-- one effective date range inside that Semester.
+- one effective date window inside that Semester.
+
+A mid-semester revision may therefore publish a complete replacement snapshot whose `effectiveFrom` is the cutover date and whose `effectiveTo` is later in the same Semester. It is still complete for that declared window; it is not a list of changed rows only.
 
 Why full snapshots:
 
@@ -550,7 +552,7 @@ Inside one publication:
 
 ### 17.3 Occurrence collision validation
 
-After materialization, SmartLab detects structural source conflicts for the same date/time interval.
+After materialization, SmartLab detects structural source conflicts for the same date/time interval. Overlap is evaluated using the materialized local wall-clock interval (`startTimeSnapshot`/`endTimeSnapshot`), not merely LessonPeriod sequence numbers, because different LessonPeriodSets may use different clocks.
 
 At minimum, overlapping occurrences may not double-book:
 
@@ -591,11 +593,14 @@ Activation is a short transaction after all heavy staging/validation/materializa
 Activation must atomically:
 
 1. verify the candidate is still `validated`;
-2. verify no newer conflicting activation occurred concurrently;
-3. mark current active publication `superseded` if present;
-4. set its `supersededById`;
-5. mark candidate `active`;
-6. record activation audit event.
+2. verify the School-local activation date is not earlier than `effectiveFrom`;
+3. verify no newer conflicting activation occurred concurrently;
+4. mark current active publication `superseded` if present;
+5. set its `supersededById`;
+6. mark candidate `active`;
+7. record activation audit event.
+
+S2.1 does not implement scheduled future auto-activation. A candidate whose `effectiveFrom` is in the future remains `validated` until an authorized activation at/after the cutover date.
 
 No window may expose two active publications for the same School + Semester.
 
@@ -617,11 +622,14 @@ S2.2+ must define impact preview before a new publication supersedes occurrences
 
 ## 21. Current-plan query semantics
 
-For ordinary current schedule/availability views:
+For ordinary current/future schedule and availability views:
 
 - select the active TimetablePublication for current School + Semester;
+- the requested date must fall inside that publication's effective window;
 - query its materialized ScheduleOccurrences by date/range;
 - overlay later SmartLab operational state.
+
+Arbitrary historical timetable browsing across superseded effective windows is a read-model concern for S2.3. Historical business records already linked to an occurrence always follow their stored publication/occurrence lineage.
 
 For historical workflow records:
 
