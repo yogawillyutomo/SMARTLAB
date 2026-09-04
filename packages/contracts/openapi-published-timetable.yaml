@@ -117,11 +117,11 @@ paths:
       operationId: listScheduleOccurrences
       summary: List current-plan Schedule Occurrences for a bounded date range
       description: |
-        Requires `schedules.view`. Returns only occurrences belonging to timetable
-        publications that are currently `active` for the authenticated School.
-        The endpoint is a current-plan projection, not a historical reconstruction of
-        which publication was active on a past date. Date ranges are inclusive and
-        limited to 14 calendar days.
+        Requires schedules.view. Returns only occurrences belonging to timetable
+        publications that are currently active for the authenticated School.
+        This is a current-plan projection, not a historical reconstruction of which
+        publication was active on a past date. Date ranges are inclusive and limited
+        to 14 calendar days.
       security: *auth
       parameters:
         - name: from
@@ -159,7 +159,6 @@ paths:
         '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
         '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
         '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
-
 components:
   parameters:
     PublicationId:
@@ -169,7 +168,6 @@ components:
       schema: { type: string, format: ulid }
 
   schemas:
-
     ScheduleReference:
       type: object
       additionalProperties: false
@@ -205,9 +203,9 @@ components:
         id: { type: string, format: ulid }
         schoolId: { type: string, format: ulid }
         publicationId: { type: string, format: ulid }
-        sourcePublicationId: { type: string }
+        sourcePublicationId: { type: string, minLength: 1 }
         sourceVersion: { type: integer, minimum: 1 }
-        sourceScheduleId: { type: string }
+        sourceScheduleId: { type: string, minLength: 1 }
         occursOn: { type: string, format: date }
         activityType: { $ref: '#/components/schemas/ActivityType' }
         teacher: { $ref: '#/components/schemas/ScheduleReference' }
@@ -220,7 +218,8 @@ components:
         lessonPeriodSetId: { type: string, format: ulid }
         startLessonPeriodId: { type: string, format: ulid }
         endLessonPeriodId: { type: string, format: ulid }
-        startTime: { type: string, pattern: '^(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d      type: string
+        startTime: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]
+      type: string
       enum: [staged, validated, active, superseded, rejected]
 
     ActivityType:
@@ -407,13 +406,11 @@ components:
         details: { type: object, additionalProperties: true }
 
   responses:
-
     ScheduleOccurrenceCollection:
       description: Paginated current-plan Schedule Occurrences for the authenticated School.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ScheduleOccurrenceCollectionEnvelope' }
-
     PublicationCollection:
       description: Paginated current-School publication list.
       content:
@@ -438,7 +435,8 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/DomainError' }
  }
-        endTime: { type: string, pattern: '^(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d      type: string
+        endTime: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]
+      type: string
       enum: [staged, validated, active, superseded, rejected]
 
     ActivityType:
@@ -673,7 +671,6 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ScheduleOccurrence' }
         meta: { $ref: '#/components/schemas/ScheduleOccurrenceMeta' }
-
     PublicationStatus:
       type: string
       enum: [staged, validated, active, superseded, rejected]
