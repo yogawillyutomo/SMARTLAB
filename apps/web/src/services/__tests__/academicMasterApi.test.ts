@@ -177,17 +177,20 @@ describe('Academic Master gateway boundary', () => {
   });
 
   it('binds all resource families to their canonical server namespaces', async () => {
-    const responseByPath: Record<string, unknown> = {
-      '/master-data/academic-units': academicUnit,
-      '/master-data/teachers': teacher,
-      '/master-data/classes': academicClass,
-      '/master-data/subjects': subject,
-      '/master-data/academic-years': academicYear,
-      '/master-data/semesters': semester,
-      '/master-data/lesson-period-sets': lessonPeriodSet,
-      '/master-data/lesson-periods': lessonPeriod,
-    };
-    const get = vi.fn(async (path: string) => ({ data: responseByPath[path] }));
+    const responseByPrefix = [
+      ['/master-data/academic-units/', academicUnit],
+      ['/master-data/teachers/', teacher],
+      ['/master-data/classes/', academicClass],
+      ['/master-data/subjects/', subject],
+      ['/master-data/academic-years/', academicYear],
+      ['/master-data/semesters/', semester],
+      ['/master-data/lesson-period-sets/', lessonPeriodSet],
+      ['/master-data/lesson-periods/', lessonPeriod],
+    ] as const;
+    const get = vi.fn(async (path: string) => {
+      const match = responseByPrefix.find(([prefix]) => path.startsWith(prefix));
+      return { data: match?.[1] };
+    });
     const gateway = createAcademicMasterGateway(clientWith({ get: get as ApiClient['get'] }));
 
     await gateway.academicUnits.show(academicUnit.id);
