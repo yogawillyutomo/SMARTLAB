@@ -1,63 +1,213 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, Download, Printer, Copy, Pencil, Trash2 } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { useUIStore } from '@/stores/uiStore';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Printer,
+  RefreshCw,
+  Server,
+} from 'lucide-react';
 import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Card, CardContent } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input, Select } from '@/components/ui/Input';
-import { StatusBadge } from '@/components/ui/Badge';
-import { FormDialog } from '@/components/forms/FormDialog';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/States';
-import { toast } from '@/stores/toastStore';
-import { downloadCSV, cn } from '@/utils';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Input';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import {
-  defaultRegularScheduleWeekday,
-  regularScheduleConflictMessages,
-  REGULAR_SCHEDULE_WEEKDAYS,
-  schedulesForWeekday,
-  type RegularScheduleWeekday,
-} from '@/lib/scheduleView';
-import type { Schedule } from '@/types';
+  activityLabel,
+  dateKeyForDate,
+  datesForWeek,
+  formatScheduleWeekRange,
+  moveWeek,
+  occurrencesForDate,
+  scheduleOccurrencePresentationIssue,
+  weekStartForDate,
+  type ScheduleOccurrencePresentationIssue,
+} from '@/lib/scheduleOccurrenceView';
+import {
+  scheduleOccurrenceGateway,
+  type ScheduleOccurrenceDto,
+  type ScheduleOccurrenceResult,
+} from '@/services/scheduleOccurrenceApi';
+import { useAuthStore } from '@/stores/authStore';
+import { downloadCSV, cn } from '@/utils';
 
-const DAYS = REGULAR_SCHEDULE_WEEKDAYS;
+type ScheduleViewMode = 'week' | 'day' | 'list';
+
+type SchedulePageState =
+  | { status: 'loading' }
+  | { status: 'ready'; result: ScheduleOccurrenceResult }
+  | { status: 'error'; issue: ScheduleOccurrencePresentationIssue };
+
+interface ScheduleFilters {
+  laboratoryId: string;
+  academicClassId: string;
+  teacherId: string;
+  subjectId: string;
+  activityType: string;
+}
+
+const EMPTY_FILTERS: ScheduleFilters = {
+  laboratoryId: 'all',
+  academicClassId: 'all',
+  teacherId: 'all',
+  subjectId: 'all',
+  activityType: 'all',
+};
+
+function timeLabel(value: string): string {
+  return value.slice(0, 5);
+}
+
+function occurrenceResourceOptions(
+  occurrences: readonly ScheduleOccurrenceDto[],
+  select: (occurrence: ScheduleOccurrenceDto) => { id: string; name: string } | null,
+): Array<{ value: string; label: string }> {
+  const values = new Map<string, string>();
+  occurrences.forEach((occurrence) => {
+    const resource = select(occurrence);
+    if (resource) values.set(resource.id, resource.name);
+  });
+  return [...values.entries()]
+    .sort((left, right) => left[1].localeCompare(right[1]) || left[0].localeCompare(right[0]))
+    .map(([value, label]) => ({ value, label }));
+}
+
+function occurrenceCard(occurrence: ScheduleOccurrenceDto) {
+  return (
+    <div
+      key={occurrence.id}
+      className="rounded-xl border border-base-700/60 bg-base-900/30 p-4 shadow-sm"
+      data-occurrence-id={occurrence.id}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-ink-primary">
+          {timeLabel(occurrence.startTime)} - {timeLabel(occurrence.endTime)}
+        </span>
+        <Badge tone="accent">{activityLabel(occurrence.activityType)}</Badge>
+      </div>
+
+      <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-ink-primary">
+        {occurrence.subject.name}
+      </p>
+
+      <div className="mt-3 space-y-1.5 border-t border-base-700/50 pt-2.5 text-xs leading-5 text-ink-secondary">
+        <p><span className="text-ink-muted">Kelas:</span> {occurrence.academicClass.name}</p>
+        <p><span className="text-ink-muted">Guru:</span> {occurrence.teacher.name}</p>
+        <p>
+          <span className="text-ink-muted">Lab:</span>{' '}
+          {occurrence.plannedLaboratory?.name ?? 'Belum direncanakan'}
+        </p>
+        <p><span className="text-ink-muted">JP:</span> {occurrence.instructionPeriodCount}</p>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-base-700/40 pt-2 text-[11px] text-ink-muted">
+        <span>TESSELA v{occurrence.sourceVersion}</span>
+        <span aria-hidden="true">•</span>
+        <span className="break-all">{occurrence.sourceScheduleId}</span>
+      </div>
+    </div>
+  );
+}
 
 export function SchedulesPage() {
-  const { db, mutate } = useAppData();
   const navigate = useNavigate();
-  const { semester } = useUIStore();
-  const canCreate = usePermission('schedules', 'create');
-  const canUpdate = usePermission('schedules', 'update');
-  const canDelete = usePermission('schedules', 'delete');
-  const canExport = usePermission('schedules', 'export');
+  const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const canViewBookings = usePermission('bookings', 'view');
-  const [view, setView] = useState<'week' | 'day' | 'list'>('week');
-  const [selectedDay, setSelectedDay] = useState<RegularScheduleWeekday>(defaultRegularScheduleWeekday);
-  const [filters, setFilters] = useState({ lab: 'all', className: 'all', teacher: 'all', subject: 'all' });
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Schedule | null>(null);
-  const [confirmDel, setConfirmDel] = useState<Schedule | null>(null);
-  const [form, setForm] = useState<Partial<Schedule>>({});
+
+  const todayKey = useMemo(() => dateKeyForDate(new Date()), []);
+  const [weekStart, setWeekStart] = useState(() => weekStartForDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [view, setView] = useState<ScheduleViewMode>('week');
+  const [filters, setFilters] = useState<ScheduleFilters>(EMPTY_FILTERS);
+  const [state, setState] = useState<SchedulePageState>({ status: 'loading' });
   const weeklyBoardRef = useRef<HTMLDivElement>(null);
   const [weeklyScrollState, setWeeklyScrollState] = useState({ atStart: true, atEnd: false });
+  const loadSequence = useRef(0);
 
-  const filtered = useMemo(() => {
-    return db.schedules.filter((s) => {
-      if (filters.lab !== 'all' && s.laboratoryId !== filters.lab) return false;
-      if (filters.className !== 'all' && s.className !== filters.className) return false;
-      if (filters.teacher !== 'all' && s.teacherName !== filters.teacher) return false;
-      if (filters.subject !== 'all' && s.subject !== filters.subject) return false;
-      return true;
-    });
-  }, [db.schedules, filters]);
+  const weekDates = useMemo(() => datesForWeek(weekStart), [weekStart]);
 
-  const classes = [...new Set(db.schedules.map((s) => s.className))];
-  const teachers = [...new Set(db.schedules.map((s) => s.teacherName))];
-  const subjects = [...new Set(db.schedules.map((s) => s.subject))];
-  const selectedDaySchedules = useMemo(() => schedulesForWeekday(filtered, selectedDay), [filtered, selectedDay]);
+  const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    setState({ status: 'loading' });
+
+    try {
+      const result = await scheduleOccurrenceGateway.listAll({
+        from: weekDates[0].key,
+        to: weekDates[6].key,
+      });
+
+      if (sequence === loadSequence.current) {
+        setState({ status: 'ready', result });
+      }
+    } catch (error) {
+      if (sequence !== loadSequence.current) return;
+      const issue = scheduleOccurrencePresentationIssue(error);
+      if (issue.authBoundary) {
+        await bootstrapSession({ force: true });
+        return;
+      }
+      setState({ status: 'error', issue });
+    }
+  }, [bootstrapSession, weekDates]);
+
+  useEffect(() => {
+    void load();
+    return () => {
+      loadSequence.current += 1;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (!weekDates.some((date) => date.key === selectedDate)) {
+      setSelectedDate(weekDates[0].key);
+    }
+  }, [selectedDate, weekDates]);
+
+  const occurrences = state.status === 'ready' ? state.result.data : [];
+
+  const laboratoryOptions = useMemo(
+    () => occurrenceResourceOptions(occurrences, (occurrence) => occurrence.plannedLaboratory),
+    [occurrences],
+  );
+  const classOptions = useMemo(
+    () => occurrenceResourceOptions(occurrences, (occurrence) => occurrence.academicClass),
+    [occurrences],
+  );
+  const teacherOptions = useMemo(
+    () => occurrenceResourceOptions(occurrences, (occurrence) => occurrence.teacher),
+    [occurrences],
+  );
+  const subjectOptions = useMemo(
+    () => occurrenceResourceOptions(occurrences, (occurrence) => occurrence.subject),
+    [occurrences],
+  );
+
+  const hasUnplannedLaboratory = useMemo(
+    () => occurrences.some((occurrence) => occurrence.plannedLaboratory === null),
+    [occurrences],
+  );
+
+  const filtered = useMemo(() => occurrences.filter((occurrence) => {
+    if (filters.laboratoryId === '__unplanned__' && occurrence.plannedLaboratory !== null) return false;
+    if (filters.laboratoryId !== 'all'
+      && filters.laboratoryId !== '__unplanned__'
+      && occurrence.plannedLaboratory?.id !== filters.laboratoryId) return false;
+    if (filters.academicClassId !== 'all' && occurrence.academicClass.id !== filters.academicClassId) return false;
+    if (filters.teacherId !== 'all' && occurrence.teacher.id !== filters.teacherId) return false;
+    if (filters.subjectId !== 'all' && occurrence.subject.id !== filters.subjectId) return false;
+    if (filters.activityType !== 'all' && occurrence.activityType !== filters.activityType) return false;
+    return true;
+  }), [filters, occurrences]);
+
+  const selectedDateOccurrences = useMemo(
+    () => occurrencesForDate(filtered, selectedDate),
+    [filtered, selectedDate],
+  );
+
   const updateWeeklyScrollState = useCallback(() => {
     const board = weeklyBoardRef.current;
     if (!board) return;
@@ -71,7 +221,21 @@ export function SchedulesPage() {
 
   useEffect(() => {
     updateWeeklyScrollState();
-  }, [filtered.length, updateWeeklyScrollState, view]);
+  }, [filtered.length, updateWeeklyScrollState, view, weekStart]);
+
+  function changeWeek(delta: number) {
+    const next = moveWeek(weekStart, delta);
+    setWeekStart(next);
+    setSelectedDate(next);
+    setFilters(EMPTY_FILTERS);
+  }
+
+  function goToCurrentWeek() {
+    const next = weekStartForDate(new Date());
+    setWeekStart(next);
+    setSelectedDate(dateKeyForDate(new Date()));
+    setFilters(EMPTY_FILTERS);
+  }
 
   function scrollWeeklyBoard(direction: 'left' | 'right') {
     const board = weeklyBoardRef.current;
@@ -85,166 +249,178 @@ export function SchedulesPage() {
     });
   }
 
-  function openCreate() {
-    if (!canCreate) return;
-    setEditing(null);
-    setForm({ day: 'Senin', startTime: '07:00', endTime: '09:30', lessonHours: 3, laboratoryId: db.labs[0]?.id, activityType: 'Praktikum', status: 'Tetap', semester });
-    setOpen(true);
-  }
-  function openEdit(s: Schedule) {
-    if (!canUpdate) return;
-    setEditing(s);
-    setForm(s);
-    setOpen(true);
-  }
-
-  function save() {
-    if (editing ? !canUpdate : !canCreate) return;
-    if (!form.laboratoryId || !form.className || !form.teacherName || !form.subject) {
-      toast('Lengkapi semua field wajib', 'error');
-      return;
-    }
-    const conflicts = regularScheduleConflictMessages(db.schedules, form, editing?.id);
-    if (conflicts.length > 0) {
-      toast(`Konflik terdeteksi: ${conflicts[0]}`, 'error');
-      return;
-    }
-    const result = mutate((d) => {
-      if (editing) {
-        const idx = d.schedules.findIndex((s) => s.id === editing.id);
-        if (idx >= 0) d.schedules[idx] = { ...d.schedules[idx], ...form } as Schedule;
-      } else {
-        d.schedules.push({ ...form, id: `sch-${Date.now()}`, date: form.date ?? new Date().toISOString().split('T')[0] } as Schedule);
-      }
-    });
-    if (!result.ok) {
-      toast(result.error, 'error');
-      return;
-    }
-    toast(editing ? 'Jadwal diperbarui' : 'Jadwal ditambahkan', 'success');
-    setOpen(false);
-  }
-
-  function duplicate(s: Schedule) {
-    if (!canCreate) return;
-    const result = mutate((d) => {
-      d.schedules.push({ ...s, id: `sch-${Date.now()}`, day: s.day, status: 'Pengganti' });
-    });
-    if (!result.ok) {
-      toast(result.error, 'error');
-      return;
-    }
-    toast('Jadwal diduplikasi', 'success');
-  }
-
-  function remove() {
-    if (!confirmDel || !canDelete) return;
-    const result = mutate((d) => {
-      d.schedules = d.schedules.filter((s) => s.id !== confirmDel.id);
-    });
-    if (!result.ok) {
-      toast(result.error, 'error');
-      return;
-    }
-    toast('Jadwal dihapus', 'success');
-    setConfirmDel(null);
-  }
-
-  function scheduleCard(schedule: Schedule) {
-    const laboratoryCode = db.labs.find((lab) => lab.id === schedule.laboratoryId)?.code ?? 'Lab tidak ditemukan';
-    const content = (
-      <>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <span className="whitespace-nowrap text-sm font-semibold text-ink-primary">{schedule.startTime} - {schedule.endTime}</span>
-          <StatusBadge status={schedule.status} />
-        </div>
-        <p className="mt-3 line-clamp-2 break-words text-sm font-medium leading-5 text-ink-primary">{schedule.subject}</p>
-        <div className="mt-3 space-y-1.5 border-t border-base-700/50 pt-2.5 text-xs leading-5 text-ink-secondary">
-          <p className="break-words"><span className="text-ink-muted">Kelas:</span> {schedule.className}</p>
-          <p className="break-words"><span className="text-ink-muted">Lab:</span> {laboratoryCode}</p>
-        </div>
-      </>
-    );
-    const className = cn(
-      'w-full rounded-xl border border-base-700/60 bg-base-900/30 p-4 text-left shadow-sm',
-      canUpdate && 'transition-colors hover:border-accent-content/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
-    );
-    if (!canUpdate) return <div key={schedule.id} className={className}>{content}</div>;
-    return (
-      <button
-        key={schedule.id}
-        type="button"
-        onClick={() => openEdit(schedule)}
-        aria-label={`Edit jadwal ${schedule.subject} untuk ${schedule.className}`}
-        title="Edit jadwal"
-        className={className}
-      >
-        {content}
-      </button>
-    );
-  }
-
   function exportCSV() {
-    if (!canExport) return;
-    downloadCSV('jadwal-reguler.csv', filtered.map((s) => ({
-      Hari: s.day, Tanggal: s.date, Jam: `${s.startTime}-${s.endTime}`, Lab: db.labs.find((l) => l.id === s.laboratoryId)?.name, Kelas: s.className, Guru: s.teacherName, Mapel: s.subject, Status: s.status,
+    downloadCSV('jadwal-reguler-canonical.csv', filtered.map((occurrence) => ({
+      Tanggal: occurrence.occursOn,
+      Jam: `${timeLabel(occurrence.startTime)}-${timeLabel(occurrence.endTime)}`,
+      Lab: occurrence.plannedLaboratory?.name ?? 'Belum direncanakan',
+      Kelas: occurrence.academicClass.name,
+      Guru: occurrence.teacher.name,
+      Mapel: occurrence.subject.name,
+      Jenis: activityLabel(occurrence.activityType),
+      JP: occurrence.instructionPeriodCount,
+      Sumber: `${occurrence.sourcePublicationId} v${occurrence.sourceVersion}`,
+      SourceScheduleId: occurrence.sourceScheduleId,
     })));
   }
+
+  const activePublicationCount = state.status === 'ready' ? state.result.meta.activePublicationCount : 0;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Jadwal Reguler"
-        description="Alokasi penggunaan laboratorium yang berulang berdasarkan tahun ajaran, semester, kelas, guru, mata pelajaran, hari, dan jam."
+        description="Current plan dari publikasi TESSELA aktif. Jadwal struktural bersifat read-only di SmartLab."
         icon={<CalendarDays className="h-5 w-5" />}
         actions={
           <>
-            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Jadwal Reguler</Button>}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<RefreshCw className="h-4 w-4" />}
+              onClick={() => void load()}
+              disabled={state.status === 'loading'}
+            >
+              Muat ulang
+            </Button>
+            <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV} disabled={filtered.length === 0}>
+              Export
+            </Button>
+            <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>
+              Print
+            </Button>
           </>
         }
       />
 
       <Card>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-ink-secondary">Jadwal Reguler digunakan untuk alokasi pembelajaran berulang. Penggunaan insidental atau kegiatan pada tanggal tertentu diajukan melalui Reservasi Lab.</p>
-          {canViewBookings && <Button variant="secondary" size="sm" className="min-h-10 shrink-0 whitespace-nowrap px-4" onClick={() => navigate('/bookings')}>Buka Reservasi Lab</Button>}
+        <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-primary/15 text-accent-content">
+              <Server className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-ink-primary">Sumber jadwal canonical</p>
+                <Badge tone={activePublicationCount > 0 ? 'success' : 'muted'}>
+                  {activePublicationCount > 0
+                    ? `${activePublicationCount} publikasi aktif`
+                    : 'Belum ada publikasi aktif'}
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-ink-muted">
+                Perubahan guru, kelas, mata pelajaran, hari, jam, dan planned Laboratory dilakukan di TESSELA lalu dipublikasikan sebagai versi baru.
+                SmartLab tidak mengedit atau memecahkan ulang jadwal sumber. Perubahan satu tanggal akan memakai Schedule Exception pada fase berikutnya.
+              </p>
+            </div>
+          </div>
+
+          {canViewBookings && (
+            <Button variant="secondary" size="sm" className="min-h-10 shrink-0 px-4" onClick={() => navigate('/bookings')}>
+              Buka Reservasi Lab
+            </Button>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <Select label="Laboratorium" value={filters.lab} onChange={(e) => setFilters({ ...filters, lab: e.target.value })} placeholder="Semua lab" options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-            <Select label="Kelas" value={filters.className} onChange={(e) => setFilters({ ...filters, className: e.target.value })} placeholder="Semua kelas" options={classes.map((c) => ({ value: c, label: c }))} />
-            <Select label="Guru" value={filters.teacher} onChange={(e) => setFilters({ ...filters, teacher: e.target.value })} placeholder="Semua guru" options={teachers.map((t) => ({ value: t, label: t }))} />
-            <Select label="Mapel" value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="Semua mapel" options={subjects.map((s) => ({ value: s, label: s }))} />
-            <div className="ml-auto flex items-center gap-1 rounded-lg border border-base-700 p-1" role="group" aria-label="Pilih tampilan jadwal">
-              {(['week', 'day', 'list'] as const).map((v) => (
-                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={cn('rounded-md px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', view === v ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}>
-                  {v === 'week' ? 'Mingguan' : v === 'day' ? 'Harian' : 'Daftar'}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" icon={<ChevronLeft className="h-4 w-4" />} onClick={() => changeWeek(-1)}>
+              Minggu sebelumnya
+            </Button>
+            <Button variant="secondary" size="sm" onClick={goToCurrentWeek}>Minggu ini</Button>
+            <Button variant="secondary" size="sm" icon={<ChevronRight className="h-4 w-4" />} onClick={() => changeWeek(1)}>
+              Minggu berikutnya
+            </Button>
+            <p className="ml-auto text-sm font-semibold text-ink-primary">{formatScheduleWeekRange(weekStart)}</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <Select
+              label="Laboratorium"
+              value={filters.laboratoryId}
+              onChange={(event) => setFilters({ ...filters, laboratoryId: event.target.value })}
+              options={[
+                { value: 'all', label: 'Semua laboratorium' },
+                ...laboratoryOptions,
+                ...(hasUnplannedLaboratory ? [{ value: '__unplanned__', label: 'Belum direncanakan' }] : []),
+              ]}
+            />
+            <Select
+              label="Kelas"
+              value={filters.academicClassId}
+              onChange={(event) => setFilters({ ...filters, academicClassId: event.target.value })}
+              options={[{ value: 'all', label: 'Semua kelas' }, ...classOptions]}
+            />
+            <Select
+              label="Guru"
+              value={filters.teacherId}
+              onChange={(event) => setFilters({ ...filters, teacherId: event.target.value })}
+              options={[{ value: 'all', label: 'Semua guru' }, ...teacherOptions]}
+            />
+            <Select
+              label="Mata Pelajaran"
+              value={filters.subjectId}
+              onChange={(event) => setFilters({ ...filters, subjectId: event.target.value })}
+              options={[{ value: 'all', label: 'Semua mapel' }, ...subjectOptions]}
+            />
+            <Select
+              label="Jenis Kegiatan"
+              value={filters.activityType}
+              onChange={(event) => setFilters({ ...filters, activityType: event.target.value })}
+              options={[
+                { value: 'all', label: 'Semua jenis' },
+                { value: 'practical', label: 'Praktikum' },
+                { value: 'theory', label: 'Teori' },
+                { value: 'exam', label: 'Ujian' },
+                { value: 'other', label: 'Lainnya' },
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-700/50 pt-4">
+            <p className="text-xs text-ink-muted">
+              {state.status === 'ready'
+                ? `${filtered.length} occurrence ditampilkan dari ${state.result.meta.total} occurrence current plan minggu ini.`
+                : 'Occurrence akan dimuat dari Laravel API.'}
+            </p>
+
+            <div className="flex items-center gap-1 rounded-lg border border-base-700 p-1" role="group" aria-label="Pilih tampilan jadwal">
+              {(['week', 'day', 'list'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={view === mode}
+                  onClick={() => setView(mode)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    view === mode ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted',
+                  )}
+                >
+                  {mode === 'week' ? 'Mingguan' : mode === 'day' ? 'Harian' : 'Daftar'}
                 </button>
               ))}
             </div>
           </div>
 
           {view === 'day' && (
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Pilih hari jadwal">
-              {DAYS.map((day) => (
+            <div className="flex flex-wrap gap-2 border-t border-base-700/50 pt-4" role="group" aria-label="Pilih tanggal jadwal">
+              {weekDates.map((date) => (
                 <button
-                  key={day}
+                  key={date.key}
                   type="button"
-                  aria-pressed={selectedDay === day}
-                  onClick={() => setSelectedDay(day)}
+                  aria-pressed={selectedDate === date.key}
+                  onClick={() => setSelectedDate(date.key)}
                   className={cn(
-                    'rounded-lg border px-3 py-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                    selectedDay === day
+                    'rounded-lg border px-3 py-2 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    selectedDate === date.key
                       ? 'border-accent-content/40 bg-accent-primary/15 text-accent-content'
-                      : 'border-base-700 text-ink-muted hover:bg-base-700/40 hover:text-ink-primary'
+                      : 'border-base-700 text-ink-muted hover:bg-base-700/40 hover:text-ink-primary',
                   )}
                 >
-                  {day}
+                  <span className="block">{date.label}</span>
+                  <span className="mt-0.5 block text-[11px] opacity-75">{date.shortLabel}</span>
                 </button>
               ))}
             </div>
@@ -252,30 +428,55 @@ export function SchedulesPage() {
         </CardContent>
       </Card>
 
-      {filtered.length === 0 ? (
-        <Card><EmptyState icon={<CalendarDays className="h-7 w-7" />} title="Belum ada Jadwal Reguler" description="Tambah jadwal reguler atau ubah filter." /></Card>
+      {state.status === 'loading' ? (
+        <Card><LoadingState label="Memuat current plan jadwal dari server..." /></Card>
+      ) : state.status === 'error' ? (
+        <Card><ErrorState message={state.issue.message} onRetry={state.issue.retryable ? () => void load() : undefined} /></Card>
+      ) : activePublicationCount === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<CalendarDays className="h-7 w-7" />}
+            title="Belum ada publikasi jadwal aktif"
+            description="Aktifkan publikasi TESSELA yang sudah tervalidasi sebelum halaman ini dapat menampilkan current plan."
+          />
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<CalendarDays className="h-7 w-7" />}
+            title="Tidak ada occurrence pada rentang ini"
+            description="Current plan aktif tersedia, tetapi tidak ada jadwal yang cocok dengan minggu dan filter yang dipilih."
+          />
+        </Card>
       ) : view === 'list' ? (
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-base-700 text-left text-ink-muted">
-                <th className="px-4 py-3 font-medium">Hari</th><th className="px-4 py-3 font-medium">Jam</th><th className="px-4 py-3 font-medium">Lab</th><th className="px-4 py-3 font-medium">Kelas</th><th className="px-4 py-3 font-medium">Guru</th><th className="px-4 py-3 font-medium">Mapel</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Aksi</th>
-              </tr></thead>
+              <thead>
+                <tr className="border-b border-base-700 text-left text-ink-muted">
+                  <th className="px-4 py-3 font-medium">Tanggal</th>
+                  <th className="px-4 py-3 font-medium">Jam</th>
+                  <th className="px-4 py-3 font-medium">Lab</th>
+                  <th className="px-4 py-3 font-medium">Kelas</th>
+                  <th className="px-4 py-3 font-medium">Guru</th>
+                  <th className="px-4 py-3 font-medium">Mapel</th>
+                  <th className="px-4 py-3 font-medium">Jenis</th>
+                  <th className="px-4 py-3 font-medium">JP</th>
+                  <th className="px-4 py-3 font-medium">Sumber</th>
+                </tr>
+              </thead>
               <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.id} className="border-b border-base-700/40 hover:bg-base-700/30">
-                    <td className="px-4 py-3 text-ink-primary">{s.day}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{s.startTime} - {s.endTime}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{db.labs.find((l) => l.id === s.laboratoryId)?.name}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{s.className}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{s.teacherName}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{s.subject}</td>
-                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3"><div className="flex gap-1">
-                      {canUpdate && <button type="button" aria-label={`Edit jadwal ${s.subject} untuk ${s.className}`} title="Edit jadwal" onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><Pencil className="h-3.5 w-3.5" /></button>}
-                      {canCreate && <button type="button" aria-label={`Duplikasi jadwal ${s.subject} untuk ${s.className}`} title="Duplikasi jadwal" onClick={() => duplicate(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><Copy className="h-3.5 w-3.5" /></button>}
-                      {canDelete && <button type="button" aria-label={`Hapus jadwal ${s.subject} untuk ${s.className}`} title="Hapus jadwal" onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><Trash2 className="h-3.5 w-3.5" /></button>}
-                    </div></td>
+                {filtered.map((occurrence) => (
+                  <tr key={occurrence.id} className="border-b border-base-700/40 hover:bg-base-700/30">
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-primary">{occurrence.occursOn}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-secondary">{timeLabel(occurrence.startTime)} - {timeLabel(occurrence.endTime)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{occurrence.plannedLaboratory?.name ?? 'Belum direncanakan'}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{occurrence.academicClass.name}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{occurrence.teacher.name}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{occurrence.subject.name}</td>
+                    <td className="px-4 py-3"><Badge tone="accent">{activityLabel(occurrence.activityType)}</Badge></td>
+                    <td className="px-4 py-3 text-ink-secondary">{occurrence.instructionPeriodCount}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-muted">TESSELA v{occurrence.sourceVersion}</td>
                   </tr>
                 ))}
               </tbody>
@@ -285,10 +486,19 @@ export function SchedulesPage() {
       ) : view === 'day' ? (
         <Card>
           <CardContent className="space-y-3">
-            <p className="font-semibold text-ink-primary">{selectedDay}</p>
-            {selectedDaySchedules.length === 0 ? (
-              <EmptyState title={`Tidak ada jadwal ${selectedDay}`} description="Pilih hari lain atau ubah filter jadwal." className="py-8" />
-            ) : selectedDaySchedules.map(scheduleCard)}
+            <div>
+              <p className="font-semibold text-ink-primary">
+                {weekDates.find((date) => date.key === selectedDate)?.label ?? selectedDate}
+              </p>
+              <p className="text-xs text-ink-muted">{selectedDate}</p>
+            </div>
+            {selectedDateOccurrences.length === 0 ? (
+              <EmptyState
+                title="Tidak ada occurrence pada tanggal ini"
+                description="Pilih tanggal lain atau ubah filter current plan."
+                className="py-8"
+              />
+            ) : selectedDateOccurrences.map(occurrenceCard)}
           </CardContent>
         </Card>
       ) : (
@@ -298,10 +508,8 @@ export function SchedulesPage() {
               type="button"
               variant="secondary"
               size="sm"
-              className="min-h-9 shrink-0 px-3"
               icon={<ChevronLeft className="h-4 w-4" />}
               aria-label="Geser jadwal ke kiri"
-              title="Geser jadwal ke kiri"
               disabled={weeklyScrollState.atStart}
               onClick={() => scrollWeeklyBoard('left')}
             >
@@ -311,27 +519,36 @@ export function SchedulesPage() {
               type="button"
               variant="secondary"
               size="sm"
-              className="min-h-9 shrink-0 px-3"
               icon={<ChevronRight className="h-4 w-4" />}
               aria-label="Geser jadwal ke kanan"
-              title="Geser jadwal ke kanan"
               disabled={weeklyScrollState.atEnd}
               onClick={() => scrollWeeklyBoard('right')}
             >
               Geser kanan
             </Button>
           </div>
-          <div ref={weeklyBoardRef} onScroll={updateWeeklyScrollState} className="overflow-x-auto pb-3" tabIndex={0} role="region" aria-label="Papan jadwal mingguan Senin sampai Jumat">
-            <div className="grid min-w-[1280px] grid-cols-5 gap-5">
-              {DAYS.map((day) => {
-                const daySchedules = schedulesForWeekday(filtered, day);
+
+          <div
+            ref={weeklyBoardRef}
+            onScroll={updateWeeklyScrollState}
+            className="overflow-x-auto pb-3"
+            tabIndex={0}
+            role="region"
+            aria-label="Papan current plan jadwal Senin sampai Minggu"
+          >
+            <div className="grid min-w-[1792px] grid-cols-7 gap-5">
+              {weekDates.map((date) => {
+                const dayOccurrences = occurrencesForDate(filtered, date.key);
                 return (
-                  <Card key={day} data-weekday-column className="min-w-0">
+                  <Card key={date.key} data-weekday-column className="min-w-0">
                     <CardContent className="space-y-3 p-4">
-                      <p className="border-b border-base-700/60 pb-3 text-sm font-semibold text-ink-primary">{day}</p>
-                      {daySchedules.length === 0 ? (
-                        <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
-                      ) : daySchedules.map(scheduleCard)}
+                      <div className="border-b border-base-700/60 pb-3">
+                        <p className="text-sm font-semibold text-ink-primary">{date.label}</p>
+                        <p className="text-xs text-ink-muted">{date.shortLabel}</p>
+                      </div>
+                      {dayOccurrences.length === 0
+                        ? <p className="py-4 text-center text-xs text-ink-muted">Tidak ada jadwal</p>
+                        : dayOccurrences.map(occurrenceCard)}
                     </CardContent>
                   </Card>
                 );
@@ -340,23 +557,6 @@ export function SchedulesPage() {
           </div>
         </div>
       )}
-
-      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Jadwal Reguler' : 'Tambah Jadwal Reguler'} onSubmit={save} size="lg">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Select label="Hari" value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} options={DAYS.map((d) => ({ value: d, label: d }))} />
-          <Input label="Tanggal" type="date" value={form.date ?? ''} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-          <Input label="Jam Mulai" type="time" value={form.startTime ?? ''} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
-          <Input label="Jam Selesai" type="time" value={form.endTime ?? ''} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
-          <Select label="Laboratorium" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-          <Select label="Kelas" value={form.className} onChange={(e) => setForm({ ...form, className: e.target.value })} options={classes.map((c) => ({ value: c, label: c }))} />
-          <Select label="Guru" value={form.teacherName} onChange={(e) => setForm({ ...form, teacherName: e.target.value })} options={teachers.map((t) => ({ value: t, label: t }))} />
-          <Select label="Mata Pelajaran" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} options={subjects.map((s) => ({ value: s, label: s }))} />
-          <Select label="Jenis Kegiatan" value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value as Schedule['activityType'] })} options={['Praktikum', 'Teori', 'Ujian', 'Lainnya'].map((a) => ({ value: a, label: a }))} />
-          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Schedule['status'] })} options={['Tetap', 'Pengganti', 'Dibatalkan'].map((s) => ({ value: s, label: s }))} />
-        </div>
-      </FormDialog>
-
-      <ConfirmDialog open={Boolean(confirmDel)} onClose={() => setConfirmDel(null)} onConfirm={remove} message={`Hapus jadwal ${confirmDel?.subject} (${confirmDel?.className})?`} confirmLabel="Hapus" />
     </div>
   );
 }
