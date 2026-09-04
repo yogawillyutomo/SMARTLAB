@@ -15,7 +15,7 @@ export interface ScheduleOccurrencePresentationIssue {
   authBoundary: boolean;
 }
 
-function localDateKey(date: Date): string {
+export function dateKeyForDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -31,13 +31,13 @@ export function weekStartForDate(date: Date): string {
   const cursor = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const isoWeekday = cursor.getDay() === 0 ? 7 : cursor.getDay();
   cursor.setDate(cursor.getDate() - (isoWeekday - 1));
-  return localDateKey(cursor);
+  return dateKeyForDate(cursor);
 }
 
 export function moveWeek(weekStart: string, deltaWeeks: number): string {
   const date = parseLocalDateKey(weekStart);
   date.setDate(date.getDate() + (deltaWeeks * 7));
-  return localDateKey(date);
+  return dateKeyForDate(date);
 }
 
 export function datesForWeek(weekStart: string): ScheduleWeekDate[] {
@@ -45,7 +45,7 @@ export function datesForWeek(weekStart: string): ScheduleWeekDate[] {
   return SCHEDULE_WEEKDAYS.map((weekday, index) => {
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
     return {
-      key: localDateKey(date),
+      key: dateKeyForDate(date),
       label: weekday,
       shortLabel: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short' }).format(date),
     };
