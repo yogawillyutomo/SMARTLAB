@@ -1,0 +1,362 @@
+openapi: 3.1.0
+info:
+  title: SmartLab API
+  version: 0.11.0
+  description: Canonical SmartLab API v1 contract. Version 0.11 modularizes the unchanged 0.10 endpoint surface and adds server-authoritative Identity Administration.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local Laravel API
+paths:
+  /health:
+    $ref: './openapi-0.10.yaml#/paths/~1health'
+  /me:
+    $ref: './openapi-0.10.yaml#/paths/~1me'
+  /auth/login:
+    $ref: './openapi-0.10.yaml#/paths/~1auth~1login'
+  /auth/logout:
+    $ref: './openapi-0.10.yaml#/paths/~1auth~1logout'
+  /laboratories:
+    $ref: './openapi-0.10.yaml#/paths/~1laboratories'
+  /laboratories/{laboratoryId}:
+    $ref: './openapi-0.10.yaml#/paths/~1laboratories~1{laboratoryId}'
+  /devices:
+    $ref: './openapi-0.10.yaml#/paths/~1devices'
+  /devices/{deviceId}:
+    $ref: './openapi-0.10.yaml#/paths/~1devices~1{deviceId}'
+  /devices/{deviceId}/transfers:
+    $ref: './openapi-0.10.yaml#/paths/~1devices~1{deviceId}~1transfers'
+  /incidents/reporting-context/laboratories:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1reporting-context~1laboratories'
+  /incidents/reporting-context/laboratories/{laboratoryId}/devices:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1reporting-context~1laboratories~1{laboratoryId}~1devices'
+  /incidents/assignee-candidates:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1assignee-candidates'
+  /incidents/submissions/{submissionId}:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1submissions~1{submissionId}'
+  /incidents:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents'
+  /incidents/{incidentId}:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1{incidentId}'
+  /incidents/{incidentId}/assignments:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1{incidentId}~1assignments'
+  /incidents/{incidentId}/transitions:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1{incidentId}~1transitions'
+  /incidents/{incidentId}/comments:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1{incidentId}~1comments'
+  /incidents/{incidentId}/events:
+    $ref: './openapi-0.10.yaml#/paths/~1incidents~1{incidentId}~1events'
+  /laboratories/{laboratoryId}/layouts:
+    $ref: './openapi-0.10.yaml#/paths/~1laboratories~1{laboratoryId}~1layouts'
+  /layouts/{layoutId}:
+    $ref: './openapi-0.10.yaml#/paths/~1layouts~1{layoutId}'
+  /layouts/{layoutId}/activate:
+    $ref: './openapi-0.10.yaml#/paths/~1layouts~1{layoutId}~1activate'
+  /layouts/{layoutId}/unplaced-devices:
+    $ref: './openapi-0.10.yaml#/paths/~1layouts~1{layoutId}~1unplaced-devices'
+
+  /identity/memberships:
+    get:
+      operationId: listIdentityMemberships
+      summary: List SchoolMembership administration records for the current School
+      description: Requires `users.view`. The tenant resource is SchoolMembership; results never expand beyond the active School. Search is case-insensitive over User name and email. Results are ordered by User name, User email, then membership ULID.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/IdentityStatus' }
+        - name: roleKey
+          in: query
+          schema: { $ref: '#/components/schemas/IdentityRoleKey' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Current-School membership administration page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityMembershipCollectionResponse' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+    post:
+      operationId: createIdentityMembership
+      summary: Create a new User and active SchoolMembership for the current School
+      description: Requires `users.create`. The server normalizes name/email/profile fields, creates a globally unique User plus an active membership, assigns one or more canonical roles, and writes an immutable identity audit event atomically. This endpoint does not link an existing User by email. The School must retain at least one active Super Admin.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIdentityMembershipRequest' }
+      responses:
+        '201':
+          description: User, current-School membership, role assignments, and immutable audit event committed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityMembershipResponse' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/IdentityAdministrationConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+
+  /identity/memberships/{membershipId}:
+    parameters:
+      - name: membershipId
+        in: path
+        required: true
+        description: SchoolMembership ULID. Lookup is always scoped to the active School; another School's membership is indistinguishable from a missing membership.
+        schema: { type: string, format: ulid }
+    get:
+      operationId: getIdentityMembership
+      summary: Read one current-School membership administration record
+      description: Requires `users.view`.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Current-School membership projection
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityMembershipResponse' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IdentityMembershipNotFound' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+    patch:
+      operationId: updateIdentityMembership
+      summary: Update current-School membership state, canonical roles, or eligible global User fields
+      description: Requires `users.update`. The request must contain at least one allowed field. Effective no-ops do not write an audit event. Membership status and roles remain School-scoped. Changes to global User identity/login state are rejected when that User also belongs to another School. The mutation is serialized, preserves the last-active-Super-Admin invariant, and writes one immutable identity audit event atomically for an effective change.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateIdentityMembershipRequest' }
+      responses:
+        '200':
+          description: Canonical membership projection after mutation or effective no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityMembershipResponse' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/IdentityMembershipNotFound' }
+        '409': { $ref: '#/components/responses/IdentityAdministrationConflict' }
+        '422': { $ref: './openapi-0.10.yaml#/components/responses/ValidationFailed' }
+
+  /identity/roles:
+    get:
+      operationId: listIdentityRoles
+      summary: Read the canonical Identity role and permission catalog
+      description: Requires `roles.view`. S1A exposes the role catalog read-only. Membership counts are scoped to the active School; role permissions remain server-authoritative.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Canonical roles with server permissions and current-School membership counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityRoleCollectionResponse' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './openapi-0.10.yaml#/components/responses/MembershipContextConflict' }
+
+components:
+  securitySchemes:
+    sanctumSession:
+      type: apiKey
+      in: cookie
+      name: smartlab-api-session
+      description: Browser-managed Laravel session cookie for the first-party stateful SPA. Deployments may configure SESSION_COOKIE.
+    sanctumBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: Sanctum personal access token for mobile or API token clients.
+  responses:
+    IdentityMembershipNotFound:
+      description: No SchoolMembership exists in the active School with this identifier
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/IdentityAdministrationError' }
+          example:
+            message: School membership not found.
+            code: IDENTITY_MEMBERSHIP_NOT_FOUND
+    IdentityAdministrationConflict:
+      description: The active membership context is unresolved or the requested identity mutation violates a protected administration invariant
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/IdentityAdministrationError' }
+          examples:
+            activeMembership:
+              value:
+                message: An active school membership is required.
+                code: ACTIVE_MEMBERSHIP_REQUIRED
+            schoolContext:
+              value:
+                message: School context selection is required.
+                code: SCHOOL_CONTEXT_REQUIRED
+            lastSuperAdmin:
+              value:
+                message: At least one active Super Admin membership is required for this school.
+                code: IDENTITY_LAST_SUPER_ADMIN_REQUIRED
+            sharedUserGlobalMutation:
+              value:
+                message: Shared user account fields cannot be changed from a school-scoped administration context.
+                code: IDENTITY_SHARED_USER_MUTATION_REQUIRES_GLOBAL_AUTHORITY
+  schemas:
+    IdentityStatus:
+      type: string
+      enum: [active, inactive]
+    IdentityRoleKey:
+      type: string
+      enum: [super-admin, admin-lab, kepala-lab, teknisi, guru, ketua-kelas, siswa, pimpinan]
+    IdentityPaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+    IdentityRoleSummary:
+      type: object
+      additionalProperties: false
+      required: [key, name]
+      properties:
+        key: { $ref: '#/components/schemas/IdentityRoleKey' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+    IdentityUser:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, nip, nis, phone, status, lastLoginAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        nip: { type: [string, 'null'], maxLength: 64 }
+        nis: { type: [string, 'null'], maxLength: 64 }
+        phone: { type: [string, 'null'], maxLength: 32 }
+        status: { $ref: '#/components/schemas/IdentityStatus' }
+        lastLoginAt: { type: [string, 'null'], format: date-time, readOnly: true }
+    IdentityMembership:
+      type: object
+      additionalProperties: false
+      required: [id, status, user, roles, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: ulid, readOnly: true }
+        status: { $ref: '#/components/schemas/IdentityStatus' }
+        user: { $ref: '#/components/schemas/IdentityUser' }
+        roles:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/IdentityRoleSummary' }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    IdentityMembershipResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/IdentityMembership' }
+    IdentityMembershipCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IdentityMembership' }
+        meta: { $ref: '#/components/schemas/IdentityPaginationMeta' }
+    CreateIdentityMembershipRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password, roleKeys]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, format: password, minLength: 12, maxLength: 72 }
+        nip: { type: [string, 'null'], maxLength: 64 }
+        nis: { type: [string, 'null'], maxLength: 64 }
+        phone: { type: [string, 'null'], maxLength: 32 }
+        roleKeys:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/IdentityRoleKey' }
+    UpdateIdentityMembershipRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 8
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        nip: { type: [string, 'null'], maxLength: 64 }
+        nis: { type: [string, 'null'], maxLength: 64 }
+        phone: { type: [string, 'null'], maxLength: 32 }
+        userStatus: { $ref: '#/components/schemas/IdentityStatus' }
+        membershipStatus: { $ref: '#/components/schemas/IdentityStatus' }
+        roleKeys:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/IdentityRoleKey' }
+    IdentityRole:
+      type: object
+      additionalProperties: false
+      required: [key, name, permissions, membershipCount, activeMembershipCount]
+      properties:
+        key: { $ref: '#/components/schemas/IdentityRoleKey' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z0-9-]+\.[a-z0-9-]+$'
+        membershipCount: { type: integer, minimum: 0 }
+        activeMembershipCount: { type: integer, minimum: 0 }
+    IdentityRoleCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/IdentityRole' }
+    IdentityAdministrationError:
+      type: object
+      additionalProperties: false
+      required: [message, code]
+      properties:
+        message: { type: string }
+        code:
+          type: string
+          enum:
+            - ACTIVE_MEMBERSHIP_REQUIRED
+            - SCHOOL_CONTEXT_REQUIRED
+            - IDENTITY_MEMBERSHIP_NOT_FOUND
+            - IDENTITY_LAST_SUPER_ADMIN_REQUIRED
+            - IDENTITY_SHARED_USER_MUTATION_REQUIRES_GLOBAL_AUTHORITY

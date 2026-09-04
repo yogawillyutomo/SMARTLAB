@@ -45,6 +45,7 @@ const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
   laboratories: 'laboratories.view',
   users: 'users.view',
   roles: 'roles.view',
+  'master-data': 'master-data.view',
 };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -84,7 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/users', label: 'Pengguna', icon: Users, module: 'users', serverPermission: 'users.view' },
       { to: '/roles', label: 'Hak Akses', icon: KeyRound, module: 'roles', serverPermission: 'roles.view' },
-      { to: '/master-data', label: 'Master Data', icon: Database, module: 'master-data' },
+      { to: '/master-data', label: 'Master Data', icon: Database, module: 'master-data', serverPermission: 'master-data.view' },
       { to: '/audit-logs', label: 'Audit Log', icon: ScrollText, module: 'audit-logs' },
       { to: '/settings', label: 'Pengaturan', icon: Settings, module: 'settings' },
     ],

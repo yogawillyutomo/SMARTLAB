@@ -165,34 +165,42 @@ class IncidentEventApiTest extends TestCase
         );
     }
 
-    public function test_event_history_paginates_and_uses_created_at_then_ulid_desc_order(): void
+    public function test_event_history_paginates_and_keeps_same_timestamp_events_stable(): void
     {
         [$user, $school, $membership] = $this->authenticateWithPermissions([
             'incidents.view',
             'incidents.view-history',
         ]);
-        $incident = $this->createIncidentFor([$user, $membership], $school);
         $membership->setRelation('user', $user);
         $context = new CurrentMembershipContext($membership, collect());
 
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T12:00:00Z'));
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T11:59:00Z'));
         try {
+            $incident = $this->createIncidentFor([$user, $membership], $school);
+
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-03T12:00:00Z'));
             $first = app(IncidentCommentService::class)->add($context, $incident->id, 1, 'Komentar pertama.');
             $second = app(IncidentCommentService::class)->add($context, $incident->id, 2, 'Komentar kedua.');
         } finally {
             CarbonImmutable::setTestNow();
         }
 
-        $expected = collect([$first->id, $second->id])->sortDesc()->values()->all();
+        $this->assertSame($first->created_at?->toISOString(), $second->created_at?->toISOString());
 
-        $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
+        $pageOne = $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $expected[0])
-            ->assertJsonPath('data.1.id', $expected[1])
             ->assertJsonPath('meta.page', 1)
             ->assertJsonPath('meta.perPage', 2)
             ->assertJsonPath('meta.total', 3)
             ->assertJsonPath('meta.lastPage', 2);
+
+        $pageOneIds = $pageOne->json('data.*.id');
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $pageOneIds);
+
+        $repeatPageOneIds = $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=1')
+            ->assertOk()
+            ->json('data.*.id');
+        $this->assertSame($pageOneIds, $repeatPageOneIds);
 
         $this->getJson('/api/v1/incidents/'.$incident->id.'/events?perPage=2&page=2')
             ->assertOk()

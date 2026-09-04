@@ -67,6 +67,11 @@ class PermissionSeeder extends Seeder
         'roles' => [
             'view' => 'Lihat Hak Akses',
         ],
+        'master-data' => [
+            'view' => 'Lihat Master Data',
+            'create' => 'Buat Master Data',
+            'update' => 'Ubah Master Data',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',

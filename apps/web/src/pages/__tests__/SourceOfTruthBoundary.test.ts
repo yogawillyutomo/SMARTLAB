@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import appSource from '@/App.tsx?raw';
 import dashboardSource from '@/pages/DashboardPage.tsx?raw';
+import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
+import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
 import uiStoreSource from '@/stores/uiStore.ts?raw';
@@ -33,6 +36,23 @@ describe('source-of-truth migration foundation', () => {
     expect(topbarSource).toContain("from '@/services/laboratoryApi'");
     expect(topbarSource).toContain('laboratoryGateway.list()');
     expect(topbarSource).toContain('Notifikasi server belum tersedia');
+  });
+
+  it('keeps Academic Master Data server-authoritative and removes local CRUD from the production page', () => {
+    expect(masterDataSource).not.toContain('useAppData');
+    expect(masterDataSource).not.toContain('services/repositories');
+    expect(masterDataSource).not.toContain('masterDataRepository');
+    expect(masterDataSource).not.toContain('deleteItem');
+    expect(masterDataSource).toContain("from '@/services/academicMasterApi'");
+    expect(masterDataSource).toContain('academicMasterGateway');
+    expect(masterDataSource).toContain("hasServerPermission(user, 'master-data.create')");
+    expect(masterDataSource).toContain("hasServerPermission(user, 'master-data.update')");
+  });
+
+  it('guards Master Data routing and navigation with the canonical server permission', () => {
+    expect(appSource).toContain('RequireServerPermission permission="master-data.view"');
+    expect(navSource).toContain("'master-data': 'master-data.view'");
+    expect(navSource).toContain("serverPermission: 'master-data.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
