@@ -1,23 +1,25 @@
 # SmartLab
 
-SmartLab is a smart laboratory management platform for schools. This repository is organized as a monorepo so the web application, Laravel API, PC monitoring agent, shared contracts, infrastructure, and product documentation can evolve together without mixing responsibilities.
+SmartLab is a school laboratory management platform for planning laboratory use, operating sessions, managing devices and incidents, and progressively moving prototype workflows onto a Laravel + PostgreSQL source of truth.
+
+The repository is a monorepo so the web application, API, PC monitoring agent, shared contracts, infrastructure, and product documentation can evolve with explicit boundaries.
 
 ## Repository map
 
 ```text
 smartlab/
 ├── apps/
-│   ├── web/                  # React + TypeScript frontend (Bolt baseline)
-│   └── api/                  # Laravel REST API (to be scaffolded)
+│   ├── web/                  # React + TypeScript + Vite frontend
+│   └── api/                  # Laravel REST API
 ├── services/
-│   └── pc-agent/             # Go Windows service for PC telemetry
+│   └── pc-agent/             # Reserved Go Windows telemetry service
 ├── packages/
-│   ├── contracts/            # OpenAPI and event contracts
-│   └── design-tokens/        # Shared visual tokens
+│   ├── contracts/            # OpenAPI / HTTP contracts
+│   └── design-tokens/        # Shared visual-token documentation
 ├── infrastructure/
-│   ├── docker/
-│   ├── nginx/
-│   └── deployment/
+│   ├── docker/               # Planned containerization
+│   ├── nginx/                # Planned reverse-proxy configuration
+│   └── deployment/           # Planned deployment / backup / rollback docs
 ├── docs/
 │   ├── product/
 │   ├── architecture/
@@ -30,12 +32,32 @@ smartlab/
 └── README.md
 ```
 
-## Current status
+## Current architecture status
 
-- `apps/web`: imported from the latest Bolt prototype and kept functionally unchanged during repository restructuring.
-- `apps/api`: reserved for Laravel.
-- `services/pc-agent`: reserved for the Go-based Windows monitoring agent.
-- `packages/contracts`: initial API contract scaffold.
+The application is in a staged source-of-truth migration.
+
+### Server-authoritative today
+
+- authentication and current school membership;
+- laboratories;
+- managed devices and device transfers;
+- laboratory layouts;
+- incidents and their operational history/workflow;
+- identity administration for users and school memberships;
+- server role/permission catalog;
+- academic master data with stable IDs;
+- Dashboard metrics for laboratories, devices, and incidents.
+
+### Transitional browser-local domains
+
+Scheduling, reservations, laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, calendar/closures, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered.
+
+See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
+
+### Reserved / not implemented yet
+
+- `services/pc-agent`: contract/direction exists, but the Go service has not been implemented.
+- `infrastructure`: Docker, Nginx, deployment, backup, restore, rollback, and observability are still placeholders.
 
 ## Run the frontend
 
@@ -49,16 +71,42 @@ npm run dev
 
 ```bash
 cd apps/web
+npm ci
 npm run lint
 npm run typecheck
+npm run test
 npm run build
 ```
 
-On Windows PowerShell, repository-wide checks can later be run with:
+## Run the API
+
+Create the Laravel environment from `apps/api/.env.example`, configure PostgreSQL, then use the normal Laravel workflow.
+
+Typical validation:
+
+```bash
+cd apps/api
+composer install --no-interaction
+php artisan test
+```
+
+GitHub CI additionally validates PostgreSQL migrations/seeders and Composer metadata.
+
+## Repository-wide validation
+
+Linux/macOS:
+
+```bash
+./scripts/check-all.sh
+```
+
+Windows PowerShell:
 
 ```powershell
 ./scripts/check-all.ps1
 ```
+
+The scripts run frontend install/lint/typecheck/test/build, API install/tests when Laravel is present, and Go checks when a PC Agent module exists.
 
 ## Working agreement
 
@@ -67,3 +115,4 @@ On Windows PowerShell, repository-wide checks can later be run with:
 3. Update `packages/contracts/openapi.yaml` before or alongside API-breaking work.
 4. Every pull request must include validation evidence.
 5. Do not merge when required CI checks fail.
+6. Do not present browser-local prototype data as canonical operational truth after a domain has moved to the API.

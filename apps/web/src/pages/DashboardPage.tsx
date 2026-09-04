@@ -54,8 +54,6 @@ const PENDING_SERVER_DOMAINS = [
   'Kalender Akademik',
   'Notifikasi',
   'Laporan & Analitik',
-  'Pengguna / Hak Akses Admin',
-  'Master Data',
   'Audit Log',
   'Pengaturan Tenant',
 ] as const;

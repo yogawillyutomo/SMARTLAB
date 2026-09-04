@@ -6,6 +6,7 @@ if (Test-Path "$Root/apps/web/package.json") {
     npm ci
     npm run lint
     npm run typecheck
+    npm run test
     npm run build
     Pop-Location
 }

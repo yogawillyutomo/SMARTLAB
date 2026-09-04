@@ -1,12 +1,12 @@
 # SmartLab Full Source-of-Truth Migration
 
-**Status:** migration foundation / implementation roadmap
+**Status:** active staged migration
 
-**Baseline:** `main@b71ef1a5781eeb6998c3fd24a586c5975caba539`
+**Baseline:** `main@9245583a1a3acbca7dad3cc7fccf9df597a413a0`
 
 ## Goal
 
-Remove mixed local/API application state from production-facing SmartLab flows. PostgreSQL-backed Laravel APIs become the canonical source of truth for persisted business data and authorization. Browser-local repositories remain only as an explicitly temporary prototype implementation until the corresponding server domain is delivered; they must not be presented as canonical operational data.
+Remove mixed local/API application state from production-facing SmartLab flows. PostgreSQL-backed Laravel APIs become the canonical source of truth for persisted SmartLab business data and authorization. Browser-local repositories remain only as an explicitly temporary prototype implementation until the corresponding server domain is delivered; they must not be presented as canonical operational data.
 
 This roadmap follows the approved operational workflow specification and the repository rule that backend adoption happens through focused vertical slices rather than one unreviewable mega-change.
 
@@ -15,38 +15,40 @@ This roadmap follows the approved operational workflow specification and the rep
 | Domain | Server authority | Frontend integration | Status |
 | --- | --- | --- | --- |
 | Authentication / current membership | Laravel session + Sanctum | `authApi.ts`, `authStore.ts` | canonical |
-| Laboratories | PostgreSQL / Laboratory API | `LaboratoryApiPages.tsx` | canonical |
-| Devices | PostgreSQL / Device API | `DeviceApiPages.tsx` | canonical |
+| Laboratories | PostgreSQL / Laboratory API | Laboratory API pages | canonical |
+| Devices | PostgreSQL / Device API | Device API pages | canonical |
 | Device transfers | PostgreSQL / Device Transfer API | device detail workflow | canonical |
-| Laboratory layouts | PostgreSQL / Layout API | `LaboratoryLayoutApiPage.tsx` | canonical |
-| Incidents | PostgreSQL / Incident API E1-E13 | Incident list/detail/workflow | canonical |
+| Laboratory layouts | PostgreSQL / Layout API | canonical layout editor | canonical |
+| Incidents | PostgreSQL / Incident API E1-E13 | incident list/detail/workflow | canonical |
+| Identity administration | PostgreSQL / users + school memberships | `identityAdminGateway`, `UsersPage.tsx` | canonical |
+| Role / permission catalog | Laravel authorization catalog | `identityAdminGateway`, `RolesPage.tsx` | canonical read-only catalog |
+| Academic master | PostgreSQL / academic master API | `academicMasterGateway`, `MasterDataPage.tsx` | canonical |
+| Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
-## Remaining browser-local domains
+The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
 
-The following production routes still depend wholly or materially on `AppDataProvider`, `useAppData`, `repositories.ts`, seed data, or compatibility permission state. They are not yet server-authoritative.
+## Remaining browser-local or incomplete domains
+
+The following production routes still depend wholly or materially on `AppDataProvider`, `useAppData`, browser repositories/seed state, or do not yet have a complete canonical server domain.
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/dashboard` | dashboard aggregation | cross-domain read model / server-backed domain clients |
-| `/schedules` | regular schedules | academic master + schedule domain |
+| `/schedules` | regular schedules | schedule domain + academic integration |
 | `/bookings` | laboratory reservations | availability + reservation domain |
 | `/sessions` | laboratory execution | occurrence/session domain |
 | `/journals` | execution report/journal | session/report domain |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
 | `/assets` | fixed assets | asset domain |
-| `/stock` | stock/spare parts | inventory + transaction domain |
+| `/stock` | stock/spare parts | inventory + immutable transaction domain |
 | `/work-orders` | corrective work orders | work-order domain linked to Incident |
 | `/maintenance` | preventive maintenance | maintenance plan/execution domain |
 | `/loans` | item loans | custody/loan domain |
 | `/calendar` | academic calendar/closures | calendar/closure domain |
 | `/reports` | reporting | validated aggregate/reporting queries |
 | `/notifications` | user notifications | notification domain |
-| `/users` | tenant users/memberships | identity administration API |
-| `/roles` | roles/permissions | RBAC administration API |
-| `/master-data` | academic/reference masters | tenant master-data domain |
 | `/audit-logs` | audit evidence | canonical append-oriented audit query API |
 | `/settings` | tenant/product settings | tenant settings domain |
-| global search/topbar/dashboard badges | cross-domain summaries | server-backed query/read model |
+| global search/topbar/unsupported dashboard metrics | cross-domain summaries | server-backed query/read model |
 
 ## Non-negotiable rules
 
@@ -59,32 +61,48 @@ The following production routes still depend wholly or materially on `AppDataPro
 7. Each migration slice includes contract, backend, frontend, tests, authorization, and rollback/failure behavior.
 8. Local seed data must never appear as real production data after a route is migrated.
 9. Dashboard/reporting consumers may only show canonical metrics for canonical domains. Unsupported metrics must be explicitly unavailable until their source domain is migrated.
-10. `AppDataProvider` and `repositories.ts` are deleted from the production application only after their last domain consumer is migrated.
+10. `AppDataProvider` and browser repositories are deleted from the production application only after their last domain consumer is migrated.
+
+## Cross-product authority boundary
+
+SmartLab currently hosts a canonical academic-master API for SmartLab itself. Before Phase S2, the broader Bakaran Project ownership boundary between shared Master Data, TESSELA, and SmartLab must be locked.
+
+Until that architecture decision is made:
+
+- do not rewrite the stable-ID academic work already delivered;
+- do not introduce a second timetable solver into SmartLab;
+- treat the current academic API as the SmartLab authority boundary that may later become a synchronized projection/adapter of shared Master Data;
+- preserve stable identifiers and integration-friendly contracts.
+
+A dedicated architecture decision must define external authority, synchronization, failure behavior, and ownership before schedule integration expands.
 
 ## Migration order
 
-### Phase S0 - Source-of-truth foundation
+### Phase S0 - Source-of-truth foundation — substantially complete
 
-- document this matrix;
-- fix local Sanctum development origin baseline;
-- migrate Dashboard Laboratory/Device/Incident summaries to canonical clients;
-- add explicit provenance/availability handling for metrics whose domains are still local;
-- add regression tests preventing canonical Dashboard metrics from reading `db.labs`, `db.devices`, or `db.incidents`.
+Delivered:
 
-### Phase S1 - Tenant administration and master references
+- source-of-truth matrix;
+- canonical Dashboard Laboratory/Device/Incident summaries;
+- explicit unavailable state for unsupported metrics;
+- server-backed authentication/current membership;
+- regression coverage around canonical domain boundaries.
 
-Build canonical APIs for:
+### Phase S1 - Tenant administration and master references — partially complete
+
+Delivered:
 
 - users / school memberships;
-- roles and role assignments;
-- permissions / role permissions according to locked policy;
+- server role/permission catalog and role assignment support used by identity administration;
+- academic/reference Master Data with stable IDs.
+
+Still pending or intentionally deferred:
+
 - tenant settings;
-- academic/reference Master Data with stable IDs;
-- audit query foundation.
+- tenant-specific permission override editor/contract;
+- canonical audit query UI/API completion.
 
-Reason: schedules, reservations, execution, imports, notifications, and reporting need stable tenant/academic identities.
-
-### Phase S2 - Scheduling and availability
+### Phase S2 - Scheduling and availability — next major product slice
 
 Build canonical domains for:
 
@@ -96,6 +114,8 @@ Build canonical domains for:
 - priority event overrides.
 
 No recurring schedule is destructively rewritten for a one-date exception.
+
+**Entry gate:** lock shared Master Data ↔ TESSELA ↔ SmartLab authority and integration responsibilities.
 
 ### Phase S3 - Laboratory execution and reporting
 
@@ -127,12 +147,7 @@ Build authenticated device-agent enrollment and approved telemetry ingestion/rea
 
 ### Phase S7 - Notifications, reporting, and final Dashboard
 
-Build:
-
-- canonical notifications with valid deep links;
-- reporting/analytics queries based on validated canonical domains;
-- complete Dashboard aggregation/read model;
-- global search against canonical entities.
+Build canonical notifications with valid deep links, reporting/analytics queries based on validated canonical domains, complete Dashboard aggregation/read models, and global search against canonical entities.
 
 ### Phase S8 - Local prototype retirement
 
@@ -145,11 +160,11 @@ Acceptance gate:
 - full web/API CI and PostgreSQL integration tests pass;
 - browser UAT confirms refresh/deep-link persistence because data lives on the server.
 
-## Immediate UAT finding
+## Historical UAT finding
 
-The 2026-09-03 local UAT exposed a real mixed-source defect: Dashboard displayed three seeded laboratories (`LAB RPL 1`, `LAB RPL 2`, `LAB RPL 3`) while the canonical Laboratory API correctly returned zero rows from a new `smartlab_dev` database. This is classified as a source-of-truth correctness defect, not a cosmetic discrepancy.
+The 2026-09-03 local UAT exposed a real mixed-source defect: Dashboard displayed three seeded laboratories while the canonical Laboratory API correctly returned zero rows from a new `smartlab_dev` database. This was classified as a source-of-truth correctness defect, not a cosmetic discrepancy.
 
-The same class of defect must be assumed possible for every still-local domain until its migration slice is complete.
+The Dashboard has since been cut over to canonical Laboratory/Device/Incident clients. The same class of defect must still be assumed possible for every remaining local domain until its migration slice is complete.
 
 ## Definition of done for the full program
 
