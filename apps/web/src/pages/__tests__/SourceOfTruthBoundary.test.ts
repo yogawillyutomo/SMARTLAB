@@ -3,6 +3,7 @@ import appSource from '@/App.tsx?raw';
 import dashboardSource from '@/pages/DashboardPage.tsx?raw';
 import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
 import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
+import calendarSource from '@/pages/CalendarPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -70,6 +71,17 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="schedules.view"');
     expect(navSource).toContain("schedules: 'schedules.view'");
     expect(navSource).toContain("serverPermission: 'schedules.view'");
+  });
+
+  it('keeps the calendar route server-authoritative and removes browser-local calendar mutations', () => {
+    expect(calendarSource).not.toContain('useAppData');
+    expect(calendarSource).not.toContain('db.calendarEvents');
+    expect(calendarSource).not.toContain('mutate((d)');
+    expect(calendarSource).toContain("from '@/services/calendarApi'");
+    expect(calendarSource).toContain('calendarEventGateway.list');
+    expect(appSource).toContain('RequireServerPermission permission="calendar.view"');
+    expect(navSource).toContain("calendar: 'calendar.view'");
+    expect(navSource).toContain("serverPermission: 'calendar.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
