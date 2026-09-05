@@ -91,15 +91,17 @@ export function CalendarPage(){
   const load=useCallback(async()=>{
     setLoading(true);setError(null);
     try{
-      const [calendar,laboratories]=await Promise.all([
-        calendarEventGateway.list(range),
-        laboratoryGateway.list(),
-      ]);
+      const calendar=await calendarEventGateway.list(range);
       setEvents(calendar);
-      setLabs(laboratories.filter((lab)=>lab.status==='active'));
+      if(canCreate||canUpdate){
+        const laboratories=await laboratoryGateway.list();
+        setLabs(laboratories.filter((lab)=>lab.status==='active'));
+      }else{
+        setLabs([]);
+      }
     }catch(err){setError(issueMessage(err));}
     finally{setLoading(false);}
-  },[range]);
+  },[range,canCreate,canUpdate]);
 
   useEffect(()=>{void load();},[load]);
 
