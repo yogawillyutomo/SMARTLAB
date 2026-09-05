@@ -12,6 +12,7 @@ use App\Domain\Calendar\OperationalCalendarException;
 use App\Domain\Availability\LaboratoryAvailabilityException;
 use App\Domain\Reservation\LaboratoryReservationException;
 use App\Domain\ScheduleException\ScheduleExceptionDomainException;
+use App\Domain\PriorityEvent\PriorityEventDomainException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -190,6 +191,22 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json($body, $exception->status);
         });
         $exceptions->render(function (ScheduleExceptionDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->details !== []) {
+                $body['details'] = $exception->details;
+            }
+
+            return response()->json($body, $exception->status);
+        });
+        $exceptions->render(function (PriorityEventDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
