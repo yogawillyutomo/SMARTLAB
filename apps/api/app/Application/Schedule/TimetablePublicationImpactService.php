@@ -158,6 +158,25 @@ class TimetablePublicationImpactService
                         ],
                     ]);
                 }
+
+                if ($laboratory !== null && $laboratory->status === 'active') {
+                    $studentCount = (int) ($candidate->academicClass?->student_count ?? 0);
+                    if ($studentCount > 0 && $studentCount > (int) $laboratory->capacity) {
+                        $this->pushBlocker($blockers, $fingerprintItems, [
+                            'type' => 'laboratory_capacity_conflict',
+                            'entityId' => (string) $laboratory->id,
+                            'date' => $candidate->occurs_on->format('Y-m-d'),
+                            'laboratoryId' => (string) $laboratory->id,
+                            'title' => 'Publikasi kandidat melebihi kapasitas Laboratory saat ini.',
+                            'details' => [
+                                'candidateOccurrenceId' => (string) $candidate->id,
+                                'sourceScheduleId' => (string) $candidate->entry?->source_schedule_id,
+                                'studentCount' => $studentCount,
+                                'laboratoryCapacity' => (int) $laboratory->capacity,
+                            ],
+                        ]);
+                    }
+                }
             }
 
 
@@ -297,7 +316,10 @@ class TimetablePublicationImpactService
             ->where('school_id', $schoolId)
             ->where('publication_id', $publicationId)
             ->whereBetween('occurs_on', [$from, $to])
-            ->with('entry:id,school_id,publication_id,source_schedule_id')
+            ->with([
+                'entry:id,school_id,publication_id,source_schedule_id',
+                'academicClass:id,school_id,student_count',
+            ])
             ->orderBy('occurs_on')
             ->orderBy('start_time_snapshot')
             ->orderBy('id')
