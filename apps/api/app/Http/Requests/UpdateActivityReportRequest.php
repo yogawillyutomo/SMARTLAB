@@ -22,8 +22,8 @@ class UpdateActivityReportRequest extends FormRequest
     {
         return [
             'reportType' => ['sometimes', Rule::in(['practicum', 'exam', 'workshop', 'general'])],
-            'presentCount' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
-            'absentCount' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
+            'presentCount' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:32767'],
+            'absentCount' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:32767'],
             'attendanceNotes' => ['sometimes', 'nullable', 'string', 'max:4000'],
             'externalAttendanceSystem' => ['sometimes', 'nullable', 'string', 'max:128'],
             'externalAttendanceReferenceId' => ['sometimes', 'nullable', 'string', 'max:255'],
