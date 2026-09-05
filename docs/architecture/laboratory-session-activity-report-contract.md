@@ -1,6 +1,6 @@
 # Laboratory Session and Activity Report Contract
 
-**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented; S3.4 unified frontend implemented  
+**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented; S3.4 unified frontend implemented; S3.5 observations/Incident linkage/attachments implemented  
 **Date:** 2026-09-05  
 **Depends on:** ADR-001, S2 Published Timetable/Schedule Occurrence, Unified Laboratory Availability, Reservation, Schedule Exception, Priority Event, Incident
 
@@ -1075,9 +1075,41 @@ Delivered:
 - `/journals` retained only as a compatibility/deep-link redirect into canonical report history;
 - no Session/Journal browser-local dataset is mixed into the migrated routes.
 
-### S3.5 — Observation, Incident linkage, attachments
+### S3.5 — Observation, Incident linkage, attachments — implemented
 
-Implement explicit issue observations, Incident promotion/linkage, and attachment metadata/storage policy.
+Delivered observation semantics:
+
+- `SessionIssueObservation` is immutable execution evidence, not a second Incident domain;
+- evidence can be added while the Session is `in_progress`, or after end only while its ActivityReport remains `draft`;
+- `observedAt` must fall inside the Session's actual execution interval;
+- Device observations require a canonical Device in the same Laboratory and an Incident-reporting-eligible lifecycle state;
+- S3.5 does not invent canonical Asset identity: Asset/facility/other observations carry narrative evidence only until their authoritative domains exist;
+- saving an observation never auto-creates an Incident;
+- Incident promotion is a separate explicit action requiring `session-observations.promote` plus `incidents.create`;
+- promotion derives Laboratory, Device when applicable, occurrence time, reporter identity, and correlation/submission identity server-side;
+- each observation can link to at most one Incident; retries return the same link instead of creating duplicate tickets;
+- the Incident keeps its own canonical lifecycle after promotion.
+
+Delivered attachment semantics:
+
+- attachment bytes are stored outside ActivityReport rows on a configurable private Laravel filesystem disk;
+- metadata stores provider, opaque internal storage key, original safe filename, server-derived media type/size, SHA-256, uploader, and creation time;
+- storage keys are never exposed to the web client;
+- default accepted media types are JPEG, PNG, WebP, and PDF with a configurable default limit of 10 MiB;
+- upload is allowed only while ActivityReport is `draft`;
+- upload requires ActivityReport `If-Match`, increments report version, and appends an audit event;
+- attachments are immutable in S3.5; there is no ordinary delete/replace endpoint;
+- download always rechecks report authorization and returns private/no-store, `nosniff`, sandbox-oriented headers;
+- if metadata remains but the object is missing, list responses expose `available=false` and download returns 410 rather than deleting historical metadata;
+- production malware scanning is not represented as already implemented; expanding allowed file types should wait for a dedicated scanning/quarantine contract.
+
+Delivered frontend semantics:
+
+- Session detail lists execution observations and clearly states that evidence is not automatically an Incident;
+- Incident creation is exposed only through the explicit promotion dialog;
+- report detail/editor lists attachment evidence, checksum prefix, and availability;
+- draft editors can upload evidence through the canonical multipart API;
+- browser-local Session/Journal/Incident side effects are not reintroduced.
 
 ### S3.6 — Offline draft sync and UAT
 
