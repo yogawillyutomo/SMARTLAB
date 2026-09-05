@@ -8,6 +8,7 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
 use App\Models\LessonPeriod;
 use App\Models\LessonPeriodSet;
+use App\Models\PriorityEvent;
 use App\Models\Role;
 use App\Models\ScheduleOccurrence;
 use App\Models\School;
@@ -169,6 +170,58 @@ class LaboratorySessionApiTest extends TestCase
             ->postJson('/api/v1/laboratory-sessions/'.$ended['id'].'/cancel', ['reason' => 'Tidak boleh'])
             ->assertStatus(409)
             ->assertJsonPath('code', 'LABORATORY_SESSION_STATE_CONFLICT');
+    }
+
+    public function test_approved_priority_event_can_start_by_excluding_only_its_own_blocker_and_cannot_be_cancelled_mid_session(): void
+    {
+        [$actor, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'admin-lab',
+        );
+        $fixture = $this->fixture($school);
+        $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14', $fixture['labB']);
+
+        $event = PriorityEvent::query()->create([
+            'school_id' => $school->id,
+            'event_number' => 'PEV-20260914-SESSION',
+            'laboratory_id' => $fixture['labA']->id,
+            'requester_user_id' => $actor->id,
+            'requester_membership_id' => $membership->id,
+            'requester_name_snapshot' => $actor->name,
+            'requester_email_snapshot' => $actor->email,
+            'event_date' => '2026-09-14',
+            'starts_at' => '10:00:00',
+            'ends_at' => '11:00:00',
+            'category' => 'official_visit',
+            'title' => 'Kunjungan Industri',
+            'participants' => 20,
+            'description' => null,
+            'pic_name' => $actor->name,
+            'status' => 'approved',
+            'rejection_reason' => null,
+            'decided_at' => now(),
+            'cancelled_at' => null,
+            'version' => 2,
+        ]);
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'priority_event',
+            'sourceId' => $event->id,
+        ])->assertCreated()->json('data');
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 10:05:00', 'Asia/Jakarta'));
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'in_progress')
+            ->assertJsonPath('data.source.type', 'priority_event');
+
+        $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/priority-events/'.$event->id.'/cancel', ['reason' => 'Tidak boleh saat berjalan'])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'LABORATORY_SESSION_ACTIVE_SOURCE_CONFLICT')
+            ->assertJsonPath('details.session.id', $session['id']);
     }
 
     public function test_prepared_session_blocks_source_mutation_until_explicitly_cancelled(): void
