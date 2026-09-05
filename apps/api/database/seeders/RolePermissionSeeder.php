@@ -38,6 +38,7 @@ class RolePermissionSeeder extends Seeder
             'master-data.view',
             'schedules.view',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.cancel', 'calendar.export',
+            'availability.view',
             'audit-logs.view', 'audit-logs.export',
         ],
         'teknisi' => [
