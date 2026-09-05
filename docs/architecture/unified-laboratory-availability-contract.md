@@ -42,7 +42,7 @@ Therefore an occurrence ending at 08:45 does not conflict with a request beginni
 
 All date/time query values are interpreted in the School's local operational clock. S2.5 does not convert schedule snapshots to another timezone.
 
-## Canonical sources in S2.5
+## Canonical sources after S2.8
 
 1. Laboratory status.
 2. Active TESSELA-backed ScheduleOccurrence rows from an active publication covering the date.
@@ -55,7 +55,7 @@ Active relocations, submitted/approved reservations, approved Priority Events, a
 
 ## Deferred sources
 
-S2.5 intentionally does not yet include:
+The completed S2 scheduling slice intentionally does not yet include:
 
 - canonical preventive/corrective maintenance unavailability outside the current Calendar blocker mechanism.
 
