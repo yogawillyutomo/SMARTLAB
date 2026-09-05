@@ -278,6 +278,40 @@ class LaboratorySessionApiTest extends TestCase
             ->assertJsonPath('data.status', 'cancelled');
     }
 
+    public function test_laboratory_cannot_be_deactivated_while_session_is_prepared_or_in_progress(): void
+    {
+        [, $school] = $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');
+        $fixture = $this->fixture($school);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->patchJson('/api/v1/laboratories/'.$fixture['labA']->id, ['status' => 'inactive'])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'LABORATORY_SESSION_ACTIVE_SOURCE_CONFLICT')
+            ->assertJsonPath('details.operation', 'deactivate_laboratory')
+            ->assertJsonPath('details.session.id', $session['id']);
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        $this->patchJson('/api/v1/laboratories/'.$fixture['labA']->id, ['status' => 'inactive'])
+            ->assertStatus(409)
+            ->assertJsonPath('details.session.status', 'in_progress');
+
+        $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', ['endOutcome' => 'interrupted'])
+            ->assertOk();
+
+        $this->patchJson('/api/v1/laboratories/'.$fixture['labA']->id, ['status' => 'inactive'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'inactive');
+    }
+
     public function test_schedule_exception_cannot_change_a_prepared_schedule_session_source(): void
     {
         [, $school] = $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');
