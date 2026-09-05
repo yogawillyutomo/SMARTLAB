@@ -116,6 +116,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('timetable-publications', [TimetablePublicationController::class, 'index'])->middleware('permission:schedules.view');
         Route::post('timetable-publications', [TimetablePublicationController::class, 'store'])->middleware('permission:schedules.ingest');
         Route::get('timetable-publications/{publicationId}', [TimetablePublicationController::class, 'show'])->middleware('permission:schedules.view');
+        Route::get('timetable-publications/{publicationId}/impact', [TimetablePublicationController::class, 'impact'])->middleware('permission:schedules.activate');
         Route::post('timetable-publications/{publicationId}/activate', [TimetablePublicationController::class, 'activate'])->middleware('permission:schedules.activate');
 
         Route::get('devices', [DeviceController::class, 'index'])->middleware('permission:devices.view');
