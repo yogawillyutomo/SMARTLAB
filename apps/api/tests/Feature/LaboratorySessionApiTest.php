@@ -461,9 +461,10 @@ class LaboratorySessionApiTest extends TestCase
             'version' => 1,
         ]);
 
-        $this->patchJson('/api/v1/activity-reports/'.$reportId, [
-            'commonContent' => ['objective' => 'Menguji DOM', 'outcomeReflection' => 'Tujuan tercapai.'],
-        ])
+        $this->withHeader('If-Match', '')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'commonContent' => ['objective' => 'Menguji DOM', 'outcomeReflection' => 'Tujuan tercapai.'],
+            ])
             ->assertStatus(428)
             ->assertJsonPath('code', 'PRECONDITION_REQUIRED');
 
