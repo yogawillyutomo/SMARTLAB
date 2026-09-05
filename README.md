@@ -58,11 +58,12 @@ The application is in a staged source-of-truth migration.
 - canonical ActivityReport backend with atomic Session-end draft creation, report-type validation, aggregate attendance evidence, draft/submission/revision/verification lifecycle, controlled manual backfill, ETag versioning, and audit history;
 - canonical `/sessions` Pelaksanaan Lab frontend with server-scoped eligible source discovery, prepare/start/end/cancel actions, ActivityReport editing/submission/verification, and server-backed history; `/journals` is a compatibility redirect into the same canonical workflow;
 - canonical S3.5 execution evidence: immutable Session issue observations, explicit idempotent Observation→Incident promotion, and draft-only private ActivityReport attachments with SHA-256 metadata and authorized download;
+- canonical S3.6 controlled offline ActivityReport draft working copies with account-scoped seven-day cache, stable client mutation IDs, idempotent server receipts, fail-closed stale-version conflicts, and explicit three-way rebase UX;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Pelaksanaan Lab is now server-authoritative through S3.5, including explicit issue evidence, Incident linkage, and private report attachments. Remaining transitional work includes offline report-draft sync/UAT, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next slice is S3.6 offline draft sync and operational UAT.
+Pelaksanaan Lab is now server-authoritative through S3.6, including explicit issue evidence, Incident linkage, private report attachments, and controlled offline ActivityReport draft working copies that preserve server/version authority. Remaining transitional work includes telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next phase is S4 Assets, Inventory, Loans, and Preventive Maintenance.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
