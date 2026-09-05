@@ -160,13 +160,13 @@ class PriorityEventApiTest extends TestCase
             'picName' => 'Admin Lab',
         ])->assertCreated()->json('data');
 
-        $this->withHeader('If-Match', '"1"')
-            ->postJson('/api/v1/priority-events/'.$event['id'].'/approve')
-            ->assertOk();
-
         $this->postJson('/api/v1/priority-events/'.$event['id'].'/cancel', ['reason' => 'missing precondition'])
             ->assertStatus(428)
             ->assertJsonPath('code', 'PRECONDITION_REQUIRED');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/priority-events/'.$event['id'].'/approve')
+            ->assertOk();
 
         $this->withHeader('If-Match', '"2"')
             ->postJson('/api/v1/priority-events/'.$event['id'].'/cancel', ['reason' => 'Kegiatan dipindahkan'])
