@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.17.0
-  description: Canonical SmartLab API v1 contract. Version 0.17 preserves the complete 0.16 surface and adds S2.6 canonical Laboratory Reservations.
+  version: 0.18.0
+  description: Canonical SmartLab API v1 contract. Version 0.18 preserves the complete 0.17 surface and adds S2.7 non-destructive dated Schedule Exceptions.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -42,6 +42,9 @@ paths:
   /calendar-events: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events' }
   /calendar-events/{calendarEventId}: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events~1{calendarEventId}' }
   /calendar-events/{calendarEventId}/cancel: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events~1{calendarEventId}~1cancel' }
+  /schedule-exceptions: { $ref: './openapi-schedule-exceptions.yaml#/paths/~1schedule-exceptions' }
+  /schedule-exceptions/{scheduleExceptionId}: { $ref: './openapi-schedule-exceptions.yaml#/paths/~1schedule-exceptions~1{scheduleExceptionId}' }
+  /schedule-exceptions/{scheduleExceptionId}/cancel: { $ref: './openapi-schedule-exceptions.yaml#/paths/~1schedule-exceptions~1{scheduleExceptionId}~1cancel' }
   /schedule-occurrences: { $ref: './openapi-published-timetable.yaml#/paths/~1schedule-occurrences' }
   /timetable-publications: { $ref: './openapi-published-timetable.yaml#/paths/~1timetable-publications' }
   /timetable-publications/{publicationId}: { $ref: './openapi-published-timetable.yaml#/paths/~1timetable-publications~1{publicationId}' }

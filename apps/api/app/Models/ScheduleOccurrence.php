@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ScheduleOccurrence extends Model
 {
@@ -70,6 +71,12 @@ class ScheduleOccurrence extends Model
     public function endLessonPeriod(): BelongsTo
     {
         return $this->belongsTo(LessonPeriod::class, 'end_lesson_period_id');
+    }
+
+    public function activeException(): HasOne
+    {
+        return $this->hasOne(ScheduleException::class, 'occurrence_id')
+            ->where('status', 'active');
     }
 
     protected function casts(): array

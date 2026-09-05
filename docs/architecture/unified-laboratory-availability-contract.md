@@ -1,6 +1,6 @@
 # Unified Laboratory Availability Contract
 
-**Status:** Implemented in S2.5 and extended in S2.6
+**Status:** Implemented in S2.5 and extended through S2.7
 
 SmartLab evaluates one School-local Laboratory and one local date/time window against canonical operational evidence.
 
@@ -46,17 +46,17 @@ All date/time query values are interpreted in the School's local operational clo
 
 1. Laboratory status.
 2. Active TESSELA-backed ScheduleOccurrence rows from an active publication covering the date.
-3. Submitted or approved LaboratoryReservation rows for the requested Laboratory/date.
-4. Active OperationalCalendarEvent rows whose scope is School or the requested Laboratory.
+3. Active dated ScheduleException overlays: cancellation suppresses source occupancy; relocation suppresses the original and creates schedule occupancy on the replacement Laboratory.
+4. Submitted or approved LaboratoryReservation rows for the requested Laboratory/date.
+5. Active OperationalCalendarEvent rows whose scope is School or the requested Laboratory.
 
-Submitted/approved reservations and blocked Calendar Events become blockers. Informational Calendar Events are returned separately as notices and do not change availability.
+Active relocations, submitted/approved reservations, and blocked Calendar Events become blockers. Informational Calendar Events are returned separately as notices and do not change availability.
 
 ## Deferred sources
 
 S2.5 intentionally does not yet include:
 
-- dated ScheduleExceptions (S2.7);
 - priority-event overrides (S2.8);
 - canonical preventive/corrective maintenance unavailability outside the current Calendar blocker mechanism.
 
-S2.6 Reservation extends this same service rather than adding parallel conflict logic. The remaining later domains must do the same.
+S2.6 Reservation and S2.7 Schedule Exception extend this same service rather than adding parallel conflict logic. Priority-event and later operational sources must do the same.

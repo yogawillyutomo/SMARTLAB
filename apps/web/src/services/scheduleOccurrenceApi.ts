@@ -9,6 +9,18 @@ export interface ScheduleReferenceDto {
   name: string;
 }
 
+export type ScheduleOperationalStatus = 'scheduled' | 'cancelled' | 'relocated';
+
+export interface ScheduleOccurrenceExceptionDto {
+  id: string;
+  resolution: 'cancel' | 'relocate';
+  reason: string;
+  approvedByName: string;
+  version: number;
+  createdAt: string;
+  replacementLaboratory: ScheduleReferenceDto | null;
+}
+
 export interface ScheduleOccurrenceDto {
   id: string;
   schoolId: string;
@@ -22,6 +34,9 @@ export interface ScheduleOccurrenceDto {
   academicClass: ScheduleReferenceDto;
   subject: ScheduleReferenceDto;
   plannedLaboratory: ScheduleReferenceDto | null;
+  operationalStatus: ScheduleOperationalStatus;
+  operationalLaboratory: ScheduleReferenceDto | null;
+  exception: ScheduleOccurrenceExceptionDto | null;
   lessonPeriodSetId: string;
   startLessonPeriodId: string;
   endLessonPeriodId: string;
@@ -88,6 +103,9 @@ const OCCURRENCE_FIELDS = [
   'academicClass',
   'subject',
   'plannedLaboratory',
+  'operationalStatus',
+  'operationalLaboratory',
+  'exception',
   'lessonPeriodSetId',
   'startLessonPeriodId',
   'endLessonPeriodId',
@@ -173,6 +191,48 @@ export function parseScheduleOccurrence(value: unknown): ScheduleOccurrenceDto {
   const plannedLaboratory = value.plannedLaboratory;
   if (plannedLaboratory !== null && !isRecord(plannedLaboratory)) throw new ScheduleOccurrenceContractError();
 
+  const operationalLaboratory = value.operationalLaboratory;
+  if (operationalLaboratory !== null && !isRecord(operationalLaboratory)) throw new ScheduleOccurrenceContractError();
+
+  if (!['scheduled', 'cancelled', 'relocated'].includes(String(value.operationalStatus))) {
+    throw new ScheduleOccurrenceContractError();
+  }
+
+  let exception: ScheduleOccurrenceExceptionDto | null = null;
+  if (value.exception !== null) {
+    if (!isRecord(value.exception)
+      || !isUlid(requiredString(value.exception, 'id'))
+      || !['cancel', 'relocate'].includes(String(value.exception.resolution))
+      || typeof value.exception.reason !== 'string'
+      || value.exception.reason.trim() === ''
+      || typeof value.exception.approvedByName !== 'string'
+      || value.exception.approvedByName.trim() === ''
+      || !positiveInteger(value.exception.version)
+      || typeof value.exception.createdAt !== 'string'
+      || Number.isNaN(Date.parse(value.exception.createdAt))) {
+      throw new ScheduleOccurrenceContractError();
+    }
+    const replacement = value.exception.replacementLaboratory;
+    if (replacement !== null && !isRecord(replacement)) throw new ScheduleOccurrenceContractError();
+    exception = {
+      id: value.exception.id as string,
+      resolution: value.exception.resolution as 'cancel' | 'relocate',
+      reason: value.exception.reason,
+      approvedByName: value.exception.approvedByName,
+      version: value.exception.version,
+      createdAt: value.exception.createdAt,
+      replacementLaboratory: replacement === null ? null : parseReference(replacement),
+    };
+  }
+
+  if (value.operationalStatus === 'scheduled' && value.exception !== null) throw new ScheduleOccurrenceContractError();
+  if (value.operationalStatus === 'cancelled' && (exception?.resolution !== 'cancel' || operationalLaboratory !== null)) {
+    throw new ScheduleOccurrenceContractError();
+  }
+  if (value.operationalStatus === 'relocated' && (exception?.resolution !== 'relocate' || operationalLaboratory === null)) {
+    throw new ScheduleOccurrenceContractError();
+  }
+
   const startTime = requiredTime(value, 'startTime');
   const endTime = requiredTime(value, 'endTime');
   if (startTime >= endTime) throw new ScheduleOccurrenceContractError();
@@ -190,6 +250,9 @@ export function parseScheduleOccurrence(value: unknown): ScheduleOccurrenceDto {
     academicClass: parseReference(value.academicClass),
     subject: parseReference(value.subject),
     plannedLaboratory: plannedLaboratory === null ? null : parseReference(plannedLaboratory),
+    operationalStatus: value.operationalStatus as ScheduleOperationalStatus,
+    operationalLaboratory: operationalLaboratory === null ? null : parseReference(operationalLaboratory),
+    exception,
     lessonPeriodSetId: requiredUlid(value, 'lessonPeriodSetId'),
     startLessonPeriodId: requiredUlid(value, 'startLessonPeriodId'),
     endLessonPeriodId: requiredUlid(value, 'endLessonPeriodId'),

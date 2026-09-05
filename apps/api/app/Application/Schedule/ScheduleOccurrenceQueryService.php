@@ -41,6 +41,8 @@ class ScheduleOccurrenceQueryService
                 'academicClass:id,school_id,code,name',
                 'subject:id,school_id,code,name',
                 'plannedLaboratory:id,school_id,code,name',
+                'activeException:id,school_id,occurrence_id,resolution,replacement_laboratory_id,reason,status,approved_by_name_snapshot,version,created_at',
+                'activeException.replacementLaboratory:id,school_id,code,name',
             ]);
 
         if (isset($filters['laboratoryId'])) {

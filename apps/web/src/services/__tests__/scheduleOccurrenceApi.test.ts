@@ -34,6 +34,9 @@ const occurrence = {
   academicClass: { id: ids.academicClass, code: 'XI-PPLG-1', name: 'XI PPLG 1' },
   subject: { id: ids.subject, code: 'WEB', name: 'Pemrograman Web' },
   plannedLaboratory: { id: ids.laboratory, code: 'LAB-RPL-1', name: 'Lab RPL 1' },
+  operationalStatus: 'scheduled' as const,
+  operationalLaboratory: { id: ids.laboratory, code: 'LAB-RPL-1', name: 'Lab RPL 1' },
+  exception: null,
   lessonPeriodSetId: ids.periodSet,
   startLessonPeriodId: ids.startPeriod,
   endLessonPeriodId: ids.endPeriod,
@@ -70,7 +73,27 @@ describe('Schedule Occurrence response parsing', () => {
   it('parses exact canonical occurrence and pagination envelopes', () => {
     expect(parseScheduleOccurrence(occurrence)).toEqual(occurrence);
     expect(parseScheduleOccurrencePage(page)).toEqual(page);
-    expect(parseScheduleOccurrence({ ...occurrence, plannedLaboratory: null }).plannedLaboratory).toBeNull();
+    expect(parseScheduleOccurrence({
+      ...occurrence,
+      plannedLaboratory: null,
+      operationalLaboratory: null,
+    }).plannedLaboratory).toBeNull();
+
+    const relocated = {
+      ...occurrence,
+      operationalStatus: 'relocated' as const,
+      operationalLaboratory: { id: '01ARZ3NDEKTSV4RRFFQ69G5FC0', code: 'LAB-RPL-2', name: 'Lab RPL 2' },
+      exception: {
+        id: '01ARZ3NDEKTSV4RRFFQ69G5FC1',
+        resolution: 'relocate' as const,
+        reason: 'Maintenance',
+        approvedByName: 'Admin Lab',
+        version: 1,
+        createdAt: '2026-09-05T01:00:00.000Z',
+        replacementLaboratory: { id: '01ARZ3NDEKTSV4RRFFQ69G5FC0', code: 'LAB-RPL-2', name: 'Lab RPL 2' },
+      },
+    };
+    expect(parseScheduleOccurrence(relocated).operationalStatus).toBe('relocated');
   });
 
   it.each([

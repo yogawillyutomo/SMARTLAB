@@ -482,6 +482,9 @@ class PublishedTimetableApiTest extends TestCase
                 ->assertJsonPath('data.0.plannedLaboratory.id', $fixture['labA']->id)
                 ->assertJsonPath('data.0.plannedLaboratory.code', 'LAB-RPL-1')
                 ->assertJsonPath('data.0.plannedLaboratory.name', 'Lab RPL 1')
+                ->assertJsonPath('data.0.operationalStatus', 'scheduled')
+                ->assertJsonPath('data.0.operationalLaboratory.id', $fixture['labA']->id)
+                ->assertJsonPath('data.0.exception', null)
                 ->assertJsonPath('data.0.startTime', '07:00:00')
                 ->assertJsonPath('data.0.endTime', '08:45:00')
                 ->assertJsonPath('data.0.instructionPeriodCount', 2);

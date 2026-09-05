@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ScheduleOccurrenceController;
+use App\Http\Controllers\Api\V1\ScheduleExceptionController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
 use App\Http\Controllers\Api\V1\LaboratoryReservationController;
@@ -21,6 +22,7 @@ use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
+use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
@@ -90,6 +92,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:calendar.update', \App\Http\Middleware\RequireCalendarEventVersionPrecondition::class]);
         Route::post('calendar-events/{calendarEventId}/cancel', [OperationalCalendarEventController::class, 'cancel'])
             ->middleware(['permission:calendar.cancel', \App\Http\Middleware\RequireCalendarEventVersionPrecondition::class]);
+
+        Route::get('schedule-exceptions', [ScheduleExceptionController::class, 'index'])->middleware('permission:schedule-exceptions.view');
+        Route::post('schedule-exceptions', [ScheduleExceptionController::class, 'store'])->middleware('permission:schedule-exceptions.create');
+        Route::get('schedule-exceptions/{scheduleExceptionId}', [ScheduleExceptionController::class, 'show'])->middleware('permission:schedule-exceptions.view');
+        Route::post('schedule-exceptions/{scheduleExceptionId}/cancel', [ScheduleExceptionController::class, 'cancel'])
+            ->middleware(['permission:schedule-exceptions.cancel', RequireScheduleExceptionVersionPrecondition::class]);
 
         Route::get('schedule-occurrences', [ScheduleOccurrenceController::class, 'index'])->middleware('permission:schedules.view');
 
