@@ -1,6 +1,6 @@
 # Laboratory Session and Activity Report Contract
 
-**Status:** S3.1 architecture contract — locked before canonical implementation  
+**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport pending  
 **Date:** 2026-09-05  
 **Depends on:** ADR-001, S2 Published Timetable/Schedule Occurrence, Unified Laboratory Availability, Reservation, Schedule Exception, Priority Event, Incident
 
@@ -1030,22 +1030,22 @@ S3 does not:
 
 This document.
 
-### S3.2 — LaboratorySession backend
+### S3.2 — LaboratorySession backend — implemented
 
-Implement:
+Delivered:
 
 - persistence + event history;
 - source eligibility and preparation;
-- start-time revalidation;
+- explicit `Teacher.membership_id` ownership for Guru schedule sources;
+- start-time source fingerprint revalidation;
 - duplicate-source protection;
 - start/end/cancel lifecycle;
-- Session-aware source mutation guards;
+- Session-aware Reservation/Priority/ScheduleException and Laboratory-deactivation guards;
 - in-progress Session availability blocker;
-- timetable publication impact extension;
-- permissions and API contract;
-- integration tests.
+- timetable publication `active_session_conflict`;
+- permissions, OpenAPI 0.20, and integration tests.
 
-No frontend cutover yet.
+No frontend cutover yet. ActivityReport is still absent, so S3.2 end records report-pending evidence; S3.3 must make normal end + report draft atomic before `/sessions` becomes canonical.
 
 ### S3.3 — ActivityReport backend
 
