@@ -13,6 +13,18 @@ class ScheduleOccurrenceResource extends JsonResource
             ? $this->entry->source_snapshots
             : [];
 
+        $activeException = $this->activeException;
+        $operationalStatus = match ($activeException?->resolution) {
+            'cancel' => 'cancelled',
+            'relocate' => 'relocated',
+            default => 'scheduled',
+        };
+        $operationalLaboratory = match ($operationalStatus) {
+            'cancelled' => null,
+            'relocated' => $activeException?->replacementLaboratory,
+            default => $this->plannedLaboratory,
+        };
+
         return [
             'id' => $this->id,
             'schoolId' => $this->school_id,
@@ -41,6 +53,25 @@ class ScheduleOccurrenceResource extends JsonResource
                 'id' => $this->planned_laboratory_id,
                 'code' => $this->snapshot($snapshots, 'laboratoryCode', $this->plannedLaboratory?->code),
                 'name' => $this->snapshot($snapshots, 'laboratoryName', $this->plannedLaboratory?->name),
+            ],
+            'operationalStatus' => $operationalStatus,
+            'operationalLaboratory' => $operationalLaboratory === null ? null : [
+                'id' => $operationalLaboratory->id,
+                'code' => $operationalLaboratory->code,
+                'name' => $operationalLaboratory->name,
+            ],
+            'exception' => $activeException === null ? null : [
+                'id' => $activeException->id,
+                'resolution' => $activeException->resolution,
+                'reason' => $activeException->reason,
+                'approvedByName' => $activeException->approved_by_name_snapshot,
+                'version' => $activeException->version,
+                'createdAt' => $activeException->created_at?->toISOString(),
+                'replacementLaboratory' => $activeException->replacementLaboratory === null ? null : [
+                    'id' => $activeException->replacementLaboratory->id,
+                    'code' => $activeException->replacementLaboratory->code,
+                    'name' => $activeException->replacementLaboratory->name,
+                ],
             ],
             'lessonPeriodSetId' => $this->lesson_period_set_id,
             'startLessonPeriodId' => $this->start_lesson_period_id,
