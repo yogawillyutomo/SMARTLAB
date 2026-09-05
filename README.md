@@ -56,11 +56,12 @@ The application is in a staged source-of-truth migration.
 - fail-closed TESSELA publication impact preview/reconciliation gate before activation, including operational drift, prepared/in-progress schedule Session commitments, and deterministic impact fingerprints;
 - canonical LaboratorySession backend with source-bound prepare/start/end/cancel lifecycle, source fingerprint revalidation, actual occupancy, server permissions, ETag versioning, and audit history;
 - canonical ActivityReport backend with atomic Session-end draft creation, report-type validation, aggregate attendance evidence, draft/submission/revision/verification lifecycle, controlled manual backfill, ETag versioning, and audit history;
+- canonical `/sessions` Pelaksanaan Lab frontend with server-scoped eligible source discovery, prepare/start/end/cancel actions, ActivityReport editing/submission/verification, and server-backed history; `/journals` is a compatibility redirect into the same canonical workflow;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-The `/sessions` and `/journals` frontend workflows remain browser-local/transitional even though the S3.2 LaboratorySession and S3.3 ActivityReport backends are now canonical. Unified Pelaksanaan Lab frontend cutover, observation/Incident linkage, attachments, offline report-draft sync, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain pending. The next slice is S3.4 unified Pelaksanaan Lab frontend.
+Pelaksanaan Lab is now server-authoritative end to end for the S3.4 scope. Remaining transitional work includes observation/Incident linkage, attachments, offline report-draft sync, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next slice is S3.5 observation, Incident linkage, and attachments.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
