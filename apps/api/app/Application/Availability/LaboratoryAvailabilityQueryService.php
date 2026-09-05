@@ -7,6 +7,7 @@ use App\Domain\Availability\LaboratoryAvailabilityException;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
 use App\Models\OperationalCalendarEvent;
+use App\Models\PriorityEvent;
 use App\Models\ScheduleException;
 use App\Models\ScheduleOccurrence;
 use App\Models\TimetablePublication;
@@ -122,6 +123,17 @@ class LaboratoryAvailabilityQueryService
             ->orderBy('id')
             ->get();
 
+        $priorityEvents = PriorityEvent::query()
+            ->where('school_id', $schoolId)
+            ->where('laboratory_id', $laboratory->id)
+            ->whereDate('event_date', $date)
+            ->where('status', 'approved')
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->orderBy('starts_at')
+            ->orderBy('id')
+            ->get();
+
         $reservations = LaboratoryReservation::query()
             ->where('school_id', $schoolId)
             ->where('laboratory_id', $laboratory->id)
@@ -195,6 +207,10 @@ class LaboratoryAvailabilityQueryService
             $blockers[] = $this->relocationBlocker($exception);
         }
 
+        foreach ($priorityEvents as $priorityEvent) {
+            $blockers[] = $this->priorityEventBlocker($priorityEvent);
+        }
+
         foreach ($reservations as $reservation) {
             $blockers[] = $this->reservationBlocker($reservation);
         }
@@ -257,6 +273,9 @@ class LaboratoryAvailabilityQueryService
                     'status' => 'covered',
                 ],
                 'reservations' => [
+                    'status' => 'covered',
+                ],
+                'priorityEvents' => [
                     'status' => 'covered',
                 ],
                 'laboratoryStatus' => [
@@ -338,6 +357,27 @@ class LaboratoryAvailabilityQueryService
                 'teacher' => $teacher,
                 'academicClass' => $academicClass,
                 'subject' => $subject,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function priorityEventBlocker(PriorityEvent $event): array
+    {
+        return [
+            'type' => 'priority_event',
+            'sourceId' => (string) $event->id,
+            'title' => (string) $event->title,
+            'allDay' => false,
+            'startsAt' => substr((string) $event->starts_at, 0, 8),
+            'endsAt' => substr((string) $event->ends_at, 0, 8),
+            'details' => [
+                'eventNumber' => (string) $event->event_number,
+                'category' => (string) $event->category,
+                'status' => (string) $event->status,
+                'requesterName' => (string) $event->requester_name_snapshot,
+                'participants' => (int) $event->participants,
+                'picName' => (string) $event->pic_name,
             ],
         ];
     }
