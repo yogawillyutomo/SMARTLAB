@@ -2,7 +2,11 @@ openapi: 3.1.0
 info:
   title: SmartLab Activity Report API module
   version: 0.21.0
-  description: S3.3 canonical ActivityReport lifecycle. Normal reports are created atomically by LaboratorySession end; manual backfill is elevated and never invents a Session.
+  description: |
+    S3.3 canonical ActivityReport lifecycle. Normal reports are created atomically
+    by LaboratorySession end; manual backfill is elevated and never invents a Session.
+    SmartLab stores participant aggregates only. Individual attendance remains outside
+    SmartLab authority.
 paths:
   /activity-reports:
     get:
@@ -14,93 +18,235 @@ paths:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
         - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
-        - { name: reportType, in: query, schema: { type: string, enum: [practicum, exam, workshop, general] } }
-        - { name: status, in: query, schema: { type: string, enum: [draft, submitted, revision_required, verified] } }
-        - { name: origin, in: query, schema: { type: string, enum: [session, manual_backfill] } }
+        - { name: reportType, in: query, schema: { $ref: '#/components/schemas/ActivityReportType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ActivityReportStatus' } }
+        - { name: origin, in: query, schema: { $ref: '#/components/schemas/ActivityReportOrigin' } }
         - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
       responses:
         '200': { description: Paginated Activity Report collection }
         '403': { description: all scope requested without activity-reports.view-all }
+        '422': { description: Query validation failed }
+
   /activity-reports/backfill:
     post:
       operationId: createActivityReportBackfill
       summary: Create exceptional historical evidence without a fake Session
+      description: |
+        Requires activity-reports.create-backfill. This path is limited to legacy migration,
+        historical backfill, or an approved recovery procedure. It creates origin=manual_backfill,
+        never creates a LaboratorySession, and always starts as draft.
       security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBackfillInput' }
       responses:
         '201': { description: Manual backfill draft created with ETag version }
-        '422': { description: Backfill evidence is invalid }
+        '403': { description: Caller lacks activity-reports.create-backfill }
+        '422': { description: Backfill evidence or report content is invalid }
+
   /activity-reports/{reportId}:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
     get:
       operationId: getActivityReport
+      summary: Read one Activity Report and append-oriented timeline
       security: *auth
       responses:
-        '200': { description: Report detail and audit timeline }
-        '404': { description: Missing, cross-School, or out of scope }
+        '200': { description: Activity Report detail and audit timeline }
+        '404': { description: Report is missing, cross-School, or outside caller scope }
     patch:
       operationId: updateActivityReport
+      summary: Edit report content while status=draft
+      description: |
+        Requires activity-reports.edit. Only draft content is editable.
+        reportType controls the accepted keys in typeSpecificContent:
+        practicum = topic, steps, softwareTools, learningOutcome;
+        exam = classification, proctor, readiness, continuityNotes, accommodationEvidence;
+        workshop = organizer, facilitator, agenda, resources, output;
+        general = activityOwner, classification, resourceUse, result.
       security: *auth
-      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateActivityReportInput' }
       responses:
-        '200': { description: Draft updated }
-        '409': { description: Invalid lifecycle state }
-        '412': { description: Version conflict }
-        '422': { description: Type-specific content or aggregate attendance invalid }
-        '428': { description: Missing/malformed If-Match }
+        '200': { description: Draft updated with new ETag version }
+        '404': { description: Missing, cross-School, or outside caller scope }
+        '409': { description: Report is not editable in its current lifecycle state }
+        '412': { description: Activity Report version conflict }
+        '422': { description: Report-type content or aggregate attendance is invalid }
+        '428': { description: Missing or malformed If-Match }
+
   /activity-reports/{reportId}/submit:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: submitActivityReport
+      summary: Submit a complete draft for verification
+      description: |
+        Requires activity-reports.submit. Submission requires commonContent.objective and
+        commonContent.outcomeReflection plus report-type minimum evidence:
+        practicum topic+learningOutcome; exam classification+readiness;
+        workshop agenda+output; general activityOwner+result.
       security: *auth
       responses:
-        '200': { description: Report submitted }
+        '200': { description: Report submitted with new ETag version }
+        '404': { description: Missing, cross-School, or outside caller scope }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Version conflict }
-        '422': { description: Required content incomplete }
-        '428': { description: Missing/malformed If-Match }
+        '412': { description: Activity Report version conflict }
+        '422': { description: Required report-type content is incomplete }
+        '428': { description: Missing or malformed If-Match }
+
   /activity-reports/{reportId}/request-revision:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: requestActivityReportRevision
+      summary: Return a submitted report for revision
+      description: Requires activity-reports.request-revision. A non-empty reason is mandatory.
       security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
       responses:
-        '200': { description: Report requires revision }
+        '200': { description: Report status becomes revision_required }
+        '404': { description: Missing, cross-School, or outside caller scope }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Version conflict }
-        '428': { description: Missing/malformed If-Match }
+        '412': { description: Activity Report version conflict }
+        '422': { description: Revision reason is invalid }
+        '428': { description: Missing or malformed If-Match }
+
   /activity-reports/{reportId}/reopen:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: reopenActivityReport
+      summary: Reopen a revision-required report as an editable draft
+      description: Requires activity-reports.edit.
       security: *auth
       responses:
-        '200': { description: Report reopened as draft }
+        '200': { description: Report reopened as draft with new ETag version }
+        '404': { description: Missing, cross-School, or outside caller scope }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Version conflict }
-        '428': { description: Missing/malformed If-Match }
+        '412': { description: Activity Report version conflict }
+        '428': { description: Missing or malformed If-Match }
+
   /activity-reports/{reportId}/verify:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: verifyActivityReport
+      summary: Verify a submitted Activity Report
+      description: Requires activity-reports.verify. verified is terminal for ordinary S3.3 workflow.
       security: *auth
       responses:
-        '200': { description: Report verified }
+        '200': { description: Report verified with new ETag version }
+        '404': { description: Missing, cross-School, or outside caller scope }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Version conflict }
-        '428': { description: Missing/malformed If-Match }
+        '412': { description: Activity Report version conflict }
+        '428': { description: Missing or malformed If-Match }
+
 components:
   parameters:
     IfMatch:
       name: If-Match
       in: header
       required: true
+      description: Current ActivityReport integer entity version as a quoted ETag.
       schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+
+  schemas:
+    ActivityReportType:
+      type: string
+      enum: [practicum, exam, workshop, general]
+
+    ActivityReportStatus:
+      type: string
+      enum: [draft, submitted, revision_required, verified]
+
+    ActivityReportOrigin:
+      type: string
+      enum: [session, manual_backfill]
+
+    ParticipantCount:
+      type: [integer, 'null']
+      minimum: 0
+      maximum: 32767
+
+    CommonContent:
+      type: object
+      additionalProperties: false
+      properties:
+        objective: { type: [string, 'null'], maxLength: 8000 }
+        material: { type: [string, 'null'], maxLength: 8000 }
+        resources: { type: [string, 'null'], maxLength: 8000 }
+        issues: { type: [string, 'null'], maxLength: 8000 }
+        followUp: { type: [string, 'null'], maxLength: 8000 }
+        outcomeReflection: { type: [string, 'null'], maxLength: 8000 }
+
+    TypeSpecificContent:
+      type: object
+      description: Keys are restricted server-side according to reportType as documented on PATCH /activity-reports/{reportId}.
+      additionalProperties:
+        type: [string, 'null']
+        maxLength: 8000
+
+    UpdateActivityReportInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        reportType: { $ref: '#/components/schemas/ActivityReportType' }
+        presentCount: { $ref: '#/components/schemas/ParticipantCount' }
+        absentCount: { $ref: '#/components/schemas/ParticipantCount' }
+        attendanceNotes: { type: [string, 'null'], maxLength: 4000 }
+        externalAttendanceSystem: { type: [string, 'null'], maxLength: 128 }
+        externalAttendanceReferenceId: { type: [string, 'null'], maxLength: 255 }
+        commonContent: { $ref: '#/components/schemas/CommonContent' }
+        typeSpecificContent: { $ref: '#/components/schemas/TypeSpecificContent' }
+
+    CreateBackfillInput:
+      type: object
+      additionalProperties: false
+      required:
+        - reportType
+        - laboratoryId
+        - occurredOn
+        - manualBackfillReason
+        - responsibleName
+        - activityDescription
+      properties:
+        reportType: { $ref: '#/components/schemas/ActivityReportType' }
+        laboratoryId: { type: string, format: ulid }
+        occurredOn: { type: string, format: date }
+        manualBackfillReason: { type: string, minLength: 1, maxLength: 2000 }
+        responsibleName: { type: string, minLength: 1, maxLength: 255 }
+        activityDescription: { type: string, minLength: 1, maxLength: 4000 }
+        plannedParticipantCount: { $ref: '#/components/schemas/ParticipantCount' }
+        presentCount: { $ref: '#/components/schemas/ParticipantCount' }
+        absentCount: { $ref: '#/components/schemas/ParticipantCount' }
+        attendanceNotes: { type: [string, 'null'], maxLength: 4000 }
+        externalAttendanceSystem: { type: [string, 'null'], maxLength: 128 }
+        externalAttendanceReferenceId: { type: [string, 'null'], maxLength: 255 }
+        commonContent: { $ref: '#/components/schemas/CommonContent' }
+        typeSpecificContent: { $ref: '#/components/schemas/TypeSpecificContent' }
+
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
