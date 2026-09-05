@@ -1,20 +1,22 @@
 openapi: 3.1.0
 info:
   title: SmartLab Laboratory Session API module
-  version: 0.22.0
-  description: S3 canonical Laboratory execution lifecycle with S3.3 atomic ActivityReport draft creation and the S3.4 ownership-safe execution-source read model.
+  version: 0.23.0
+  description: |
+    Canonical Laboratory execution contract through S3.5: ownership-safe source discovery,
+    source-bound LaboratorySession lifecycle, immutable execution observations, and explicit
+    idempotent Observation-to-Incident promotion. Observation creation never auto-creates
+    an Incident.
 paths:
   /laboratory-session-sources:
     get:
       operationId: listLaboratorySessionSources
-      summary: List eligible canonical execution sources for the Pelaksanaan Lab workspace
+      summary: List eligible canonical execution sources
       description: |
-        Requires sessions.view. Returns current operational ScheduleOccurrences, approved
-        Laboratory Reservations, and approved Priority Events that are eligible for
-        execution in the requested window. The server applies current-membership ownership
-        for scope=mine and never asks the browser to infer ownership from teacher/PIC names.
-        Existing LaboratorySession and ActivityReport summaries are attached when present.
-        The date window is bounded to 14 calendar days.
+        Requires sessions.view. Returns eligible active ScheduleOccurrences, approved
+        Laboratory Reservations, and approved Priority Events. scope=mine is resolved
+        from canonical membership ownership on the server; schedule ownership uses
+        Teacher.membership_id rather than browser display-name inference.
       security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
@@ -22,34 +24,15 @@ paths:
         - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
         - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
       responses:
-        '200':
-          description: Eligible source rows with any existing canonical Session/report summary
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data, meta]
-                properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/LaboratorySessionSourceRow' }
-                  meta:
-                    type: object
-                    required: [from, to, scope, count]
-                    properties:
-                      from: { type: string, format: date }
-                      to: { type: string, format: date }
-                      scope: { type: string, enum: [mine, all] }
-                      count: { type: integer, minimum: 0 }
+        '200': { description: Eligible execution sources with existing Session/report summaries }
         '403': { description: all scope requested without sessions.view-all }
-        '422': { description: Query validation failed }
+        '422': { description: Invalid or over-wide query window }
 
   /laboratory-sessions:
     get:
       operationId: listLaboratorySessions
-      summary: List canonical Laboratory Sessions in the active School
-      description: Requires sessions.view. Users without sessions.view-all are limited to source ownership scope.
-      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      summary: List canonical Laboratory Sessions
+      security: *auth
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
@@ -60,16 +43,15 @@ paths:
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
       responses:
-        '200': { description: Paginated Laboratory Session collection }
+        '200': { description: Paginated canonical Session collection }
         '403': { description: all scope requested without sessions.view-all }
     post:
       operationId: prepareLaboratorySession
-      summary: Prepare one execution from an approved canonical source
+      summary: Prepare one execution from a canonical operational source
       description: |
-        Requires sessions.prepare. sourceType must be schedule_occurrence,
-        laboratory_reservation, or priority_event. There is no general manual Session
-        source. Users without sessions.view-all may prepare only a source owned by their
-        current membership; schedule ownership uses Teacher.membership_id.
+        Requires sessions.prepare. No general manual Session source exists.
+        A user without sessions.view-all may prepare only a source owned by the
+        current membership.
       security: *auth
       requestBody:
         required: true
@@ -78,9 +60,10 @@ paths:
             schema: { $ref: '#/components/schemas/PrepareLaboratorySessionInput' }
       responses:
         '201': { description: Prepared Session with ETag version }
-        '404': { description: Source is missing or outside execution scope }
-        '409': { description: Source is ineligible or already has a non-cancelled Session }
-        '422': { description: Request validation failed }
+        '404': { description: Source missing or outside execution scope }
+        '409': { description: Source ineligible or already has a non-cancelled Session }
+        '422': { description: Validation failed }
+
   /laboratory-sessions/{sessionId}:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
@@ -88,36 +71,30 @@ paths:
       operationId: getLaboratorySession
       security: *auth
       responses:
-        '200': { description: Session detail and append-oriented timeline }
-        '404': { description: Session is missing, cross-School, or out of scope }
+        '200': { description: Session detail and append-oriented lifecycle timeline }
+        '404': { description: Missing, cross-School, or outside caller scope }
+
   /laboratory-sessions/{sessionId}/start:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: startLaboratorySession
-      summary: Start a prepared Session after source and availability revalidation
-      description: |
-        Requires sessions.start. The server re-resolves and fingerprints the source,
-        requires the School-local source date, and checks Unified Laboratory Availability
-        with only the canonical source itself excluded. Stale source evidence fails with
-        SESSION_SOURCE_CHANGED. No client-controlled blocker exclusion exists.
+      summary: Start a prepared Session after fail-closed source and availability revalidation
       security: *auth
       responses:
-        '200': { description: Session started and now contributes actual occupancy }
-        '409': { description: Source changed, source is not startable, or incompatible blockers remain }
+        '200': { description: Session started and contributes actual occupancy }
+        '409': { description: Source changed, source ineligible, wrong execution date, or availability blocked }
         '412': { description: Session version conflict }
         '428': { description: Missing or malformed If-Match }
+
   /laboratory-sessions/{sessionId}/end:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: endLaboratorySession
-      summary: End an in-progress Session
-      description: |
-        Requires sessions.end. The mutation records actual completion/interruption evidence
-        and atomically creates or confirms exactly one ActivityReport draft for the ended Session.
+      summary: End an in-progress Session and atomically create/confirm its ActivityReport draft
       security: *auth
       requestBody:
         required: true
@@ -125,18 +102,19 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EndLaboratorySessionInput' }
       responses:
-        '200': { description: Session ended with associated ActivityReport draft summary }
+        '200': { description: Ended Session with associated ActivityReport draft summary }
         '409': { description: Invalid lifecycle state }
         '412': { description: Session version conflict }
         '428': { description: Missing or malformed If-Match }
+
   /laboratory-sessions/{sessionId}/cancel:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: cancelLaboratorySession
-      summary: Cancel a prepared Session before execution starts
-      description: In-progress Sessions cannot be cancelled; end them as interrupted.
+      summary: Cancel a prepared Session before execution begins
+      description: An in-progress Session is ended as interrupted instead of cancelled.
       security: *auth
       requestBody:
         required: true
@@ -148,6 +126,64 @@ paths:
         '409': { description: Invalid lifecycle state }
         '412': { description: Session version conflict }
         '428': { description: Missing or malformed If-Match }
+
+  /laboratory-sessions/{sessionId}/observations:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: listSessionIssueObservations
+      summary: List immutable issue observations recorded for one Session
+      description: |
+        Requires session-observations.view. Users without session-observations.view-all
+        are limited to Sessions owned by their current membership.
+      security: *auth
+      responses:
+        '200': { description: Ordered observation evidence collection }
+        '404': { description: Session missing, cross-School, or outside caller scope }
+    post:
+      operationId: createSessionIssueObservation
+      summary: Record execution evidence without automatically creating an Incident
+      description: |
+        Requires session-observations.create. Evidence may be recorded while the Session
+        is in_progress, or after end only while the associated ActivityReport remains draft.
+        observedAt must fall inside the actual execution window. Device observations require
+        an eligible canonical Device in the same Laboratory. S3.5 deliberately refuses a
+        canonical Asset reference until the S4 Asset domain exists.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSessionIssueObservationInput' }
+      responses:
+        '201': { description: Immutable observation recorded; no Incident is created }
+        '404': { description: Session missing, cross-School, or outside caller scope }
+        '409': { description: Observation window is closed or observedAt is outside actual execution }
+        '422': { description: Invalid subject/reference or payload }
+
+  /session-observations/{observationId}/promote-incident:
+    parameters:
+      - { name: observationId, in: path, required: true, schema: { type: string, format: ulid } }
+    post:
+      operationId: promoteSessionIssueObservationToIncident
+      summary: Explicitly create and link one canonical Incident from an observation
+      description: |
+        Requires both session-observations.promote and incidents.create. Laboratory,
+        optional Device, occurredAt, reporter identity, and a stable correlation/submission
+        identifier are server-derived from canonical evidence. Retrying an already-linked
+        observation returns the same link and cannot create a second Incident.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PromoteObservationInput' }
+      responses:
+        '200': { description: Observation with exactly one linked Incident summary }
+        '403': { description: Required observation/Incident permission is missing }
+        '404': { description: Observation missing, cross-School, or outside caller scope }
+        '422': { description: Incident classification/content is invalid }
+
 components:
   parameters:
     IfMatch:
@@ -155,142 +191,16 @@ components:
       in: header
       required: true
       schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+
   schemas:
     LaboratorySessionSourceType:
       type: string
       enum: [schedule_occurrence, laboratory_reservation, priority_event]
+
     LaboratorySessionStatus:
       type: string
       enum: [prepared, in_progress, ended, cancelled]
-    LaboratorySessionActivityKind:
-      type: string
-      enum: [practical, theory, exam, other]
-    LaboratoryReference:
-      type: object
-      required: [id, code, name]
-      properties:
-        id: { type: string, format: ulid }
-        code: { type: string }
-        name: { type: string }
-    LaboratorySessionReportSummary:
-      type: object
-      required: [id, reportNumber, reportType, status, version]
-      properties:
-        id: { type: string, format: ulid }
-        reportNumber: { type: string }
-        reportType: { type: string, enum: [practicum, exam, workshop, general] }
-        status: { type: string, enum: [draft, submitted, revision_required, verified] }
-        version: { type: integer, minimum: 1 }
-    LaboratorySessionSourceRow:
-      type: object
-      required:
-        - sourceType
-        - sourceId
-        - sourceNumber
-        - date
-        - startsAt
-        - endsAt
-        - activityKind
-        - title
-        - subtitle
-        - laboratory
-        - responsibility
-        - session
-      properties:
-        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
-        sourceId: { type: string, format: ulid }
-        sourceNumber: { type: string }
-        date: { type: string, format: date }
-        startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]    PrepareLaboratorySessionInput:
-      type: object
-      additionalProperties: false
-      required: [sourceType, sourceId]
-      properties:
-        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
-        sourceId: { type: string, format: ulid }
-        openingCondition: { type: [string, 'null'], maxLength: 4000 }
-        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
-    EndLaboratorySessionInput:
-      type: object
-      additionalProperties: false
-      required: [endOutcome]
-      properties:
-        endOutcome: { type: string, enum: [completed, interrupted] }
-        closingCondition: { type: [string, 'null'], maxLength: 4000 }
-        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
-    ReasonInput:
-      type: object
-      additionalProperties: false
-      required: [reason]
-      properties:
-        reason: { type: string, minLength: 1, maxLength: 2000 }
- }
-        endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]    PrepareLaboratorySessionInput:
-      type: object
-      additionalProperties: false
-      required: [sourceType, sourceId]
-      properties:
-        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
-        sourceId: { type: string, format: ulid }
-        openingCondition: { type: [string, 'null'], maxLength: 4000 }
-        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
-    EndLaboratorySessionInput:
-      type: object
-      additionalProperties: false
-      required: [endOutcome]
-      properties:
-        endOutcome: { type: string, enum: [completed, interrupted] }
-        closingCondition: { type: [string, 'null'], maxLength: 4000 }
-        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
-    ReasonInput:
-      type: object
-      additionalProperties: false
-      required: [reason]
-      properties:
-        reason: { type: string, minLength: 1, maxLength: 2000 }
- }
-        activityKind: { $ref: '#/components/schemas/LaboratorySessionActivityKind' }
-        title: { type: string }
-        subtitle: { type: string }
-        laboratory:
-          allOf:
-            - $ref: '#/components/schemas/LaboratoryReference'
-            - type: object
-              required: [capacity, status]
-              properties:
-                capacity: { type: integer, minimum: 1 }
-                status: { type: string, enum: [active, inactive] }
-        responsibility:
-          type: object
-          required: [name, teacherId, academicClass, subject, plannedParticipantCount]
-          properties:
-            name: { type: string }
-            teacherId: { type: [string, 'null'], format: ulid }
-            academicClass:
-              oneOf:
-                - $ref: '#/components/schemas/LaboratoryReference'
-                - type: 'null'
-            subject:
-              oneOf:
-                - $ref: '#/components/schemas/LaboratoryReference'
-                - type: 'null'
-            plannedParticipantCount: { type: integer, minimum: 0, maximum: 32767 }
-        session:
-          oneOf:
-            - type: object
-              required: [id, sessionNumber, status, version, actualStartedAt, actualEndedAt, activityReport]
-              properties:
-                id: { type: string, format: ulid }
-                sessionNumber: { type: string }
-                status: { $ref: '#/components/schemas/LaboratorySessionStatus' }
-                version: { type: integer, minimum: 1 }
-                actualStartedAt: { type: [string, 'null'], format: date-time }
-                actualEndedAt: { type: [string, 'null'], format: date-time }
-                activityReport:
-                  oneOf:
-                    - $ref: '#/components/schemas/LaboratorySessionReportSummary'
-                    - type: 'null'
-            - type: 'null'
+
     PrepareLaboratorySessionInput:
       type: object
       additionalProperties: false
@@ -300,6 +210,7 @@ components:
         sourceId: { type: string, format: ulid }
         openingCondition: { type: [string, 'null'], maxLength: 4000 }
         operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+
     EndLaboratorySessionInput:
       type: object
       additionalProperties: false
@@ -308,9 +219,47 @@ components:
         endOutcome: { type: string, enum: [completed, interrupted] }
         closingCondition: { type: [string, 'null'], maxLength: 4000 }
         operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+
     ReasonInput:
       type: object
       additionalProperties: false
       required: [reason]
       properties:
         reason: { type: string, minLength: 1, maxLength: 2000 }
+
+    SessionObservationSubjectType:
+      type: string
+      enum: [device, asset, facility, other]
+
+    SessionObservationSeverity:
+      type: string
+      enum: [low, medium, high, critical]
+
+    CreateSessionIssueObservationInput:
+      type: object
+      additionalProperties: false
+      required: [subjectType, summary, severity, observedAt]
+      properties:
+        subjectType: { $ref: '#/components/schemas/SessionObservationSubjectType' }
+        referenceId:
+          type: [string, 'null']
+          description: Required only for subjectType=device. S3.5 rejects references for asset/facility/other.
+          maxLength: 128
+        summary: { type: string, minLength: 1, maxLength: 4000 }
+        severity: { $ref: '#/components/schemas/SessionObservationSeverity' }
+        observedAt: { type: string, format: date-time }
+
+    PromoteObservationInput:
+      type: object
+      additionalProperties: false
+      required: [category, priority, title, description, blocksLaboratoryOperation]
+      properties:
+        category:
+          type: string
+          enum: [hardware, software, network, electrical, peripheral, facility, cleanliness, security, other]
+        priority: { type: string, enum: [low, normal, high, critical] }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, minLength: 1, maxLength: 4000 }
+        impact: { type: [string, 'null'], maxLength: 2000 }
+        blocksLaboratoryOperation: { type: boolean }
+        stepsTaken: { type: [string, 'null'], maxLength: 2000 }
