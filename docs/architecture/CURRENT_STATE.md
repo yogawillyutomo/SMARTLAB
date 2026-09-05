@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** repository state including canonical S2 scheduling and S3.2 LaboratorySession backend
+**Baseline:** repository state including canonical S2 scheduling, S3.2 LaboratorySession, and S3.3 ActivityReport backend
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -29,6 +29,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Priority Events | canonical submitted/approved/rejected/cancelled workflow; submission may expose conflicts but approval is fail-closed until explicit reconciliation; canonical `/priority-events` frontend |
 | Timetable publication reconciliation | future-only schedule diff + operational impact preview; activation recalculates impact transactionally and refuses unresolved Reservation, Priority Event, Schedule Exception, prepared/in-progress source Session, Calendar, or Laboratory status drift |
 | LaboratorySession backend | PostgreSQL source-bound Session lifecycle over current ScheduleOccurrence / approved Reservation / approved Priority Event; source fingerprint revalidation, duplicate protection, actual occupancy, source-mutation guards, ETag versioning, and audit |
+| ActivityReport backend | PostgreSQL 1:1 normal Session report with atomic end→draft creation, report-type content validation, aggregate attendance evidence, draft/submitted/revision_required/verified lifecycle, controlled manual backfill, ETag versioning, and audit |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -36,7 +37,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
 
 - `/sessions` frontend execution workflow (still browser-local despite canonical Session backend);
-- ActivityReport / `/journals`;
+- `/journals` frontend compatibility workflow (ActivityReport backend is canonical, UI cutover is pending);
 - monitoring telemetry;
 - fixed assets;
 - stock/spare parts;
@@ -55,8 +56,8 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S3.3: ActivityReport backend with atomic Session-end draft creation and report lifecycle.
-2. Phase S3.4–S3.6: unified Pelaksanaan Lab frontend, explicit Incident/attachment linkage, offline draft sync/UAT.
+1. Phase S3.4: unified Pelaksanaan Lab frontend cutover over canonical Session + ActivityReport APIs.
+2. Phase S3.5–S3.6: explicit Incident/attachment linkage and offline draft sync/UAT.
 3. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
 4. Phase S5: Corrective Work Orders.
 5. Phase S6: PC monitoring telemetry.
@@ -97,7 +98,8 @@ The locked target boundary is:
 - S2.7 makes dated Schedule Exceptions canonical: only one-date cancel/relocate is supported; source occurrences remain immutable; relocation uses the same availability engine; exception cancellation fails closed if restoring the source plan would conflict.
 - S2.8 makes Priority Events canonical and closes timetable-revision safety: priority submission may record conflicts, approval requires a clear Unified Availability result, approved events become blockers, new TESSELA publications expose deterministic impact previews, active exceptions never migrate silently, operational writes share a School-scoped write mutex with activation, and activation fails closed until impact is clear.
 - S3.1 locks the execution/report boundary in [Laboratory Session and Activity Report Contract](./laboratory-session-activity-report-contract.md): normal Sessions originate only from current operational ScheduleOccurrence/approved Reservation/approved Priority Event; source evidence is revalidated before start; in-progress Sessions become operational occupancy; normal ended Sessions own exactly one ActivityReport draft; individual attendance stays outside SmartLab authority; Incident creation from execution observations is explicit; offline report drafts retain server/version authority.
-- S3.2 implements the LaboratorySession backend: PostgreSQL persistence/events, exact source provenance, Teacher.membership_id ownership for Guru schedule execution, School-local start gate, source fingerprint revalidation, actual in-progress availability blockers, source mutation/deactivation guards, timetable `active_session_conflict`, permissions, OpenAPI 0.20, and integration coverage. `/sessions` is intentionally not cut over until ActivityReport makes end→draft atomic in S3.3.
+- S3.2 implements the LaboratorySession backend: PostgreSQL persistence/events, exact source provenance, Teacher.membership_id ownership for Guru schedule execution, School-local start gate, source fingerprint revalidation, actual in-progress availability blockers, source mutation/deactivation guards, timetable `active_session_conflict`, permissions, OpenAPI 0.20, and integration coverage.
+- S3.3 implements the ActivityReport backend: normal Session end atomically creates exactly one draft; report variants are server-validated; aggregate attendance remains non-authoritative for individual students; manual backfill is elevated and never creates a fake Session; report lifecycle/version/audit are canonical under OpenAPI 0.21. Frontend `/sessions` and `/journals` remain transitional until S3.4.
 
 ## Validation contract
 

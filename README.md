@@ -55,11 +55,12 @@ The application is in a staged source-of-truth migration.
 - canonical Priority Events with explicit reconciliation before approval and a server-authoritative `/priority-events` workflow;
 - fail-closed TESSELA publication impact preview/reconciliation gate before activation, including operational drift, prepared/in-progress schedule Session commitments, and deterministic impact fingerprints;
 - canonical LaboratorySession backend with source-bound prepare/start/end/cancel lifecycle, source fingerprint revalidation, actual occupancy, server permissions, ETag versioning, and audit history;
+- canonical ActivityReport backend with atomic Session-end draft creation, report-type validation, aggregate attendance evidence, draft/submission/revision/verification lifecycle, controlled manual backfill, ETag versioning, and audit history;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-The `/sessions` and `/journals` frontend workflows remain browser-local/transitional even though the S3.2 LaboratorySession backend is now canonical. ActivityReport/journal persistence, unified Session frontend cutover, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain pending. The execution/report semantics are locked in [Laboratory Session and Activity Report Contract](docs/architecture/laboratory-session-activity-report-contract.md); the next backend slice is S3.3 ActivityReport.
+The `/sessions` and `/journals` frontend workflows remain browser-local/transitional even though the S3.2 LaboratorySession and S3.3 ActivityReport backends are now canonical. Unified Pelaksanaan Lab frontend cutover, observation/Incident linkage, attachments, offline report-draft sync, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain pending. The next slice is S3.4 unified Pelaksanaan Lab frontend.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 

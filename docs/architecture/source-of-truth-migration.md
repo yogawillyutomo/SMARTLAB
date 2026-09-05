@@ -33,6 +33,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Priority Events | PostgreSQL request/approval lifecycle + append-oriented events | canonical `/priority-events` UI | canonical |
 | Timetable publication impact/reconciliation | future occurrence diff + cross-domain operational impact gate | API-first administration + automated TESSELA revision UAT | canonical backend |
 | LaboratorySession execution backend | PostgreSQL source-bound prepare/start/end/cancel + event history; actual in-progress occupancy and source mutation guards | API-first; `/sessions` frontend remains local until S3.4 | canonical backend |
+| ActivityReport backend | PostgreSQL 1:1 normal Session reports + controlled manual backfill; report lifecycle, aggregate attendance, optimistic versioning, audit | API-first; `/journals` frontend remains local until S3.4 | canonical backend |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -43,8 +44,8 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/sessions` | laboratory execution UI | canonical LaboratorySession backend exists; ActivityReport + execution read-model/frontend cutover still required |
-| `/journals` | execution report/journal | session/report domain |
+| `/sessions` | laboratory execution UI | canonical LaboratorySession + ActivityReport backends exist; unified execution read-model/frontend cutover still required |
+| `/journals` | execution report/journal | canonical ActivityReport backend exists; compatibility/deep-link frontend cutover still required |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
 | `/assets` | fixed assets | asset domain |
 | `/stock` | stock/spare parts | inventory + immutable transaction domain |
@@ -274,11 +275,20 @@ Delivered in S3.2:
 - canonical Session permission catalog, tenant scoping, audit timeline, OpenAPI 0.20, and integration tests;
 - existing availability web gateway accepts `laboratory_session` evidence so S2 frontend flows remain compatible.
 
-S3.2 intentionally does **not** cut over `/sessions` and does not implement ActivityReport. The end endpoint records report-pending evidence; S3.3 must make normal end + ActivityReport draft atomic before the frontend becomes canonical.
+S3.2 intentionally did **not** cut over `/sessions` while ActivityReport was absent.
+
+Delivered in S3.3:
+
+- PostgreSQL `activity_reports` + append-oriented `activity_report_events`;
+- exactly one normal report per ended Session, created/confirmed atomically inside the Session-end transaction;
+- report types `practicum`, `exam`, `workshop`, and `general` with server-side type-specific content validation;
+- draft → submitted → revision_required → draft and submitted → verified lifecycle with ETag/If-Match versioning;
+- aggregate present/absent evidence without individual-student attendance authority;
+- elevated manual backfill path that preserves historical evidence without inventing a fake Session;
+- own/all authorization scope, report permission catalog, append-oriented audit timeline, OpenAPI 0.21, and integration coverage.
 
 Next slices:
 
-- S3.3 ActivityReport backend;
 - S3.4 unified Pelaksanaan Lab frontend cutover;
 - S3.5 explicit observation/Incident linkage + attachments;
 - S3.6 offline draft sync + operational UAT.
