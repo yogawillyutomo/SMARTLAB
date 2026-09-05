@@ -9,7 +9,7 @@ const payload={data:{
  available:false,state:'blocked',blockerCount:1,
  blockers:[{type:'calendar_event',sourceId:'01ARZ3NDEKTSV4RRFFQ69G5FAW',title:'Maintenance',allDay:false,startsAt:'10:00:00',endsAt:'12:00:00',details:{category:'maintenance',scope:'laboratory'}}],
  noticeCount:0,notices:[],
- sourceCoverage:{schedule:{status:'covered',activePublicationCount:1},operationalCalendar:{status:'covered'},laboratoryStatus:{status:'covered'}},
+ sourceCoverage:{schedule:{status:'covered',activePublicationCount:1},operationalCalendar:{status:'covered'},reservations:{status:'covered'},laboratoryStatus:{status:'covered'}},
  issues:[]
 }};
 
