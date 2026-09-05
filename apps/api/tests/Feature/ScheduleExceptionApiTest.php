@@ -191,12 +191,14 @@ class ScheduleExceptionApiTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors(['replacementLaboratoryId']);
 
+        $busyMembership = $this->membershipFor($school);
+
         LaboratoryReservation::query()->create([
             'school_id' => $school->id,
             'reservation_number' => 'RSV-20260914-BUSYLAB1',
             'laboratory_id' => $fixture['labB']->id,
-            'requester_user_id' => User::factory()->create()->id,
-            'requester_membership_id' => $this->membershipFor($school)->id,
+            'requester_user_id' => $busyMembership->user_id,
+            'requester_membership_id' => $busyMembership->id,
             'requester_name_snapshot' => 'Guru Booking',
             'requester_email_snapshot' => 'booking@example.test',
             'reservation_date' => '2026-09-14',
