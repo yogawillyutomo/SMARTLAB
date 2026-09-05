@@ -1,0 +1,111 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Laboratory Reservation API module
+  version: 0.17.0
+paths:
+  /laboratory-reservations:
+    get:
+      operationId: listLaboratoryReservations
+      summary: List tenant-scoped Laboratory reservations within a bounded date range
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ReservationStatus' } }
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200': { description: Paginated reservation collection }
+    post:
+      operationId: createLaboratoryReservation
+      summary: Submit a reservation after a serialized canonical availability check
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReservationInput' }
+      responses:
+        '201': { description: Submitted reservation; response carries ETag equal to entity version }
+        '409': { description: Requested window is not safely available }
+  /laboratory-reservations/{reservationId}:
+    parameters:
+      - { name: reservationId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getLaboratoryReservation
+      security: *auth
+      responses:
+        '200': { description: Reservation detail with audit timeline }
+        '404': { description: Not found or not visible to the active membership }
+  /laboratory-reservations/{reservationId}/approve:
+    parameters:
+      - { name: reservationId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: approveLaboratoryReservation
+      summary: Re-check canonical availability and approve a submitted reservation
+      security: *auth
+      responses:
+        '200': { description: Approved reservation }
+        '409': { description: State conflict or availability changed since submission }
+        '412': { description: Reservation version conflict }
+        '428': { description: Missing/invalid If-Match }
+  /laboratory-reservations/{reservationId}/reject:
+    parameters:
+      - { name: reservationId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: rejectLaboratoryReservation
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Rejected reservation }
+  /laboratory-reservations/{reservationId}/cancel:
+    parameters:
+      - { name: reservationId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: cancelLaboratoryReservation
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Cancelled reservation; slot no longer blocks availability }
+components:
+  schemas:
+    ReservationStatus:
+      type: string
+      enum: [submitted, approved, rejected, cancelled]
+    CreateReservationInput:
+      type: object
+      additionalProperties: false
+      required: [laboratoryId, date, startsAt, endsAt, activity, participants, picName]
+      properties:
+        laboratoryId: { type: string, format: ulid }
+        date: { type: string, format: date }
+        startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
+        endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
+        activity: { type: string, minLength: 1, maxLength: 255 }
+        participants: { type: integer, minimum: 1, maximum: 1000 }
+        deviceNeeds: { type: [string, 'null'], maxLength: 1000 }
+        notes: { type: [string, 'null'], maxLength: 4000 }
+        picName: { type: string, minLength: 1, maxLength: 255 }
