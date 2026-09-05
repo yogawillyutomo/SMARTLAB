@@ -13,7 +13,6 @@ Validasi saat ingestion hanya membuktikan bahwa payload TESSELA valid pada saat 
 - Priority Event approved;
 - Calendar blocker dibuat;
 - Laboratory dinonaktifkan;
-- kapasitas Laboratory diturunkan.
 
 Karena itu `validated` tidak otomatis berarti `safe to activate now`.
 
@@ -114,12 +113,6 @@ Ini memaksa operator meninjau publikasi baru terhadap closure/maintenance operas
 ### Laboratory status drift
 
 Candidate occurrence yang menunjuk Laboratory yang sekarang inactive memblokir activation, walaupun Laboratory masih active saat ingestion.
-
-### Laboratory capacity drift
-
-Jika current AcademicClass student count diketahui dan sekarang melebihi current Laboratory capacity, activation diblokir.
-
-Ini menutup drift antara validation dan activation.
 
 ## Deterministic impact fingerprint
 
