@@ -694,7 +694,7 @@ export function SessionsPage() {
 
   function openAttachment(attachment: ActivityReportAttachmentDto) {
     if (!attachment.available) {
-      toast('File bukti sedang tidak tersedia. Metadata tetap dipertahankan.', 'warning');
+      toast('File bukti sedang tidak tersedia. Metadata tetap dipertahankan.', 'info');
       return;
     }
     window.open(activityReportAttachmentDownloadUrl(attachment.reportId, attachment.id), '_blank', 'noopener,noreferrer');
