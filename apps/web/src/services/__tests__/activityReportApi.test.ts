@@ -70,7 +70,7 @@ describe('activity report API contract', () => {
 
   it('uses canonical report endpoints and version preconditions', async () => {
     const get = vi.fn(async () => ({ data: [report], meta: { page: 1, perPage: 500, total: 1, lastPage: 1, from: '2026-09-01', to: '2026-09-30' } })) as ApiClient['get'];
-    const post = vi.fn(async (path: string, body?: unknown) => path.endsWith('/sync-draft')
+    const post = vi.fn(async (path: string) => path.endsWith('/sync-draft')
       ? {
           data: { ...report, version: 2 },
           sync: {
