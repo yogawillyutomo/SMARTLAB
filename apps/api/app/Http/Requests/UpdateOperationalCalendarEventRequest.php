@@ -2,10 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\RejectsUnknownFields;
 use Illuminate\Validation\Validator;
 
 class UpdateOperationalCalendarEventRequest extends CreateOperationalCalendarEventRequest
 {
+    use RejectsUnknownFields;
     private const UPDATE_FIELDS = ['scope','laboratoryId','category','availabilityEffect','title','description','startsOn','endsOn','allDay','startsAt','endsAt'];
 
     public function rules(): array
