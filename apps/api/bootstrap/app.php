@@ -10,6 +10,7 @@ use App\Domain\Layout\LayoutDomainException;
 use App\Domain\Schedule\PublishedTimetableException;
 use App\Domain\Calendar\OperationalCalendarException;
 use App\Domain\Availability\LaboratoryAvailabilityException;
+use App\Domain\Reservation\LaboratoryReservationException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -170,5 +171,21 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => $exception->getMessage(),
                 'code' => $exception->errorCode,
             ], $exception->status);
+        });
+        $exceptions->render(function (LaboratoryReservationException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->details !== []) {
+                $body['details'] = $exception->details;
+            }
+
+            return response()->json($body, $exception->status);
         });
     })->create();
