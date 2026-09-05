@@ -55,11 +55,11 @@ These routes/domains still rely wholly or materially on browser-local repositori
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
 1. Phase S3: Laboratory Session + Journal.
-4. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-5. Phase S5: Corrective Work Orders.
-6. Phase S6: PC monitoring telemetry.
-7. Phase S7: Notifications, Reporting, final Dashboard/global search.
-8. Phase S8: remove browser-local business persistence and compatibility layers.
+2. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+3. Phase S5: Corrective Work Orders.
+4. Phase S6: PC monitoring telemetry.
+5. Phase S7: Notifications, Reporting, final Dashboard/global search.
+6. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
