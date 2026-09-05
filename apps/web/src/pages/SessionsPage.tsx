@@ -16,6 +16,11 @@ import {
   Download,
   Plus,
   XCircle,
+  AlertTriangle,
+  Paperclip,
+  Upload,
+  ExternalLink,
+  Link2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { hasServerPermission } from '@/lib/authIdentity';
@@ -48,7 +53,24 @@ import {
   type ActivityReportType,
   type CreateActivityReportBackfillInput,
   type UpdateActivityReportInput,
+  type ActivityReportAttachmentDto,
+  activityReportAttachmentDownloadUrl,
 } from '@/services/activityReportApi';
+import {
+  sessionObservationGateway,
+  SessionObservationContractError,
+  type SessionIssueObservationDto,
+  type SessionObservationSubjectType,
+  type SessionObservationSeverity,
+} from '@/services/sessionObservationApi';
+import {
+  incidentGateway,
+  INCIDENT_CATEGORIES,
+  INCIDENT_PRIORITIES,
+  type IncidentCategory,
+  type IncidentPriority,
+  type IncidentReportingDeviceDto,
+} from '@/services/incidentApi';
 
 type TabKey = 'today' | 'in-progress' | 'awaiting-report' | 'history';
 
@@ -63,6 +85,39 @@ const SOURCE_LABELS: Record<LaboratorySessionSourceDto['sourceType'], string> = 
   schedule_occurrence: 'Jadwal TESSELA',
   laboratory_reservation: 'Reservasi',
   priority_event: 'Kegiatan Prioritas',
+};
+
+const OBSERVATION_SUBJECT_LABELS: Record<SessionObservationSubjectType, string> = {
+  device: 'Perangkat',
+  asset: 'Aset / Perlengkapan',
+  facility: 'Fasilitas',
+  other: 'Lainnya',
+};
+
+const OBSERVATION_SEVERITY_LABELS: Record<SessionObservationSeverity, string> = {
+  low: 'Rendah',
+  medium: 'Sedang',
+  high: 'Tinggi',
+  critical: 'Kritis',
+};
+
+const INCIDENT_CATEGORY_LABELS: Record<IncidentCategory, string> = {
+  hardware: 'Hardware',
+  software: 'Software',
+  network: 'Jaringan',
+  electrical: 'Kelistrikan',
+  peripheral: 'Periferal',
+  facility: 'Fasilitas',
+  cleanliness: 'Kebersihan',
+  security: 'Keamanan',
+  other: 'Lainnya',
+};
+
+const INCIDENT_PRIORITY_LABELS: Record<IncidentPriority, string> = {
+  low: 'Rendah',
+  normal: 'Normal',
+  high: 'Tinggi',
+  critical: 'Kritis',
 };
 
 const TYPE_FIELDS: Record<ActivityReportType, { key: string; label: string }[]> = {
@@ -114,6 +169,24 @@ interface ReportFormState {
   typeSpecificContent: Record<string, string>;
 }
 
+interface ObservationFormState {
+  subjectType: SessionObservationSubjectType;
+  referenceId: string;
+  summary: string;
+  severity: SessionObservationSeverity;
+  observedAt: string;
+}
+
+interface PromoteObservationFormState {
+  category: IncidentCategory;
+  priority: IncidentPriority;
+  title: string;
+  description: string;
+  impact: string;
+  blocksLaboratoryOperation: boolean;
+  stepsTaken: string;
+}
+
 interface BackfillFormState extends ReportFormState {
   laboratoryId: string;
   occurredOn: string;
@@ -131,6 +204,17 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function localDateTimeValue(date = new Date()): string {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+}
+
+function severityTone(severity: SessionObservationSeverity): 'muted' | 'warning' | 'danger' {
+  if (severity === 'critical' || severity === 'high') return 'danger';
+  if (severity === 'medium') return 'warning';
+  return 'muted';
 }
 
 function emptyCommon(): Record<string, string> {
@@ -166,14 +250,17 @@ function nullableCount(value: string): number | null {
 function issueMessage(error: unknown): string {
   if (error instanceof LaboratorySessionContractError) return 'Respons Pelaksanaan Lab dari server tidak sesuai kontrak.';
   if (error instanceof ActivityReportContractError) return 'Respons Laporan Pelaksanaan dari server tidak sesuai kontrak.';
+  if (error instanceof SessionObservationContractError) return 'Respons Temuan Pelaksanaan dari server tidak sesuai kontrak.';
   if (error instanceof ApiClientError) {
     if (error.code === 'LABORATORY_SESSION_VERSION_CONFLICT' || error.code === 'ACTIVITY_REPORT_VERSION_CONFLICT') {
       return 'Data sudah berubah di server. Data terbaru telah dimuat ulang.';
     }
     if (error.code === 'SESSION_SOURCE_CHANGED') return 'Sumber pelaksanaan berubah. Periksa jadwal/reservasi terbaru sebelum memulai.';
-    if (error.code === 'LABORATORY_SESSION_STATE_CONFLICT' || error.code === 'ACTIVITY_REPORT_STATE_CONFLICT') {
+    if (error.code === 'LABORATORY_SESSION_STATE_CONFLICT' || error.code === 'ACTIVITY_REPORT_STATE_CONFLICT'
+      || error.code === 'SESSION_ISSUE_OBSERVATION_STATE_CONFLICT') {
       return 'Status data sudah berubah dan aksi ini tidak lagi berlaku.';
     }
+    if (error.code === 'ACTIVITY_REPORT_ATTACHMENT_UNAVAILABLE') return 'File bukti sedang tidak tersedia, tetapi metadata laporan tetap dapat dibaca.';
     if (error.status === 403) return 'Anda tidak memiliki izin untuk aksi ini.';
     if (error.status === 422) return Object.values(error.errors ?? {}).flat()[0] ?? 'Data belum valid.';
     if (error.kind === 'network') return 'Layanan Pelaksanaan Lab tidak dapat dijangkau.';
@@ -225,6 +312,11 @@ export function SessionsPage() {
   const canBackfill = hasServerPermission(user, 'activity-reports.create-backfill');
   const canExportReports = hasServerPermission(user, 'activity-reports.export');
 
+  const canViewObservations = hasServerPermission(user, 'session-observations.view');
+  const canCreateObservation = hasServerPermission(user, 'session-observations.create');
+  const canPromoteObservation = hasServerPermission(user, 'session-observations.promote')
+    && hasServerPermission(user, 'incidents.create');
+
   const today = useMemo(() => dateKey(new Date()), []);
   const defaultFrom = useMemo(() => dateKey(addDays(new Date(), -90)), []);
   const [historyFrom, setHistoryFrom] = useState(defaultFrom);
@@ -254,12 +346,38 @@ export function SessionsPage() {
   const [cancelSession, setCancelSession] = useState<LaboratorySessionDto | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
+  const [observations, setObservations] = useState<SessionIssueObservationDto[]>([]);
+  const [observationSession, setObservationSession] = useState<LaboratorySessionDto | null>(null);
+  const [observationForm, setObservationForm] = useState<ObservationFormState>({
+    subjectType: 'other',
+    referenceId: '',
+    summary: '',
+    severity: 'medium',
+    observedAt: localDateTimeValue(),
+  });
+  const [observationDevices, setObservationDevices] = useState<IncidentReportingDeviceDto[]>([]);
+  const [observationDeviceSearch, setObservationDeviceSearch] = useState('');
+  const [observationDeviceBusy, setObservationDeviceBusy] = useState(false);
+  const [promoteObservation, setPromoteObservation] = useState<SessionIssueObservationDto | null>(null);
+  const [promoteForm, setPromoteForm] = useState<PromoteObservationFormState>({
+    category: 'other',
+    priority: 'normal',
+    title: '',
+    description: '',
+    impact: '',
+    blocksLaboratoryOperation: false,
+    stepsTaken: '',
+  });
+
   const [sessionDetail, setSessionDetail] = useState<LaboratorySessionDto | null>(null);
   const [reportDetail, setReportDetail] = useState<ActivityReportDto | null>(null);
   const [editingReport, setEditingReport] = useState<ActivityReportDto | null>(null);
   const [reportEditForm, setReportEditForm] = useState<ReportFormState | null>(null);
   const [revisionReport, setRevisionReport] = useState<ActivityReportDto | null>(null);
   const [revisionReason, setRevisionReason] = useState('');
+  const [attachments, setAttachments] = useState<ActivityReportAttachmentDto[]>([]);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [backfillForm, setBackfillForm] = useState<BackfillFormState>({
     reportType: 'general',
@@ -328,6 +446,31 @@ export function SessionsPage() {
     }
     void activityReportGateway.show(reportId).then(setReportDetail).catch((cause) => setError(issueMessage(cause)));
   }, [canViewReports, loading, reports, searchParams]);
+
+  useEffect(() => {
+    if (!sessionDetail || !canViewObservations) {
+      setObservations([]);
+      return;
+    }
+    let active = true;
+    void sessionObservationGateway.list(sessionDetail.id)
+      .then((items) => { if (active) setObservations(items); })
+      .catch((cause) => { if (active) toast(issueMessage(cause), 'error'); });
+    return () => { active = false; };
+  }, [canViewObservations, sessionDetail]);
+
+  useEffect(() => {
+    const report = editingReport ?? reportDetail;
+    if (!report || !canViewReports) {
+      setAttachments([]);
+      return;
+    }
+    let active = true;
+    void activityReportGateway.attachments(report.id)
+      .then((items) => { if (active) setAttachments(items); })
+      .catch((cause) => { if (active) toast(issueMessage(cause), 'error'); });
+    return () => { active = false; };
+  }, [canViewReports, editingReport, reportDetail]);
 
   const inProgress = useMemo(() => sessions.filter((session) => session.status === 'in_progress'), [sessions]);
   const awaiting = useMemo(
@@ -425,6 +568,136 @@ export function SessionsPage() {
       setCancelSession(null);
       setCancelReason('');
     }, 'Pelaksanaan dibatalkan.');
+  }
+
+  function openObservationDialog(session: LaboratorySessionDto) {
+    setObservationSession(session);
+    setObservationDevices([]);
+    setObservationDeviceSearch('');
+    setObservationForm({
+      subjectType: 'other',
+      referenceId: '',
+      summary: '',
+      severity: 'medium',
+      observedAt: localDateTimeValue(),
+    });
+  }
+
+  async function searchObservationDevices() {
+    if (!observationSession || observationDeviceSearch.trim().length < 2) return;
+    setObservationDeviceBusy(true);
+    try {
+      const result = await incidentGateway.reportingDevices(observationSession.laboratory.id, observationDeviceSearch);
+      setObservationDevices(result.data);
+      if (observationForm.referenceId && !result.data.some((device) => device.id === observationForm.referenceId)) {
+        setObservationForm((current) => ({ ...current, referenceId: '' }));
+      }
+    } catch (cause) {
+      toast(issueMessage(cause), 'error');
+    } finally {
+      setObservationDeviceBusy(false);
+    }
+  }
+
+  async function createObservation() {
+    if (!observationSession || !canCreateObservation || observationForm.summary.trim() === '') return;
+    if (observationForm.subjectType === 'device' && observationForm.referenceId === '') {
+      toast('Pilih Device canonical untuk temuan perangkat.', 'error');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await sessionObservationGateway.create(observationSession.id, {
+        subjectType: observationForm.subjectType,
+        referenceId: observationForm.subjectType === 'device' ? observationForm.referenceId : null,
+        summary: observationForm.summary,
+        severity: observationForm.severity,
+        observedAt: new Date(observationForm.observedAt).toISOString(),
+      });
+      setObservationSession(null);
+      setObservations(await sessionObservationGateway.list(observationSession.id));
+      toast('Temuan tersimpan sebagai evidence. Incident belum dibuat.', 'success');
+    } catch (cause) {
+      toast(issueMessage(cause), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openPromotion(observation: SessionIssueObservationDto) {
+    const category: IncidentCategory = observation.subjectType === 'device'
+      ? 'hardware'
+      : observation.subjectType === 'facility' ? 'facility' : 'other';
+    const priority: IncidentPriority = observation.severity === 'critical'
+      ? 'critical'
+      : observation.severity === 'high' ? 'high' : 'normal';
+    setPromoteObservation(observation);
+    setPromoteForm({
+      category,
+      priority,
+      title: observation.referenceCode
+        ? `${observation.referenceCode}: ${observation.summary.slice(0, 150)}`
+        : observation.summary.slice(0, 180),
+      description: `Temuan Pelaksanaan Lab: ${observation.summary}`,
+      impact: '',
+      blocksLaboratoryOperation: observation.severity === 'critical',
+      stepsTaken: '',
+    });
+  }
+
+  async function promoteToIncident() {
+    if (!promoteObservation || !canPromoteObservation || promoteForm.title.trim() === '' || promoteForm.description.trim() === '') return;
+    setBusy(true);
+    try {
+      const updated = await sessionObservationGateway.promote(promoteObservation.id, {
+        category: promoteForm.category,
+        priority: promoteForm.priority,
+        title: promoteForm.title,
+        description: promoteForm.description,
+        impact: promoteForm.impact || null,
+        blocksLaboratoryOperation: promoteForm.blocksLaboratoryOperation,
+        stepsTaken: promoteForm.stepsTaken || null,
+      });
+      setObservations((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setPromoteObservation(null);
+      toast(`Incident ${updated.incident?.ticketNumber ?? ''} dibuat dan ditautkan secara eksplisit.`, 'success');
+    } catch (cause) {
+      toast(issueMessage(cause), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadAttachment(report: ActivityReportDto) {
+    if (!attachmentFile || !canEditReport || report.status !== 'draft') return;
+    setAttachmentBusy(true);
+    try {
+      await activityReportGateway.uploadAttachment(report.id, report.version, attachmentFile);
+      const fresh = await activityReportGateway.show(report.id);
+      const items = await activityReportGateway.attachments(report.id);
+      setAttachments(items);
+      setAttachmentFile(null);
+      if (editingReport?.id === report.id) setEditingReport(fresh);
+      if (reportDetail?.id === report.id) setReportDetail(fresh);
+      toast('Bukti tersimpan di private storage dan checksum SHA-256 tercatat.', 'success');
+      await load();
+    } catch (cause) {
+      toast(issueMessage(cause), 'error');
+      const fresh = await activityReportGateway.show(report.id).catch(() => null);
+      if (fresh && editingReport?.id === report.id) setEditingReport(fresh);
+      if (fresh && reportDetail?.id === report.id) setReportDetail(fresh);
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  function openAttachment(attachment: ActivityReportAttachmentDto) {
+    if (!attachment.available) {
+      toast('File bukti sedang tidak tersedia. Metadata tetap dipertahankan.', 'warning');
+      return;
+    }
+    window.open(activityReportAttachmentDownloadUrl(attachment.reportId, attachment.id), '_blank', 'noopener,noreferrer');
   }
 
   async function openReport(report: ActivityReportDto) {
@@ -933,9 +1206,127 @@ export function SessionsPage() {
               <Input label="Sistem Presensi Eksternal" value={reportEditForm.externalAttendanceSystem} onChange={(event) => setReportEditForm({ ...reportEditForm, externalAttendanceSystem: event.target.value })} placeholder="Contoh: HADIRA" />
               <Input label="Referensi Presensi Eksternal" value={reportEditForm.externalAttendanceReferenceId} onChange={(event) => setReportEditForm({ ...reportEditForm, externalAttendanceReferenceId: event.target.value })} />
             </div>
+            {editingReport && (
+              <div className="rounded-xl border border-base-700 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-primary"><Paperclip className="h-4 w-4" /> Lampiran Bukti</h3>
+                    <p className="mt-1 text-xs text-ink-muted">Private storage · JPEG/PNG/WebP/PDF · maksimal 10 MiB per file.</p>
+                  </div>
+                  <Badge tone="muted">{attachments.length} file</Badge>
+                </div>
+                <div className="space-y-2">
+                  {attachments.map((attachment) => (
+                    <div key={attachment.id} className="flex items-center justify-between gap-3 rounded-lg bg-base-700/30 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-ink-primary">{attachment.fileName}</p>
+                        <p className="text-xs text-ink-muted">{attachment.mediaType} · {(attachment.sizeBytes / 1024).toFixed(1)} KiB · SHA-256 {attachment.sha256.slice(0, 12)}…</p>
+                      </div>
+                      <Button type="button" size="sm" variant="ghost" disabled={!attachment.available} icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => openAttachment(attachment)}>Buka</Button>
+                    </div>
+                  ))}
+                  {attachments.length === 0 && <p className="text-xs text-ink-muted">Belum ada lampiran.</p>}
+                </div>
+                {editingReport.status === 'draft' && canEditReport && (
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="flex-1">
+                      <Input
+                        label="Tambah Bukti"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
+                      />
+                    </div>
+                    <Button type="button" variant="secondary" loading={attachmentBusy} disabled={!attachmentFile} icon={<Upload className="h-4 w-4" />} onClick={() => void uploadAttachment(editingReport)}>Upload</Button>
+                  </div>
+                )}
+              </div>
+            )}
             {editingReport && canSubmitReport && <div className="flex justify-end"><Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void saveAndSubmitReport()} disabled={busy}>Simpan lalu Ajukan</Button></div>}
           </div>
         )}
+      </FormDialog>
+
+      <FormDialog
+        open={Boolean(observationSession)}
+        onClose={() => setObservationSession(null)}
+        title="Catat Temuan Pelaksanaan"
+        description="Temuan adalah evidence pelaksanaan. Menyimpan form ini tidak membuat Incident."
+        onSubmit={() => void createObservation()}
+        submitLabel="Simpan Temuan"
+        loading={busy}
+        submitDisabled={observationForm.summary.trim() === '' || (observationForm.subjectType === 'device' && observationForm.referenceId === '')}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Select
+              label="Jenis Temuan"
+              value={observationForm.subjectType}
+              options={Object.entries(OBSERVATION_SUBJECT_LABELS).map(([value, label]) => ({ value, label }))}
+              onChange={(event) => {
+                const subjectType = event.target.value as SessionObservationSubjectType;
+                setObservationForm({ ...observationForm, subjectType, referenceId: '' });
+                setObservationDevices([]);
+              }}
+            />
+            <Select
+              label="Tingkat Keparahan"
+              value={observationForm.severity}
+              options={Object.entries(OBSERVATION_SEVERITY_LABELS).map(([value, label]) => ({ value, label }))}
+              onChange={(event) => setObservationForm({ ...observationForm, severity: event.target.value as SessionObservationSeverity })}
+            />
+          </div>
+          {observationForm.subjectType === 'device' && (
+            <div className="space-y-2 rounded-xl border border-base-700 p-3">
+              <div className="flex gap-2">
+                <div className="flex-1"><Input label="Cari Device Canonical" value={observationDeviceSearch} onChange={(event) => setObservationDeviceSearch(event.target.value)} placeholder="Minimal 2 karakter kode Device" /></div>
+                <Button type="button" variant="secondary" className="mt-7" loading={observationDeviceBusy} disabled={observationDeviceSearch.trim().length < 2} onClick={() => void searchObservationDevices()}>Cari</Button>
+              </div>
+              <Select
+                label="Device"
+                value={observationForm.referenceId}
+                placeholder="Pilih Device"
+                options={observationDevices.map((device) => ({ value: device.id, label: `${device.deviceCode} · ${device.deviceType}` }))}
+                onChange={(event) => setObservationForm({ ...observationForm, referenceId: event.target.value })}
+              />
+            </div>
+          )}
+          {observationForm.subjectType === 'asset' && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground">
+              Domain Asset canonical baru masuk S4. S3.5 menyimpan temuan Asset sebagai evidence teks tanpa mengarang reference ID.
+            </div>
+          )}
+          <Input label="Waktu Temuan" type="datetime-local" value={observationForm.observedAt} onChange={(event) => setObservationForm({ ...observationForm, observedAt: event.target.value })} />
+          <Textarea label="Ringkasan Temuan" required maxLength={4000} value={observationForm.summary} onChange={(event) => setObservationForm({ ...observationForm, summary: event.target.value })} />
+        </div>
+      </FormDialog>
+
+      <FormDialog
+        open={Boolean(promoteObservation)}
+        onClose={() => setPromoteObservation(null)}
+        title="Promosikan Temuan menjadi Incident"
+        description="Aksi eksplisit ini membuat tepat satu tiket Incident dan menautkannya kembali ke evidence Pelaksanaan."
+        onSubmit={() => void promoteToIncident()}
+        submitLabel="Buat & Tautkan Incident"
+        loading={busy}
+        submitDisabled={promoteForm.title.trim() === '' || promoteForm.description.trim() === ''}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Select label="Kategori" value={promoteForm.category} options={INCIDENT_CATEGORIES.map((value) => ({ value, label: INCIDENT_CATEGORY_LABELS[value] }))} onChange={(event) => setPromoteForm({ ...promoteForm, category: event.target.value as IncidentCategory })} />
+            <Select label="Prioritas" value={promoteForm.priority} options={INCIDENT_PRIORITIES.map((value) => ({ value, label: INCIDENT_PRIORITY_LABELS[value] }))} onChange={(event) => setPromoteForm({ ...promoteForm, priority: event.target.value as IncidentPriority })} />
+          </div>
+          <Input label="Judul Incident" required maxLength={200} value={promoteForm.title} onChange={(event) => setPromoteForm({ ...promoteForm, title: event.target.value })} />
+          <Textarea label="Deskripsi" required maxLength={4000} value={promoteForm.description} onChange={(event) => setPromoteForm({ ...promoteForm, description: event.target.value })} />
+          <Textarea label="Dampak" maxLength={2000} value={promoteForm.impact} onChange={(event) => setPromoteForm({ ...promoteForm, impact: event.target.value })} />
+          <Textarea label="Langkah yang Sudah Dilakukan" maxLength={2000} value={promoteForm.stepsTaken} onChange={(event) => setPromoteForm({ ...promoteForm, stepsTaken: event.target.value })} />
+          <label className="flex items-center gap-2 text-sm text-ink-secondary">
+            <input type="checkbox" checked={promoteForm.blocksLaboratoryOperation} onChange={(event) => setPromoteForm({ ...promoteForm, blocksLaboratoryOperation: event.target.checked })} />
+            Menghambat operasional laboratorium
+          </label>
+        </div>
       </FormDialog>
 
       <FormDialog open={Boolean(revisionReport)} onClose={() => setRevisionReport(null)} title="Minta Perbaikan Laporan" onSubmit={() => void requestRevision()} submitLabel="Kirim untuk Perbaikan" loading={busy} submitDisabled={revisionReason.trim() === ''}>
@@ -991,6 +1382,44 @@ export function SessionsPage() {
             </div>
             {sessionDetail.openingCondition && <div><p className="text-xs text-ink-muted">Kondisi Awal</p><p className="text-ink-secondary">{sessionDetail.openingCondition}</p></div>}
             {sessionDetail.closingCondition && <div><p className="text-xs text-ink-muted">Kondisi Akhir</p><p className="text-ink-secondary">{sessionDetail.closingCondition}</p></div>}
+            {canViewObservations && (
+              <div className="rounded-xl border border-base-700 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 font-semibold text-ink-primary"><AlertTriangle className="h-4 w-4" /> Temuan Pelaksanaan</h3>
+                    <p className="mt-1 text-xs text-ink-muted">Evidence tidak otomatis menjadi Incident.</p>
+                  </div>
+                  {canCreateObservation && (sessionDetail.status === 'in_progress' || (sessionDetail.status === 'ended' && sessionDetail.activityReport?.status === 'draft')) && (
+                    <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => openObservationDialog(sessionDetail)}>Catat Temuan</Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {observations.length === 0 && <p className="text-xs text-ink-muted">Belum ada temuan tercatat.</p>}
+                  {observations.map((observation) => (
+                    <div key={observation.id} className="rounded-lg bg-base-700/30 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={severityTone(observation.severity)}>{OBSERVATION_SEVERITY_LABELS[observation.severity]}</Badge>
+                        <Badge tone="neutral">{OBSERVATION_SUBJECT_LABELS[observation.subjectType]}</Badge>
+                        {observation.referenceCode && <span className="text-xs font-semibold text-accent-content">{observation.referenceCode}</span>}
+                      </div>
+                      <p className="mt-2 text-ink-secondary">{observation.summary}</p>
+                      <p className="mt-1 text-xs text-ink-muted">{relativeTime(observation.observedAt)} · {observation.observedBy.name}</p>
+                      <div className="mt-2">
+                        {observation.incident ? (
+                          <Button size="sm" variant="ghost" icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => window.open(`/incidents/${observation.incident?.id}`, '_blank', 'noopener,noreferrer')}>
+                            {observation.incident.ticketNumber}
+                          </Button>
+                        ) : canPromoteObservation ? (
+                          <Button size="sm" variant="secondary" icon={<Link2 className="h-3.5 w-3.5" />} onClick={() => openPromotion(observation)}>Promosikan ke Incident</Button>
+                        ) : (
+                          <Badge tone="muted">Belum ditautkan</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <ActivityTimeline items={sessionDetail.timeline.map((event) => ({
               label: sessionTimelineLabel(event),
               by: event.actorName,
@@ -1021,6 +1450,24 @@ export function SessionsPage() {
               <div><p className="text-xs text-ink-muted">Tidak Hadir</p><p className="text-ink-primary">{reportDetail.attendance.absentCount ?? '-'}</p></div>
             </div>
             {COMMON_FIELDS.map((field) => reportDetail.commonContent[field.key] ? <div key={field.key}><p className="text-xs text-ink-muted">{field.label}</p><p className="whitespace-pre-wrap text-ink-secondary">{reportDetail.commonContent[field.key]}</p></div> : null)}
+            <div className="rounded-xl border border-base-700 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 font-semibold text-ink-primary"><Paperclip className="h-4 w-4" /> Lampiran Bukti</h3>
+                <Badge tone="muted">{attachments.length} file</Badge>
+              </div>
+              <div className="space-y-2">
+                {attachments.length === 0 && <p className="text-xs text-ink-muted">Belum ada lampiran.</p>}
+                {attachments.map((attachment) => (
+                  <button key={attachment.id} type="button" disabled={!attachment.available} onClick={() => openAttachment(attachment)} className="flex w-full items-center justify-between gap-3 rounded-lg bg-base-700/30 px-3 py-2 text-left disabled:opacity-60">
+                    <div className="min-w-0">
+                      <p className="truncate text-ink-primary">{attachment.fileName}</p>
+                      <p className="text-xs text-ink-muted">{attachment.available ? 'Tersedia' : 'File tidak tersedia'} · SHA-256 {attachment.sha256.slice(0, 12)}…</p>
+                    </div>
+                    <ExternalLink className="h-4 w-4 text-ink-muted" />
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2">
               {(reportDetail.status === 'draft' || reportDetail.status === 'revision_required') && canEditReport && <Button icon={<Pencil className="h-4 w-4" />} onClick={() => void editReport(reportDetail)}>Edit</Button>}
               {reportDetail.status === 'draft' && canSubmitReport && <Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void submitReport(reportDetail)}>Ajukan</Button>}
