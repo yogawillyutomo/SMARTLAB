@@ -9,7 +9,7 @@ const payload={data:{
  available:false,state:'blocked',blockerCount:1,
  blockers:[{type:'calendar_event',sourceId:'01ARZ3NDEKTSV4RRFFQ69G5FAW',title:'Maintenance',allDay:false,startsAt:'10:00:00',endsAt:'12:00:00',details:{category:'maintenance',scope:'laboratory'}}],
  noticeCount:0,notices:[],
- sourceCoverage:{schedule:{status:'covered',activePublicationCount:1},scheduleExceptions:{status:'covered'},operationalCalendar:{status:'covered'},reservations:{status:'covered'},priorityEvents:{status:'covered'},laboratoryStatus:{status:'covered'}},
+ sourceCoverage:{schedule:{status:'covered',activePublicationCount:1},scheduleExceptions:{status:'covered'},operationalCalendar:{status:'covered'},reservations:{status:'covered'},priorityEvents:{status:'covered'},laboratorySessions:{status:'covered'},laboratoryStatus:{status:'covered'}},
  issues:[]
 }};
 
@@ -21,6 +21,14 @@ describe('laboratory availability contract',()=>{
    expect(()=>parseLaboratoryAvailability({data:{...payload.data,available:true}})).toThrow(LaboratoryAvailabilityContractError);
    expect(()=>parseLaboratoryAvailability({data:{...payload.data,blockerCount:2}})).toThrow(LaboratoryAvailabilityContractError);
  });
+ it('accepts an in-progress Laboratory Session as canonical blocker evidence',()=>{
+   const sessionPayload={data:{
+     ...payload.data,
+     blockers:[{type:'laboratory_session',sourceId:'01ARZ3NDEKTSV4RRFFQ69G5FAX',title:'Pelaksanaan Lab sedang berlangsung',allDay:false,startsAt:'10:05:00',endsAt:null,details:{sessionNumber:'SES-20260914-ABC12345',status:'in_progress'}}],
+   }};
+   expect(parseLaboratoryAvailability(sessionPayload).blockers[0]?.type).toBe('laboratory_session');
+ });
+
  it('builds an exact single-window path and rejects unsafe input',()=>{
    expect(buildLaboratoryAvailabilityPath({laboratoryId:labId,date:'2026-09-14',startsAt:'10:00',endsAt:'12:00'}))
     .toBe(`/laboratory-availability?laboratoryId=${labId}&date=2026-09-14&startsAt=10%3A00&endsAt=12%3A00`);
