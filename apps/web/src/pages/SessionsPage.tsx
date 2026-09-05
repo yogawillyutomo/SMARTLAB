@@ -57,6 +57,21 @@ import {
   activityReportAttachmentDownloadUrl,
 } from '@/services/activityReportApi';
 import {
+  clearOfflineActivityReportDraft,
+  conflictingEditableFields,
+  createClientMutationId,
+  diffEditableSnapshot,
+  editableSnapshotFromReport,
+  isEditableSnapshotEqual,
+  loadOfflineActivityReportDraft,
+  makeOfflineActivityReportDraft,
+  rebaseEditableSnapshot,
+  saveOfflineActivityReportDraft,
+  type ActivityReportEditableSnapshot,
+  type OfflineActivityReportDraft,
+  type OfflineDraftIdentity,
+} from '@/services/activityReportOfflineDraft';
+import {
   sessionObservationGateway,
   SessionObservationContractError,
   type SessionIssueObservationDto,
@@ -187,6 +202,20 @@ interface PromoteObservationFormState {
   stepsTaken: string;
 }
 
+interface DraftSyncContext {
+  baseVersion: number;
+  baseSnapshot: ActivityReportEditableSnapshot;
+  clientMutationId: string;
+}
+
+interface DraftConflictState {
+  local: OfflineActivityReportDraft;
+  server: ActivityReportDto;
+  fields: string[];
+}
+
+type DraftSyncStatus = 'clean' | 'local' | 'syncing' | 'conflict';
+
 interface BackfillFormState extends ReportFormState {
   laboratoryId: string;
   occurredOn: string;
@@ -238,6 +267,25 @@ function reportForm(report: ActivityReportDto): ReportFormState {
   };
 }
 
+function reportFormFromSnapshot(snapshot: ActivityReportEditableSnapshot): ReportFormState {
+  return {
+    reportType: snapshot.reportType,
+    presentCount: snapshot.presentCount === null ? '' : String(snapshot.presentCount),
+    absentCount: snapshot.absentCount === null ? '' : String(snapshot.absentCount),
+    attendanceNotes: snapshot.attendanceNotes ?? '',
+    externalAttendanceSystem: snapshot.externalAttendanceSystem ?? '',
+    externalAttendanceReferenceId: snapshot.externalAttendanceReferenceId ?? '',
+    commonContent: {
+      ...emptyCommon(),
+      ...Object.fromEntries(Object.entries(snapshot.commonContent).map(([key, value]) => [key, value ?? ''])),
+    },
+    typeSpecificContent: {
+      ...emptySpecific(snapshot.reportType),
+      ...Object.fromEntries(Object.entries(snapshot.typeSpecificContent).map(([key, value]) => [key, value ?? ''])),
+    },
+  };
+}
+
 function compactContent(value: Record<string, string>): Record<string, string | null> {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, item.trim() === '' ? null : item.trim()]));
 }
@@ -245,6 +293,19 @@ function compactContent(value: Record<string, string>): Record<string, string | 
 function nullableCount(value: string): number | null {
   if (value.trim() === '') return null;
   return Number(value);
+}
+
+function editableSnapshotFromForm(form: ReportFormState): ActivityReportEditableSnapshot {
+  return {
+    reportType: form.reportType,
+    presentCount: nullableCount(form.presentCount),
+    absentCount: nullableCount(form.absentCount),
+    attendanceNotes: form.attendanceNotes.trim() || null,
+    externalAttendanceSystem: form.externalAttendanceSystem.trim() || null,
+    externalAttendanceReferenceId: form.externalAttendanceReferenceId.trim() || null,
+    commonContent: compactContent(form.commonContent),
+    typeSpecificContent: compactContent(form.typeSpecificContent),
+  };
 }
 
 function issueMessage(error: unknown): string {
@@ -261,6 +322,8 @@ function issueMessage(error: unknown): string {
       return 'Status data sudah berubah dan aksi ini tidak lagi berlaku.';
     }
     if (error.code === 'ACTIVITY_REPORT_ATTACHMENT_UNAVAILABLE') return 'File bukti sedang tidak tersedia, tetapi metadata laporan tetap dapat dibaca.';
+    if (error.code === 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT') return 'Draft lokal berbenturan dengan versi server yang lebih baru. Pilih cara penyelesaian konflik.';
+    if (error.code === 'ACTIVITY_REPORT_SYNC_MUTATION_REUSED') return 'Identitas sinkronisasi sudah pernah dipakai untuk isi berbeda. Muat ulang draft sebelum mencoba lagi.';
     if (error.status === 403) return 'Anda tidak memiliki izin untuk aksi ini.';
     if (error.status === 422) return Object.values(error.errors ?? {}).flat()[0] ?? 'Data belum valid.';
     if (error.kind === 'network') return 'Layanan Pelaksanaan Lab tidak dapat dijangkau.';
@@ -283,6 +346,7 @@ function reportTimelineLabel(event: ActivityReportDto['timeline'][number]): stri
     'activity_report.created': 'Draft laporan dibuat otomatis',
     'activity_report.manual_backfill_created': 'Backfill laporan dibuat',
     'activity_report.updated': 'Draft laporan diperbarui',
+    'activity_report.offline_sync_applied': 'Draft laporan disinkronkan',
     'activity_report.submitted': 'Laporan diajukan',
     'activity_report.revision_requested': 'Perbaikan diminta',
     'activity_report.reopened': 'Laporan dibuka kembali',
@@ -316,6 +380,14 @@ export function SessionsPage() {
   const canCreateObservation = hasServerPermission(user, 'session-observations.create');
   const canPromoteObservation = hasServerPermission(user, 'session-observations.promote')
     && hasServerPermission(user, 'incidents.create');
+
+  const offlineIdentity = useMemo<OfflineDraftIdentity | null>(() => user ? ({
+    userId: user.id,
+    membershipId: user.membership.id,
+    schoolId: user.school.id,
+  }) : null, [user]);
+
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
 
   const today = useMemo(() => dateKey(new Date()), []);
   const defaultFrom = useMemo(() => dateKey(addDays(new Date(), -90)), []);
@@ -373,6 +445,9 @@ export function SessionsPage() {
   const [reportDetail, setReportDetail] = useState<ActivityReportDto | null>(null);
   const [editingReport, setEditingReport] = useState<ActivityReportDto | null>(null);
   const [reportEditForm, setReportEditForm] = useState<ReportFormState | null>(null);
+  const [draftSyncContext, setDraftSyncContext] = useState<DraftSyncContext | null>(null);
+  const [draftSyncStatus, setDraftSyncStatus] = useState<DraftSyncStatus>('clean');
+  const [draftConflict, setDraftConflict] = useState<DraftConflictState | null>(null);
   const [revisionReport, setRevisionReport] = useState<ActivityReportDto | null>(null);
   const [revisionReason, setRevisionReason] = useState('');
   const [attachments, setAttachments] = useState<ActivityReportAttachmentDto[]>([]);
@@ -395,6 +470,17 @@ export function SessionsPage() {
     commonContent: emptyCommon(),
     typeSpecificContent: emptySpecific('general'),
   });
+
+  useEffect(() => {
+    const markOnline = () => setOnline(true);
+    const markOffline = () => setOnline(false);
+    window.addEventListener('online', markOnline);
+    window.addEventListener('offline', markOffline);
+    return () => {
+      window.removeEventListener('online', markOnline);
+      window.removeEventListener('offline', markOffline);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -472,6 +558,31 @@ export function SessionsPage() {
     return () => { active = false; };
   }, [canViewReports, editingReport, reportDetail]);
 
+  useEffect(() => {
+    if (!editingReport || !reportEditForm || !draftSyncContext || !offlineIdentity
+      || editingReport.status !== 'draft' || draftConflict) {
+      return;
+    }
+
+    const draftSnapshot = editableSnapshotFromForm(reportEditForm);
+    if (isEditableSnapshotEqual(draftSyncContext.baseSnapshot, draftSnapshot)) {
+      clearOfflineActivityReportDraft(offlineIdentity, editingReport.id);
+      setDraftSyncStatus((current) => current === 'syncing' ? current : 'clean');
+      return;
+    }
+
+    const local = makeOfflineActivityReportDraft(
+      offlineIdentity,
+      editingReport.id,
+      draftSyncContext.baseVersion,
+      draftSyncContext.baseSnapshot,
+      draftSnapshot,
+      draftSyncContext.clientMutationId,
+    );
+    saveOfflineActivityReportDraft(local);
+    setDraftSyncStatus((current) => current === 'syncing' ? current : 'local');
+  }, [draftConflict, draftSyncContext, editingReport, offlineIdentity, reportEditForm]);
+
   const inProgress = useMemo(() => sessions.filter((session) => session.status === 'in_progress'), [sessions]);
   const awaiting = useMemo(
     () => reports.filter((report) => report.status === 'draft' || report.status === 'revision_required'),
@@ -524,6 +635,10 @@ export function SessionsPage() {
 
   async function start(sessionId: string, version: number) {
     if (!canStart) return;
+    if (!online) {
+      toast('Mulai Pelaksanaan tetap online-only karena server harus memvalidasi sumber dan availability.', 'info');
+      return;
+    }
     await mutate(async () => {
       const result = await laboratorySessionGateway.start(sessionId, version);
       setSessionDetail(result);
@@ -532,6 +647,10 @@ export function SessionsPage() {
 
   async function finish() {
     if (!endSession || !canEnd) return;
+    if (!online) {
+      toast('Mengakhiri Pelaksanaan tetap online-only karena Session dan draft laporan harus dibuat atomik.', 'info');
+      return;
+    }
     const current = endSession;
     setBusy(true);
     try {
@@ -562,6 +681,10 @@ export function SessionsPage() {
 
   async function cancelPrepared() {
     if (!cancelSession || !canCancel || cancelReason.trim() === '') return;
+    if (!online) {
+      toast('Pembatalan Pelaksanaan memerlukan koneksi ke server.', 'info');
+      return;
+    }
     const current = cancelSession;
     await mutate(async () => {
       await laboratorySessionGateway.cancel(current.id, current.version, cancelReason);
@@ -601,6 +724,10 @@ export function SessionsPage() {
 
   async function createObservation() {
     if (!observationSession || !canCreateObservation || observationForm.summary.trim() === '') return;
+    if (!online) {
+      toast('Pencatatan Temuan tetap online-only pada S3.6.', 'info');
+      return;
+    }
     if (observationForm.subjectType === 'device' && observationForm.referenceId === '') {
       toast('Pilih Device canonical untuk temuan perangkat.', 'error');
       return;
@@ -648,6 +775,10 @@ export function SessionsPage() {
 
   async function promoteToIncident() {
     if (!promoteObservation || !canPromoteObservation || promoteForm.title.trim() === '' || promoteForm.description.trim() === '') return;
+    if (!online) {
+      toast('Promosi ke Incident tetap online-only.', 'info');
+      return;
+    }
     setBusy(true);
     try {
       const updated = await sessionObservationGateway.promote(promoteObservation.id, {
@@ -671,6 +802,14 @@ export function SessionsPage() {
 
   async function uploadAttachment(report: ActivityReportDto) {
     if (!attachmentFile || !canEditReport || report.status !== 'draft') return;
+    if (!online) {
+      toast('Upload lampiran tetap online-only. Draft teks lokal tidak akan hilang.', 'info');
+      return;
+    }
+    if (draftSyncStatus !== 'clean') {
+      toast('Sinkronkan draft teks terlebih dahulu sebelum mengunggah lampiran.', 'info');
+      return;
+    }
     setAttachmentBusy(true);
     try {
       await activityReportGateway.uploadAttachment(report.id, report.version, attachmentFile);
@@ -678,7 +817,9 @@ export function SessionsPage() {
       const items = await activityReportGateway.attachments(report.id);
       setAttachments(items);
       setAttachmentFile(null);
-      if (editingReport?.id === report.id) setEditingReport(fresh);
+      if (editingReport?.id === report.id) {
+        setDraftEditorFromServer(fresh);
+      }
       if (reportDetail?.id === report.id) setReportDetail(fresh);
       toast('Bukti tersimpan di private storage dan checksum SHA-256 tercatat.', 'success');
       await load();
@@ -700,7 +841,71 @@ export function SessionsPage() {
     window.open(activityReportAttachmentDownloadUrl(attachment.reportId, attachment.id), '_blank', 'noopener,noreferrer');
   }
 
+  function setDraftEditorFromServer(report: ActivityReportDto): void {
+    const baseSnapshot = editableSnapshotFromReport(report);
+    setEditingReport(report);
+    setReportEditForm(reportForm(report));
+    setDraftSyncContext({
+      baseVersion: report.version,
+      baseSnapshot,
+      clientMutationId: createClientMutationId(),
+    });
+    setDraftConflict(null);
+    setDraftSyncStatus('clean');
+  }
+
+  function restoreDraftEditor(report: ActivityReportDto): void {
+    if (!offlineIdentity) {
+      setDraftEditorFromServer(report);
+      return;
+    }
+
+    const cached = loadOfflineActivityReportDraft(offlineIdentity, report.id);
+    if (!cached) {
+      setDraftEditorFromServer(report);
+      return;
+    }
+
+    setEditingReport(report);
+    setReportEditForm(reportFormFromSnapshot(cached.draftSnapshot));
+    setDraftSyncContext({
+      baseVersion: cached.baseVersion,
+      baseSnapshot: cached.baseSnapshot,
+      clientMutationId: cached.clientMutationId,
+    });
+
+    if (cached.baseVersion !== report.version) {
+      setDraftConflict({
+        local: cached,
+        server: report,
+        fields: conflictingEditableFields(
+          cached.baseSnapshot,
+          cached.draftSnapshot,
+          editableSnapshotFromReport(report),
+        ),
+      });
+      setDraftSyncStatus('conflict');
+      return;
+    }
+
+    setDraftConflict(null);
+    setDraftSyncStatus('local');
+  }
+
+  function closeDraftEditor(): void {
+    setEditingReport(null);
+    setReportEditForm(null);
+    setDraftSyncContext(null);
+    setDraftConflict(null);
+    setDraftSyncStatus('clean');
+  }
+
   async function openReport(report: ActivityReportDto) {
+    if (!online) {
+      setReportDetail(report);
+      return;
+    }
+
     setBusy(true);
     try {
       const fresh = await activityReportGateway.show(report.id);
@@ -716,102 +921,198 @@ export function SessionsPage() {
     if (!canEditReport) return;
     setBusy(true);
     try {
-      let fresh = await activityReportGateway.show(report.id);
+      let fresh = online ? await activityReportGateway.show(report.id) : report;
       if (fresh.status === 'revision_required') {
+        if (!online) {
+          toast('Membuka ulang laporan revisi memerlukan koneksi ke server.', 'info');
+          return;
+        }
         fresh = await activityReportGateway.reopen(fresh.id, fresh.version);
       }
-      setEditingReport(fresh);
-      setReportEditForm(reportForm(fresh));
+      restoreDraftEditor(fresh);
     } catch (cause) {
       toast(issueMessage(cause), 'error');
+      if (online) await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function currentOfflineDraft(): OfflineActivityReportDraft | null {
+    if (!editingReport || !reportEditForm || !draftSyncContext || !offlineIdentity) return null;
+    return makeOfflineActivityReportDraft(
+      offlineIdentity,
+      editingReport.id,
+      draftSyncContext.baseVersion,
+      draftSyncContext.baseSnapshot,
+      editableSnapshotFromForm(reportEditForm),
+      draftSyncContext.clientMutationId,
+    );
+  }
+
+  async function synchronizeEditingDraft(submitAfter: boolean): Promise<void> {
+    if (!editingReport || !reportEditForm || !draftSyncContext || !offlineIdentity || !canEditReport) return;
+    const local = currentOfflineDraft();
+    if (!local) return;
+
+    const patch = diffEditableSnapshot(local.baseSnapshot, local.draftSnapshot);
+    if (Object.keys(patch).length === 0) {
+      clearOfflineActivityReportDraft(offlineIdentity, editingReport.id);
+      setDraftSyncStatus('clean');
+      if (submitAfter) {
+        if (!online) {
+          toast('Pengajuan laporan tetap online-only. Draft lokal aman di perangkat ini.', 'info');
+          return;
+        }
+        const submitted = await activityReportGateway.submit(editingReport.id, editingReport.version);
+        closeDraftEditor();
+        setReportDetail(submitted);
+        toast('Laporan diajukan untuk verifikasi.', 'success');
+        await load();
+      } else {
+        toast('Tidak ada perubahan draft yang perlu disinkronkan.', 'info');
+      }
+      return;
+    }
+
+    saveOfflineActivityReportDraft(local);
+
+    if (!online) {
+      setDraftSyncStatus('local');
+      toast(
+        submitAfter
+          ? 'Draft tersimpan lokal. Pengajuan akan tersedia setelah koneksi kembali.'
+          : 'Draft tersimpan lokal di perangkat ini dan belum menjadi versi kanonik server.',
+        'info',
+      );
+      return;
+    }
+
+    setBusy(true);
+    setDraftSyncStatus('syncing');
+    try {
+      const result = await activityReportGateway.syncDraft(editingReport.id, {
+        clientMutationId: local.clientMutationId,
+        baseVersion: local.baseVersion,
+        patch,
+      });
+      clearOfflineActivityReportDraft(offlineIdentity, editingReport.id);
+
+      if (result.report.status !== 'draft') {
+        closeDraftEditor();
+        setReportDetail(result.report);
+        toast('Draft sudah pernah diterapkan; status server terbaru dimuat.', 'info');
+        await load();
+        return;
+      }
+
+      if (submitAfter) {
+        const submitted = await activityReportGateway.submit(result.report.id, result.report.version);
+        closeDraftEditor();
+        setReportDetail(submitted);
+        toast('Draft tersinkron dan laporan diajukan untuk verifikasi.', 'success');
+        await load();
+        return;
+      }
+
+      setDraftEditorFromServer(result.report);
+      toast(result.sync.replayed ? 'Retry sinkronisasi dikonfirmasi tanpa duplikasi.' : 'Draft tersinkron ke server.', 'success');
       await load();
+    } catch (cause) {
+      if (cause instanceof ApiClientError && cause.code === 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT') {
+        const server = await activityReportGateway.show(editingReport.id).catch(() => null);
+        if (server) {
+          setEditingReport(server);
+          setDraftConflict({
+            local,
+            server,
+            fields: conflictingEditableFields(
+              local.baseSnapshot,
+              local.draftSnapshot,
+              editableSnapshotFromReport(server),
+            ),
+          });
+          setDraftSyncStatus('conflict');
+          toast('Versi server lebih baru. Draft lokal dipertahankan sampai konflik diselesaikan.', 'warning');
+          return;
+        }
+      }
+
+      if (cause instanceof ApiClientError && cause.kind === 'network') {
+        saveOfflineActivityReportDraft(local);
+        setDraftSyncStatus('local');
+        toast('Koneksi terputus. Draft tetap aman di cache lokal dan dapat di-retry dengan ID yang sama.', 'info');
+        return;
+      }
+
+      setDraftSyncStatus('local');
+      toast(issueMessage(cause), 'error');
     } finally {
       setBusy(false);
     }
   }
 
   async function saveReport() {
-    if (!editingReport || !reportEditForm || !canEditReport) return;
-    const form = reportEditForm;
-    const payload: UpdateActivityReportInput = {
-      reportType: form.reportType,
-      presentCount: nullableCount(form.presentCount),
-      absentCount: nullableCount(form.absentCount),
-      attendanceNotes: form.attendanceNotes.trim() || null,
-      externalAttendanceSystem: form.externalAttendanceSystem.trim() || null,
-      externalAttendanceReferenceId: form.externalAttendanceReferenceId.trim() || null,
-      commonContent: compactContent(form.commonContent),
-      typeSpecificContent: compactContent(form.typeSpecificContent),
-    };
-    setBusy(true);
-    try {
-      const updated = await activityReportGateway.update(editingReport.id, editingReport.version, payload);
-      setEditingReport(updated);
-      setReportEditForm(reportForm(updated));
-      toast('Draft laporan disimpan.', 'success');
-      await load();
-    } catch (cause) {
-      toast(issueMessage(cause), 'error');
-      const fresh = await activityReportGateway.show(editingReport.id).catch(() => null);
-      if (fresh) {
-        setEditingReport(fresh);
-        setReportEditForm(reportForm(fresh));
-      }
-    } finally {
-      setBusy(false);
-    }
+    await synchronizeEditingDraft(false);
   }
 
   async function submitReport(report: ActivityReportDto) {
     if (!canSubmitReport) return;
+    if (!online) {
+      toast('Pengajuan laporan memerlukan koneksi ke server.', 'info');
+      return;
+    }
     await mutate(async () => {
       const updated = await activityReportGateway.submit(report.id, report.version);
+      if (offlineIdentity) clearOfflineActivityReportDraft(offlineIdentity, report.id);
       setReportDetail(updated);
-      setEditingReport(null);
-      setReportEditForm(null);
+      closeDraftEditor();
     }, 'Laporan diajukan untuk verifikasi.');
   }
 
   async function saveAndSubmitReport() {
-    if (!editingReport || !reportEditForm || !canEditReport || !canSubmitReport) return;
-    const form = reportEditForm;
-    const payload: UpdateActivityReportInput = {
-      reportType: form.reportType,
-      presentCount: nullableCount(form.presentCount),
-      absentCount: nullableCount(form.absentCount),
-      attendanceNotes: form.attendanceNotes.trim() || null,
-      externalAttendanceSystem: form.externalAttendanceSystem.trim() || null,
-      externalAttendanceReferenceId: form.externalAttendanceReferenceId.trim() || null,
-      commonContent: compactContent(form.commonContent),
-      typeSpecificContent: compactContent(form.typeSpecificContent),
-    };
+    if (!canSubmitReport) return;
+    await synchronizeEditingDraft(true);
+  }
 
-    setBusy(true);
-    try {
-      const saved = await activityReportGateway.update(editingReport.id, editingReport.version, payload);
-      const submitted = await activityReportGateway.submit(saved.id, saved.version);
-      setEditingReport(null);
-      setReportEditForm(null);
-      setReportDetail(submitted);
-      toast('Draft disimpan dan laporan diajukan untuk verifikasi.', 'success');
-      await load();
-    } catch (cause) {
-      toast(issueMessage(cause), 'error');
-      const fresh = await activityReportGateway.show(editingReport.id).catch(() => null);
-      if (fresh) {
-        if (fresh.status === 'draft') {
-          setEditingReport(fresh);
-          setReportEditForm(reportForm(fresh));
-        } else {
-          setEditingReport(null);
-          setReportEditForm(null);
-          setReportDetail(fresh);
-        }
-      }
-      await load();
-    } finally {
-      setBusy(false);
-    }
+  function useServerConflictVersion(): void {
+    if (!draftConflict || !offlineIdentity) return;
+    clearOfflineActivityReportDraft(offlineIdentity, draftConflict.server.id);
+    setDraftEditorFromServer(draftConflict.server);
+    toast('Draft lokal dibuang. Editor memakai versi kanonik server.', 'info');
+  }
+
+  function rebaseLocalConflictVersion(): void {
+    if (!draftConflict || !offlineIdentity) return;
+
+    const serverSnapshot = editableSnapshotFromReport(draftConflict.server);
+    const rebased = rebaseEditableSnapshot(
+      draftConflict.local.baseSnapshot,
+      draftConflict.local.draftSnapshot,
+      serverSnapshot,
+    );
+    const clientMutationId = createClientMutationId();
+    const next = makeOfflineActivityReportDraft(
+      offlineIdentity,
+      draftConflict.server.id,
+      draftConflict.server.version,
+      serverSnapshot,
+      rebased,
+      clientMutationId,
+    );
+
+    clearOfflineActivityReportDraft(offlineIdentity, draftConflict.server.id);
+    saveOfflineActivityReportDraft(next);
+    setEditingReport(draftConflict.server);
+    setReportEditForm(reportFormFromSnapshot(rebased));
+    setDraftSyncContext({
+      baseVersion: draftConflict.server.version,
+      baseSnapshot: serverSnapshot,
+      clientMutationId,
+    });
+    setDraftConflict(null);
+    setDraftSyncStatus('local');
+    toast('Draft lokal direbase ke versi server terbaru. Periksa lalu sinkronkan.', 'success');
   }
 
   async function verifyReport(report: ActivityReportDto) {
@@ -834,6 +1135,10 @@ export function SessionsPage() {
   }
 
   async function createBackfill() {
+    if (!online) {
+      toast('Backfill historis tetap online-only.', 'info');
+      return;
+    }
     if (!canBackfill || backfillForm.laboratoryId === '' || backfillForm.manualBackfillReason.trim() === ''
       || backfillForm.responsibleName.trim() === '' || backfillForm.activityDescription.trim() === '') {
       toast('Lengkapi bukti wajib backfill.', 'error');
@@ -862,8 +1167,7 @@ export function SessionsPage() {
       setBackfillOpen(false);
       toast('Backfill laporan dibuat sebagai draft.', 'success');
       await load();
-      setEditingReport(created);
-      setReportEditForm(reportForm(created));
+      restoreDraftEditor(created);
     } catch (cause) {
       toast(issueMessage(cause), 'error');
     } finally {
