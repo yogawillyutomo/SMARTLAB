@@ -4,7 +4,6 @@ import {
   CalendarDays,
   CalendarClock,
   BookOpen,
-  ClipboardList,
   Boxes,
   Package,
   AlertTriangle,
@@ -61,7 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules', serverPermission: 'schedules.view' },
       { to: '/bookings', label: 'Reservasi Lab', icon: CalendarClock, module: 'bookings', serverPermission: 'bookings.view' },
       { to: '/priority-events', label: 'Kegiatan Prioritas', icon: Megaphone, serverPermission: 'priority-events.view' },
-      { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions' },
+      { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions', serverPermission: 'sessions.view' },
     ],
   },
   {
@@ -97,15 +96,8 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function getNavGroupsForPermissions(permissions: PermissionMatrix, role: RoleName): NavGroup[] {
-  const canViewSessions = canView(permissions, role, 'sessions');
-  const canViewJournals = canView(permissions, role, 'journals');
-
-  if (canViewSessions || !canViewJournals) return NAV_GROUPS;
-
-  return NAV_GROUPS.map((group) => group.title === 'Operasional'
-    ? { ...group, items: [...group.items, { to: '/journals', label: 'Riwayat & Laporan', icon: ClipboardList, module: 'journals' }] }
-    : group);
+export function getNavGroupsForPermissions(_permissions: PermissionMatrix, _role: RoleName): NavGroup[] {
+  return NAV_GROUPS;
 }
 
 export function canViewNavigationModule(
