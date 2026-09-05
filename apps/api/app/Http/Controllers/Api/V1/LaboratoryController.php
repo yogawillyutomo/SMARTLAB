@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Session\LaboratorySessionSourceGuard;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateLaboratoryRequest;
 use App\Http\Requests\UpdateLaboratoryRequest;
@@ -51,9 +52,12 @@ class LaboratoryController extends Controller
         return new LaboratoryResource($laboratory);
     }
 
-    public function update(UpdateLaboratoryRequest $request, string $laboratoryId): LaboratoryResource|JsonResponse
-    {
-        $laboratory = DB::transaction(function () use ($request, $laboratoryId): ?Laboratory {
+    public function update(
+        UpdateLaboratoryRequest $request,
+        string $laboratoryId,
+        LaboratorySessionSourceGuard $sessionGuard,
+    ): LaboratoryResource|JsonResponse {
+        $laboratory = DB::transaction(function () use ($request, $laboratoryId, $sessionGuard): ?Laboratory {
             $schoolId = $this->schoolId($request);
             School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
@@ -65,6 +69,10 @@ class LaboratoryController extends Controller
 
             if ($laboratory === null) {
                 return null;
+            }
+
+            if ($laboratory->status === 'active' && $request->validated('status') === 'inactive') {
+                $sessionGuard->assertLaboratoryMayBecomeInactive($schoolId, (string) $laboratory->id);
             }
 
             $laboratory->update($request->safe()->only(['code', 'name', 'location', 'capacity', 'status']));
