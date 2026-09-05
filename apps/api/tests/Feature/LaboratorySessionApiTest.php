@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AcademicClass;
 use App\Models\AcademicYear;
+use App\Models\ActivityReportAttachment;
 use App\Models\Device;
 use App\Models\Incident;
 use App\Models\Laboratory;
@@ -772,7 +773,7 @@ class LaboratorySessionApiTest extends TestCase
             'school_id' => $school->id,
             'home_laboratory_id' => $fixture['labA']->id,
             'device_code' => 'PC-RPL1-12',
-            'lifecycle_status' => 'active',
+            'lifecycle_status' => 'in_service',
         ]);
 
         $session = $this->postJson('/api/v1/laboratory-sessions', [
@@ -853,7 +854,7 @@ class LaboratorySessionApiTest extends TestCase
             'school_id' => $school->id,
             'home_laboratory_id' => $fixture['labB']->id,
             'device_code' => 'PC-RPL2-01',
-            'lifecycle_status' => 'active',
+            'lifecycle_status' => 'in_service',
         ]);
 
         $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
@@ -988,7 +989,7 @@ class LaboratorySessionApiTest extends TestCase
             ->assertJsonPath('data.available', true)
             ->json('data');
 
-        $row = AppModelsActivityReportAttachment::query()->findOrFail($attachment['id']);
+        $row = ActivityReportAttachment::query()->findOrFail($attachment['id']);
         Storage::disk('local')->assertExists($row->storage_key);
         $this->assertSame(64, strlen($attachment['sha256']));
         $this->assertStringNotContainsString('storageKey', json_encode($attachment, JSON_THROW_ON_ERROR));
