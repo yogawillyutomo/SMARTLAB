@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Priority Event API module
-  version: 0.19.0
+  version: 0.20.0
   description: S2.8 Priority Event request/approval workflow with explicit operational reconciliation.
 paths:
   /priority-events:
@@ -96,6 +96,7 @@ paths:
             schema: { $ref: '#/components/schemas/ReasonInput' }
       responses:
         '200': { description: Submitted or approved Priority Event cancelled; approved blocker is released }
+        '409': { description: Approved Priority Event cannot be cancelled while it owns a prepared or in-progress Laboratory Session. }
         '412': { description: Entity version conflict }
         '428': { description: Missing or malformed If-Match }
 components:
