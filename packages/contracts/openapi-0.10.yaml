@@ -786,7 +786,13 @@ paths:
     post:
       operationId: addIncidentComment
       summary: Append a participant-visible Incident comment
-      description: Requires `incidents.view`, `incidents.comment`, and a current strong Incident If-Match. Query parameters and unknown body fields are rejected. Text is normalized by trimming and NFC before validation and persistence. Comments are append-only: every successful request in a non-terminal Incident increments the Incident version exactly once and appends exactly one immutable `incident.comment_added` event. Identical text submitted with a fresh version is a new comment; a stale retry returns 412. New comments are unavailable only in terminal `closed` and `rejected` states.
+      description: >-
+        Requires `incidents.view`, `incidents.comment`, and a current strong Incident If-Match. Query parameters
+        and unknown body fields are rejected. Text is normalized by trimming and NFC before validation and persistence.
+        Comments are append-only: every successful request in a non-terminal Incident increments the Incident version
+        exactly once and appends exactly one immutable `incident.comment_added` event. Identical text submitted with a
+        fresh version is a new comment; a stale retry returns 412. New comments are unavailable only in terminal
+        `closed` and `rejected` states.
       security:
         - sanctumSession: []
         - sanctumBearer: []
