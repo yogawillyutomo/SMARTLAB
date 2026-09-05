@@ -218,7 +218,7 @@ Delivered in S2.8:
 - approved Priority Events block Unified Availability;
 - permission-scoped canonical `/priority-events` frontend;
 - deterministic future-only timetable publication impact preview with schedule added/removed/changed/unchanged counts;
-- activation blockers for active Schedule Exceptions, submitted/approved Reservations, approved Priority Events, blocked Calendar Events, inactive Laboratories, and Laboratory capacity drift;
+- activation blockers for active Schedule Exceptions, submitted/approved Reservations, approved Priority Events, blocked Calendar Events, and inactive Laboratories;
 - active Schedule Exceptions never silently migrate across TESSELA source versions;
 - School-scoped operational write serialization coordinates publication activation with Reservation, Schedule Exception, Calendar, Priority Event, and Laboratory-state mutations;
 - activation recalculates impact inside the same transaction and exposes no force-activation path;
