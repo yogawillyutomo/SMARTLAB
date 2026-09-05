@@ -49,16 +49,17 @@ The application is in a staged source-of-truth migration.
 - published timetable ingestion/validation/activation and materialized schedule occurrences;
 - canonical `/schedules` current-plan read model backed by active Schedule Occurrences plus non-destructive dated operational overlays;
 - canonical Operational Calendar with school/laboratory blockers and non-destructive cancellation;
-- canonical Unified Laboratory Availability read model combining schedule coverage, ScheduleOccurrence occupancy, dated Schedule Exceptions, Laboratory status, Calendar blockers, active reservations, and approved Priority Events;
+- canonical Unified Laboratory Availability read model combining schedule coverage, ScheduleOccurrence occupancy, dated Schedule Exceptions, Laboratory status, Calendar blockers, active reservations, approved Priority Events, and actual in-progress Laboratory Sessions;
 - canonical Laboratory Reservations with transactional availability checks, approval re-check, versioning, and audit history;
 - canonical dated Schedule Exceptions for one-date occurrence cancellation or Laboratory relocation without rewriting TESSELA;
 - canonical Priority Events with explicit reconciliation before approval and a server-authoritative `/priority-events` workflow;
-- fail-closed TESSELA publication impact preview/reconciliation gate before activation, including operational drift and deterministic impact fingerprints;
+- fail-closed TESSELA publication impact preview/reconciliation gate before activation, including operational drift, prepared/in-progress schedule Session commitments, and deterministic impact fingerprints;
+- canonical LaboratorySession backend with source-bound prepare/start/end/cancel lifecycle, source fingerprint revalidation, actual occupancy, server permissions, ETag versioning, and audit history;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered. The S3.1 execution/report semantics are already locked in [Laboratory Session and Activity Report Contract](docs/architecture/laboratory-session-activity-report-contract.md); implementation begins with the S3.2 LaboratorySession backend.
+The `/sessions` and `/journals` frontend workflows remain browser-local/transitional even though the S3.2 LaboratorySession backend is now canonical. ActivityReport/journal persistence, unified Session frontend cutover, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain pending. The execution/report semantics are locked in [Laboratory Session and Activity Report Contract](docs/architecture/laboratory-session-activity-report-contract.md); the next backend slice is S3.3 ActivityReport.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
