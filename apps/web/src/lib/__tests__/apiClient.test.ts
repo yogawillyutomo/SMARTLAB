@@ -168,7 +168,9 @@ describe('API transport contracts', () => {
   });
 
   it('sends multipart mutations through the shared CSRF and If-Match boundary without forcing Content-Type', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
       return jsonResponse({ data: { id: '01ATTACHMENT' }, reportVersion: 2 }, 201);
     });
     const client = createApiClient({
