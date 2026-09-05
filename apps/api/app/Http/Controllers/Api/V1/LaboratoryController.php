@@ -8,6 +8,8 @@ use App\Http\Requests\CreateLaboratoryRequest;
 use App\Http\Requests\UpdateLaboratoryRequest;
 use App\Http\Resources\LaboratoryResource;
 use App\Models\Laboratory;
+use App\Models\School;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -51,15 +53,30 @@ class LaboratoryController extends Controller
 
     public function update(UpdateLaboratoryRequest $request, string $laboratoryId): LaboratoryResource|JsonResponse
     {
-        $laboratory = $this->findForCurrentSchool($request, $laboratoryId);
+        $laboratory = DB::transaction(function () use ($request, $laboratoryId): ?Laboratory {
+            $schoolId = $this->schoolId($request);
+            School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
+
+            $laboratory = Laboratory::query()
+                ->where('school_id', $schoolId)
+                ->whereKey($laboratoryId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($laboratory === null) {
+                return null;
+            }
+
+            $laboratory->update($request->safe()->only(['code', 'name', 'location', 'capacity', 'status']));
+
+            return $laboratory->refresh();
+        });
 
         if ($laboratory === null) {
             return $this->notFound();
         }
 
-        $laboratory->update($request->safe()->only(['code', 'name', 'location', 'capacity', 'status']));
-
-        return new LaboratoryResource($laboratory->refresh());
+        return new LaboratoryResource($laboratory);
     }
 
     private function findForCurrentSchool(Request $request, string $laboratoryId): ?Laboratory
