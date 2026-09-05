@@ -108,6 +108,15 @@ class PermissionSeeder extends Seeder
             'cancel' => 'Batalkan Reservasi Laboratorium',
             'export' => 'Ekspor Reservasi Laboratorium',
         ],
+        'sessions' => [
+            'view' => 'Lihat Pelaksanaan Laboratorium',
+            'view-all' => 'Lihat Semua Pelaksanaan Laboratorium',
+            'prepare' => 'Persiapkan Pelaksanaan Laboratorium',
+            'start' => 'Mulai Pelaksanaan Laboratorium',
+            'end' => 'Akhiri Pelaksanaan Laboratorium',
+            'cancel' => 'Batalkan Pelaksanaan Laboratorium',
+            'export' => 'Ekspor Pelaksanaan Laboratorium',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',
