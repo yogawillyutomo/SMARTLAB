@@ -57,7 +57,7 @@ class TimetablePublicationImpactService
             ->where('school_id', $schoolId)
             ->where('semester_id', $publication->semester_id)
             ->where('status', 'active')
-            ->whereKeyNot($publication->id)
+            ->where('id', '!=', $publication->id)
             ->first();
 
         if ($from > $to) {
@@ -132,6 +132,35 @@ class TimetablePublicationImpactService
             ->values();
 
         if ($laboratoryIds->isNotEmpty()) {
+            $laboratories = \App\Models\Laboratory::query()
+                ->where('school_id', $schoolId)
+                ->whereIn('id', $laboratoryIds)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($candidateOccurrences as $candidate) {
+                if ($candidate->planned_laboratory_id === null) {
+                    continue;
+                }
+
+                $laboratory = $laboratories->get($candidate->planned_laboratory_id);
+                if ($laboratory === null || $laboratory->status !== 'active') {
+                    $this->pushBlocker($blockers, $fingerprintItems, [
+                        'type' => 'laboratory_status_conflict',
+                        'entityId' => (string) ($laboratory?->id ?? $candidate->planned_laboratory_id),
+                        'date' => $candidate->occurs_on->format('Y-m-d'),
+                        'laboratoryId' => (string) $candidate->planned_laboratory_id,
+                        'title' => 'Publikasi kandidat mereferensikan Laboratory yang tidak lagi aktif.',
+                        'details' => [
+                            'candidateOccurrenceId' => (string) $candidate->id,
+                            'sourceScheduleId' => (string) $candidate->entry?->source_schedule_id,
+                            'laboratoryStatus' => $laboratory?->status,
+                        ],
+                    ]);
+                }
+            }
+
+
             $reservations = LaboratoryReservation::query()
                 ->where('school_id', $schoolId)
                 ->whereIn('laboratory_id', $laboratoryIds)
