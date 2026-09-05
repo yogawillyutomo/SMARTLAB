@@ -52,7 +52,6 @@ import {
   type ActivityReportDto,
   type ActivityReportType,
   type CreateActivityReportBackfillInput,
-  type UpdateActivityReportInput,
   type ActivityReportAttachmentDto,
   activityReportAttachmentDownloadUrl,
 } from '@/services/activityReportApi';
@@ -538,12 +537,13 @@ export function SessionsPage() {
       setObservations([]);
       return;
     }
+    if (!online) return;
     let active = true;
     void sessionObservationGateway.list(sessionDetail.id)
       .then((items) => { if (active) setObservations(items); })
       .catch((cause) => { if (active) toast(issueMessage(cause), 'error'); });
     return () => { active = false; };
-  }, [canViewObservations, sessionDetail]);
+  }, [canViewObservations, online, sessionDetail]);
 
   useEffect(() => {
     const report = editingReport ?? reportDetail;
@@ -551,12 +551,13 @@ export function SessionsPage() {
       setAttachments([]);
       return;
     }
+    if (!online) return;
     let active = true;
     void activityReportGateway.attachments(report.id)
       .then((items) => { if (active) setAttachments(items); })
       .catch((cause) => { if (active) toast(issueMessage(cause), 'error'); });
     return () => { active = false; };
-  }, [canViewReports, editingReport, reportDetail]);
+  }, [canViewReports, editingReport, online, reportDetail]);
 
   useEffect(() => {
     if (!editingReport || !reportEditForm || !draftSyncContext || !offlineIdentity
@@ -612,6 +613,10 @@ export function SessionsPage() {
 
   async function prepare() {
     if (!prepareSource || !canPrepare) return;
+    if (!online) {
+      toast('Menyiapkan Pelaksanaan tetap online-only karena sumber harus divalidasi server.', 'info');
+      return;
+    }
     const source = prepareSource;
     setBusy(true);
     try {
@@ -664,8 +669,7 @@ export function SessionsPage() {
       await load();
       if (canViewReports && result.activityReport) {
         const report = await activityReportGateway.show(result.activityReport.id);
-        setEditingReport(report);
-        setReportEditForm(reportForm(report));
+        restoreDraftEditor(report);
         const next = new URLSearchParams(searchParams);
         next.set('tab', 'awaiting-report');
         next.set('reportId', report.id);
@@ -708,6 +712,10 @@ export function SessionsPage() {
 
   async function searchObservationDevices() {
     if (!observationSession || observationDeviceSearch.trim().length < 2) return;
+    if (!online) {
+      toast('Pencarian Device canonical memerlukan koneksi ke server.', 'info');
+      return;
+    }
     setObservationDeviceBusy(true);
     try {
       const result = await incidentGateway.reportingDevices(observationSession.laboratory.id, observationDeviceSearch);
@@ -834,6 +842,10 @@ export function SessionsPage() {
   }
 
   function openAttachment(attachment: ActivityReportAttachmentDto) {
+    if (!online) {
+      toast('Download lampiran memerlukan koneksi ke private storage server.', 'info');
+      return;
+    }
     if (!attachment.available) {
       toast('File bukti sedang tidak tersedia. Metadata tetap dipertahankan.', 'info');
       return;
@@ -1117,6 +1129,10 @@ export function SessionsPage() {
 
   async function verifyReport(report: ActivityReportDto) {
     if (!canVerifyReport) return;
+    if (!online) {
+      toast('Verifikasi laporan tetap online-only.', 'info');
+      return;
+    }
     await mutate(async () => {
       const updated = await activityReportGateway.verify(report.id, report.version);
       setReportDetail(updated);
@@ -1125,6 +1141,10 @@ export function SessionsPage() {
 
   async function requestRevision() {
     if (!revisionReport || !canRequestRevision || revisionReason.trim() === '') return;
+    if (!online) {
+      toast('Permintaan revisi tetap online-only.', 'info');
+      return;
+    }
     const report = revisionReport;
     await mutate(async () => {
       const updated = await activityReportGateway.requestRevision(report.id, report.version, revisionReason);
@@ -1210,7 +1230,7 @@ export function SessionsPage() {
   function sessionActions(source: LaboratorySessionSourceDto) {
     const session = source.session;
     if (!session && canPrepare) {
-      return <Button size="sm" icon={<BookOpen className="h-3.5 w-3.5" />} onClick={() => {
+      return <Button size="sm" icon={<BookOpen className="h-3.5 w-3.5" />} disabled={!online} onClick={() => {
         setPrepareSource(source);
         setPrepareForm({ openingCondition: '', operationalNotes: '' });
       }}>Siapkan</Button>;
@@ -1219,13 +1239,13 @@ export function SessionsPage() {
     if (session.status === 'prepared') {
       return (
         <div className="flex flex-wrap gap-1">
-          {canStart && <Button size="sm" variant="success" icon={<Play className="h-3.5 w-3.5" />} onClick={() => void start(session.id, session.version)}>Mulai</Button>}
-          {canCancel && <Button size="sm" variant="ghost" icon={<XCircle className="h-3.5 w-3.5" />} onClick={() => setCancelSession(sessions.find((item) => item.id === session.id) ?? null)}>Batal</Button>}
+          {canStart && <Button size="sm" variant="success" icon={<Play className="h-3.5 w-3.5" />} disabled={!online} onClick={() => void start(session.id, session.version)}>Mulai</Button>}
+          {canCancel && <Button size="sm" variant="ghost" icon={<XCircle className="h-3.5 w-3.5" />} disabled={!online} onClick={() => setCancelSession(sessions.find((item) => item.id === session.id) ?? null)}>Batal</Button>}
         </div>
       );
     }
     if (session.status === 'in_progress') {
-      return <Button size="sm" variant="danger" icon={<Square className="h-3.5 w-3.5" />} onClick={() => {
+      return <Button size="sm" variant="danger" icon={<Square className="h-3.5 w-3.5" />} disabled={!online} onClick={() => {
         const full = sessions.find((item) => item.id === session.id);
         if (full) {
           setEndSession(full);
@@ -1260,9 +1280,9 @@ export function SessionsPage() {
         icon={<BookOpen className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => void load()} loading={busy}>Muat Ulang</Button>
+            <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => void load()} loading={busy} disabled={!online}>Muat Ulang</Button>
             {(canExportSessions || canExportReports) && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCanonical}>Export</Button>}
-            {canBackfill && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => {
+            {canBackfill && <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!online} onClick={() => {
               const nextType: ActivityReportType = 'general';
               setBackfillForm({
                 reportType: nextType,
@@ -1285,6 +1305,15 @@ export function SessionsPage() {
           </>
         }
       />
+
+      {!online && (
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground">
+          <p className="font-semibold">Mode offline terbatas</p>
+          <p className="mt-1">
+            Hanya working copy draft ActivityReport yang dapat disimpan lokal. Session lifecycle, Temuan/Incident, submit/verifikasi, backfill, dan attachment tetap online-only.
+          </p>
+        </div>
+      )}
 
       <Card>
         <CardContent>
@@ -1346,7 +1375,7 @@ export function SessionsPage() {
                   <div><p className="text-xs text-ink-muted">Laboratorium</p><p className="text-ink-primary">{session.laboratory.name}</p></div>
                   <div><p className="text-xs text-ink-muted">Mulai aktual</p><p className="text-ink-primary">{session.actualStartedAt ? relativeTime(session.actualStartedAt) : '-'}</p></div>
                 </div>
-                {canEnd && <Button className="mt-4 w-full" variant="danger" icon={<Square className="h-4 w-4" />} onClick={() => {
+                {canEnd && <Button className="mt-4 w-full" variant="danger" icon={<Square className="h-4 w-4" />} disabled={!online} onClick={() => {
                   setEndSession(session);
                   setEndForm({ endOutcome: 'completed', closingCondition: '', operationalNotes: '' });
                 }}>Akhiri Pelaksanaan</Button>}
@@ -1475,9 +1504,63 @@ export function SessionsPage() {
         <Textarea label="Alasan" required value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
       </FormDialog>
 
-      <FormDialog open={Boolean(editingReport && reportEditForm)} onClose={() => { setEditingReport(null); setReportEditForm(null); }} title={editingReport ? `Lengkapi ${editingReport.reportNumber}` : 'Lengkapi Laporan'} description={editingReport?.revisionReason ? `Catatan revisi: ${editingReport.revisionReason}` : 'Presensi individual tetap menjadi kewenangan sistem presensi; SmartLab hanya menyimpan agregat.'} onSubmit={() => void saveReport()} submitLabel="Simpan Draft" loading={busy} size="xl">
+      <FormDialog
+        open={Boolean(editingReport && reportEditForm)}
+        onClose={closeDraftEditor}
+        title={editingReport ? `Lengkapi ${editingReport.reportNumber}` : 'Lengkapi Laporan'}
+        description={editingReport?.revisionReason
+          ? `Catatan revisi: ${editingReport.revisionReason}`
+          : 'Draft teks dapat disimpan lokal saat koneksi putus; server tetap authority dan presensi individual tetap di luar SmartLab.'}
+        onSubmit={() => void saveReport()}
+        submitLabel={online ? (draftSyncStatus === 'clean' ? 'Draft Tersinkron' : 'Sinkronkan Draft') : 'Simpan Lokal'}
+        submitDisabled={draftSyncStatus === 'conflict'}
+        loading={busy}
+        size="xl"
+      >
         {reportEditForm && (
           <div className="space-y-6">
+            <div className="rounded-xl border border-base-700 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink-primary">Status working copy</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {draftSyncStatus === 'clean' && 'Tidak ada perubahan lokal yang belum tersinkron.'}
+                    {draftSyncStatus === 'local' && `Perubahan tersimpan lokal pada perangkat ini${online ? ' dan menunggu sinkronisasi.' : '.'}`}
+                    {draftSyncStatus === 'syncing' && 'Sedang mengirim draft ke server dengan clientMutationId yang stabil.'}
+                    {draftSyncStatus === 'conflict' && 'Versi server berubah sejak draft lokal dibuat. Tidak ada overwrite otomatis.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone={online ? 'success' : 'warning'}>{online ? 'Online' : 'Offline'}</Badge>
+                  <Badge tone={draftSyncStatus === 'conflict' ? 'danger' : draftSyncStatus === 'local' ? 'warning' : 'muted'}>
+                    {draftSyncStatus === 'clean' ? 'Tersinkron' : draftSyncStatus === 'local' ? 'Draft Lokal' : draftSyncStatus === 'syncing' ? 'Sync…' : 'Konflik'}
+                  </Badge>
+                </div>
+              </div>
+              {draftConflict && (
+                <div className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3">
+                  <p className="text-sm font-semibold text-danger">Konflik draft vs server</p>
+                  <p className="mt-1 text-xs text-ink-secondary">
+                    Basis lokal v{draftConflict.local.baseVersion}, server sekarang v{draftConflict.server.version}.
+                    {draftConflict.fields.length > 0
+                      ? ` Field bentrok: ${draftConflict.fields.join(', ')}.`
+                      : ' Perubahan berada pada field berbeda dan dapat direbase tanpa menimpa field server lain.'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="secondary" onClick={useServerConflictVersion}>Gunakan Versi Server</Button>
+                    <Button type="button" size="sm" onClick={rebaseLocalConflictVersion}>Rebase Draft Lokal</Button>
+                  </div>
+                </div>
+              )}
+              {draftSyncStatus === 'local' && online && !draftConflict && (
+                <div className="mt-3">
+                  <Button type="button" size="sm" variant="secondary" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => void saveReport()}>
+                    Sinkronkan Sekarang
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-3">
               <Select label="Tipe Laporan" value={reportEditForm.reportType} onChange={(event) => {
                 const reportType = event.target.value as ActivityReportType;
@@ -1515,7 +1598,7 @@ export function SessionsPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-primary"><Paperclip className="h-4 w-4" /> Lampiran Bukti</h3>
-                    <p className="mt-1 text-xs text-ink-muted">Private storage · JPEG/PNG/WebP/PDF · maksimal 10 MiB per file.</p>
+                    <p className="mt-1 text-xs text-ink-muted">Private storage · JPEG/PNG/WebP/PDF · maksimal 10 MiB per file · online-only.</p>
                   </div>
                   <Badge tone="muted">{attachments.length} file</Badge>
                 </div>
@@ -1526,7 +1609,7 @@ export function SessionsPage() {
                         <p className="truncate text-sm text-ink-primary">{attachment.fileName}</p>
                         <p className="text-xs text-ink-muted">{attachment.mediaType} · {(attachment.sizeBytes / 1024).toFixed(1)} KiB · SHA-256 {attachment.sha256.slice(0, 12)}…</p>
                       </div>
-                      <Button type="button" size="sm" variant="ghost" disabled={!attachment.available} icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => openAttachment(attachment)}>Buka</Button>
+                      <Button type="button" size="sm" variant="ghost" disabled={!online || !attachment.available} icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => openAttachment(attachment)}>Buka</Button>
                     </div>
                   ))}
                   {attachments.length === 0 && <p className="text-xs text-ink-muted">Belum ada lampiran.</p>}
@@ -1541,12 +1624,12 @@ export function SessionsPage() {
                         onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
                       />
                     </div>
-                    <Button type="button" variant="secondary" loading={attachmentBusy} disabled={!attachmentFile} icon={<Upload className="h-4 w-4" />} onClick={() => void uploadAttachment(editingReport)}>Upload</Button>
+                    <Button type="button" variant="secondary" loading={attachmentBusy} disabled={!online || draftSyncStatus !== 'clean' || !attachmentFile} icon={<Upload className="h-4 w-4" />} onClick={() => void uploadAttachment(editingReport)}>Upload</Button>
                   </div>
                 )}
               </div>
             )}
-            {editingReport && canSubmitReport && <div className="flex justify-end"><Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void saveAndSubmitReport()} disabled={busy}>Simpan lalu Ajukan</Button></div>}
+            {editingReport && canSubmitReport && <div className="flex justify-end"><Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void saveAndSubmitReport()} disabled={busy || !online || draftSyncStatus === 'conflict'}>Sinkronkan lalu Ajukan</Button></div>}
           </div>
         )}
       </FormDialog>
@@ -1559,7 +1642,7 @@ export function SessionsPage() {
         onSubmit={() => void createObservation()}
         submitLabel="Simpan Temuan"
         loading={busy}
-        submitDisabled={observationForm.summary.trim() === '' || (observationForm.subjectType === 'device' && observationForm.referenceId === '')}
+        submitDisabled={!online || observationForm.summary.trim() === '' || (observationForm.subjectType === 'device' && observationForm.referenceId === '')}
         size="lg"
       >
         <div className="space-y-4">
@@ -1614,7 +1697,7 @@ export function SessionsPage() {
         onSubmit={() => void promoteToIncident()}
         submitLabel="Buat & Tautkan Incident"
         loading={busy}
-        submitDisabled={promoteForm.title.trim() === '' || promoteForm.description.trim() === ''}
+        submitDisabled={!online || promoteForm.title.trim() === '' || promoteForm.description.trim() === ''}
         size="lg"
       >
         <div className="space-y-4">
@@ -1633,7 +1716,7 @@ export function SessionsPage() {
         </div>
       </FormDialog>
 
-      <FormDialog open={Boolean(revisionReport)} onClose={() => setRevisionReport(null)} title="Minta Perbaikan Laporan" onSubmit={() => void requestRevision()} submitLabel="Kirim untuk Perbaikan" loading={busy} submitDisabled={revisionReason.trim() === ''}>
+      <FormDialog open={Boolean(revisionReport)} onClose={() => setRevisionReport(null)} title="Minta Perbaikan Laporan" onSubmit={() => void requestRevision()} submitLabel="Kirim untuk Perbaikan" loading={busy} submitDisabled={!online || revisionReason.trim() === ''}>
         <Textarea label="Alasan / Catatan Perbaikan" required value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} />
       </FormDialog>
 
