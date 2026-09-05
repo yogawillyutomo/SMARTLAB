@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademicClass;
 use App\Models\AcademicYear;
 use App\Models\ActivityReportAttachment;
+use App\Models\ActivityReportEvent;
 use App\Models\Device;
 use App\Models\Incident;
 use App\Models\Laboratory;
@@ -1118,7 +1119,7 @@ class LaboratorySessionApiTest extends TestCase
         $this->assertDatabaseCount('activity_report_draft_sync_mutations', 1);
         $this->assertSame(
             1,
-            AppModelsActivityReportEvent::query()
+            ActivityReportEvent::query()
                 ->where('report_id', $reportId)
                 ->where('event_type', 'activity_report.offline_sync_applied')
                 ->count(),
