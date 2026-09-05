@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\AcademicClass;
 use App\Models\AcademicYear;
+use App\Models\Device;
+use App\Models\Incident;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
 use App\Models\LessonPeriod;
@@ -20,6 +22,8 @@ use App\Models\TimetableEntry;
 use App\Models\TimetablePublication;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -752,6 +756,289 @@ class LaboratorySessionApiTest extends TestCase
         ])
             ->assertForbidden()
             ->assertJsonPath('code', 'FORBIDDEN');
+    }
+
+    public function test_execution_observation_is_explicit_and_incident_promotion_is_idempotent(): void
+    {
+        [$guru, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $device = Device::factory()->create([
+            'school_id' => $school->id,
+            'home_laboratory_id' => $fixture['labA']->id,
+            'device_code' => 'PC-RPL1-12',
+            'lifecycle_status' => 'active',
+        ]);
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-14 07:30:00', 'Asia/Jakarta'));
+
+        $beforeIncidents = Incident::query()->count();
+
+        $observation = $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
+            'subjectType' => 'device',
+            'referenceId' => $device->id,
+            'summary' => 'PC mati mendadak saat praktikum.',
+            'severity' => 'high',
+            'observedAt' => now()->toISOString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.subjectType', 'device')
+            ->assertJsonPath('data.referenceId', $device->id)
+            ->assertJsonPath('data.referenceCode', 'PC-RPL1-12')
+            ->assertJsonPath('data.incident', null)
+            ->assertJsonPath('data.version', 1)
+            ->json('data');
+
+        $this->assertSame($beforeIncidents, Incident::query()->count(), 'Observation creation must not auto-create an Incident.');
+
+        $this->getJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $observation['id']);
+
+        $promotePayload = [
+            'category' => 'hardware',
+            'priority' => 'high',
+            'title' => 'PC RPL1-12 mati saat praktikum',
+            'description' => 'Temuan dipromosikan secara eksplisit dari Pelaksanaan Lab.',
+            'impact' => 'Satu workstation tidak dapat digunakan.',
+            'blocksLaboratoryOperation' => false,
+            'stepsTaken' => 'Sudah mencoba restart dan memeriksa kabel daya.',
+        ];
+
+        $promoted = $this->postJson('/api/v1/session-observations/'.$observation['id'].'/promote-incident', $promotePayload)
+            ->assertOk()
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.incident.status', 'reported')
+            ->json('data');
+
+        $this->assertSame($beforeIncidents + 1, Incident::query()->count());
+        $this->assertDatabaseHas('incidents', [
+            'id' => $promoted['incident']['id'],
+            'school_id' => $school->id,
+            'laboratory_id' => $fixture['labA']->id,
+            'device_id' => $device->id,
+            'reporter_membership_id' => $membership->id,
+        ]);
+        $this->assertDatabaseHas('session_issue_observations', [
+            'id' => $observation['id'],
+            'incident_id' => $promoted['incident']['id'],
+            'version' => 2,
+        ]);
+
+        $this->postJson('/api/v1/session-observations/'.$observation['id'].'/promote-incident', [
+            ...$promotePayload,
+            'title' => 'Retry dengan payload berbeda tidak membuat tiket kedua',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.incident.id', $promoted['incident']['id']);
+
+        $this->assertSame($beforeIncidents + 1, Incident::query()->count(), 'Promotion retry must remain one Incident per observation.');
+
+        $otherDevice = Device::factory()->create([
+            'school_id' => $school->id,
+            'home_laboratory_id' => $fixture['labB']->id,
+            'device_code' => 'PC-RPL2-01',
+            'lifecycle_status' => 'active',
+        ]);
+
+        $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
+            'subjectType' => 'device',
+            'referenceId' => $otherDevice->id,
+            'summary' => 'Perangkat dari lab lain tidak boleh dipakai sebagai evidence.',
+            'severity' => 'medium',
+            'observedAt' => now()->toISOString(),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'SESSION_ISSUE_OBSERVATION_REFERENCE_INVALID');
+
+        $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
+            'subjectType' => 'asset',
+            'referenceId' => 'legacy-asset-1',
+            'summary' => 'Tidak boleh mengarang canonical Asset ID sebelum S4.',
+            'severity' => 'low',
+            'observedAt' => now()->toISOString(),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $this->assertSame(
+            ['session-observations.create', 'session-observations.promote', 'session-observations.view'],
+            Role::query()->where('key', 'guru')->firstOrFail()
+                ->permissions()->where('key', 'like', 'session-observations.%')->pluck('key')->sort()->values()->all(),
+        );
+    }
+
+    public function test_observation_creation_closes_when_report_is_no_longer_an_editable_draft(): void
+    {
+        [, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-14 08:40:00', 'Asia/Jakarta'));
+
+        $ended = $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', ['endOutcome' => 'completed'])
+            ->assertOk()
+            ->json('data');
+
+        $reportId = $ended['activityReport']['id'];
+
+        $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
+            'subjectType' => 'facility',
+            'summary' => 'AC laboratorium kurang dingin.',
+            'severity' => 'medium',
+            'observedAt' => now()->subMinutes(5)->toISOString(),
+        ])->assertCreated();
+
+        $this->withHeader('If-Match', '"1"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'commonContent' => [
+                    'objective' => 'Praktikum DOM',
+                    'outcomeReflection' => 'Kegiatan selesai.',
+                ],
+                'typeSpecificContent' => [
+                    'topic' => 'DOM',
+                    'learningOutcome' => 'Siswa memahami DOM.',
+                ],
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"');
+
+        $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/submit')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'submitted');
+
+        $this->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/observations', [
+            'subjectType' => 'other',
+            'summary' => 'Evidence baru tidak boleh masuk setelah submit.',
+            'severity' => 'low',
+            'observedAt' => now()->subMinutes(2)->toISOString(),
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'SESSION_ISSUE_OBSERVATION_STATE_CONFLICT');
+    }
+
+    public function test_activity_report_attachment_is_private_versioned_and_draft_only(): void
+    {
+        Storage::fake('local');
+
+        [, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-14 08:40:00', 'Asia/Jakarta'));
+
+        $ended = $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', ['endOutcome' => 'completed'])
+            ->assertOk()
+            ->json('data');
+
+        $reportId = $ended['activityReport']['id'];
+        $file = UploadedFile::fake()->image('bukti-kondisi.png', 320, 200);
+
+        $attachment = $this->withHeader('If-Match', '"1"')
+            ->post('/api/v1/activity-reports/'.$reportId.'/attachments', ['file' => $file], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('reportVersion', 2)
+            ->assertJsonPath('data.fileName', 'bukti-kondisi.png')
+            ->assertJsonPath('data.mediaType', 'image/png')
+            ->assertJsonPath('data.available', true)
+            ->json('data');
+
+        $row = AppModelsActivityReportAttachment::query()->findOrFail($attachment['id']);
+        Storage::disk('local')->assertExists($row->storage_key);
+        $this->assertSame(64, strlen($attachment['sha256']));
+        $this->assertStringNotContainsString('storageKey', json_encode($attachment, JSON_THROW_ON_ERROR));
+
+        $this->getJson('/api/v1/activity-reports/'.$reportId.'/attachments')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $attachment['id'])
+            ->assertJsonPath('data.0.available', true);
+
+        $this->get('/api/v1/activity-reports/'.$reportId.'/attachments/'.$attachment['id'].'/download', ['Accept' => 'application/octet-stream'])
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->withHeader('If-Match', '"2"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'commonContent' => [
+                    'objective' => 'Praktikum DOM',
+                    'outcomeReflection' => 'Kegiatan selesai.',
+                ],
+                'typeSpecificContent' => [
+                    'topic' => 'DOM',
+                    'learningOutcome' => 'Siswa memahami DOM.',
+                ],
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"');
+
+        $this->withHeader('If-Match', '"3"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/submit')
+            ->assertOk()
+            ->assertHeader('ETag', '"4"');
+
+        $this->withHeader('If-Match', '"4"')
+            ->post('/api/v1/activity-reports/'.$reportId.'/attachments', [
+                'file' => UploadedFile::fake()->image('terlambat.png', 100, 100),
+            ], ['Accept' => 'application/json'])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_STATE_CONFLICT');
+
+        Storage::disk('local')->delete($row->storage_key);
+
+        $this->getJson('/api/v1/activity-reports/'.$reportId.'/attachments')
+            ->assertOk()
+            ->assertJsonPath('data.0.available', false);
+
+        $this->get('/api/v1/activity-reports/'.$reportId.'/attachments/'.$attachment['id'].'/download', ['Accept' => 'application/json'])
+            ->assertStatus(410)
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_ATTACHMENT_UNAVAILABLE');
     }
 
     /** @return array<string,mixed> */
