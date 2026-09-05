@@ -43,4 +43,16 @@ class PublishedTimetableException extends RuntimeException
     {
         return new self($message, 'TIMETABLE_PUBLICATION_NOT_ACTIVATABLE', 409);
     }
+
+    /** @param array<string,mixed> $impact */
+    public static function reconciliationRequired(array $impact): self
+    {
+        return new self(
+            'The timetable publication cannot be activated until operational impacts are reconciled.',
+            'TIMETABLE_PUBLICATION_RECONCILIATION_REQUIRED',
+            409,
+            [],
+            ['impact' => $impact],
+        );
+    }
 }
