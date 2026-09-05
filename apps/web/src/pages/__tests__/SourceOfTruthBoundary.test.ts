@@ -68,7 +68,11 @@ describe('source-of-truth migration foundation', () => {
     expect(schedulesSource).not.toContain('ConfirmDialog');
     expect(schedulesSource).toContain("from '@/services/scheduleOccurrenceApi'");
     expect(schedulesSource).toContain('scheduleOccurrenceGateway.listAll');
-    expect(schedulesSource).toContain('SmartLab tidak mengedit atau memecahkan ulang jadwal sumber');
+    expect(schedulesSource).toContain("from '@/services/scheduleExceptionApi'");
+    expect(schedulesSource).toContain('scheduleExceptionGateway.create');
+    expect(schedulesSource).toContain("hasServerPermission(user, 'schedule-exceptions.create')");
+    expect(schedulesSource).toContain('TESSELA tetap source plan');
+    expect(schedulesSource).toContain('Exception tidak mengubah recurring timetable sumber');
     expect(appSource).toContain('RequireServerPermission permission="schedules.view"');
     expect(navSource).toContain("schedules: 'schedules.view'");
     expect(navSource).toContain("serverPermission: 'schedules.view'");
