@@ -1,6 +1,6 @@
 # Laboratory Session and Activity Report Contract
 
-**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport pending  
+**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented  
 **Date:** 2026-09-05  
 **Depends on:** ADR-001, S2 Published Timetable/Schedule Occurrence, Unified Laboratory Availability, Reservation, Schedule Exception, Priority Event, Incident
 
@@ -1047,9 +1047,9 @@ Delivered:
 
 No frontend cutover yet. ActivityReport is still absent, so S3.2 end records report-pending evidence; S3.3 must make normal end + report draft atomic before `/sessions` becomes canonical.
 
-### S3.3 — ActivityReport backend
+### S3.3 — ActivityReport backend — implemented
 
-Implement:
+Delivered:
 
 - 1:1 normal Session report;
 - atomic draft creation on Session end;

@@ -154,7 +154,8 @@ class LaboratorySessionApiTest extends TestCase
             ->assertHeader('ETag', '"3"')
             ->assertJsonPath('data.status', 'ended')
             ->assertJsonPath('data.endOutcome', 'completed')
-            ->assertJsonPath('data.timeline.2.payload.activityReportPendingS3_3', true)
+            ->assertJsonPath('data.activityReport.status', 'draft')
+            ->assertJsonPath('data.activityReport.reportType', 'practicum')
             ->json('data');
 
         $this->getJson('/api/v1/laboratory-availability?'.http_build_query([
@@ -417,6 +418,216 @@ class LaboratorySessionApiTest extends TestCase
         $this->postJson('/api/v1/timetable-publications/'.$candidate->id.'/activate')
             ->assertOk()
             ->assertJsonPath('data.status', 'active');
+    }
+
+    public function test_activity_report_lifecycle_permissions_and_tenant_scope_are_server_authoritative(): void
+    {
+        [$guru, $school, $guruMembership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $guruMembership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        $ended = $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', [
+                'endOutcome' => 'completed',
+                'closingCondition' => 'Semua perangkat dimatikan.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.activityReport.status', 'draft')
+            ->json('data');
+
+        $reportId = $ended['activityReport']['id'];
+
+        $this->assertDatabaseHas('activity_reports', [
+            'id' => $reportId,
+            'school_id' => $school->id,
+            'session_id' => $session['id'],
+            'origin' => 'session',
+            'status' => 'draft',
+            'report_type' => 'practicum',
+            'owner_membership_id' => $guruMembership->id,
+            'version' => 1,
+        ]);
+
+        $this->withHeader('If-Match', '')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'commonContent' => ['objective' => 'Menguji DOM', 'outcomeReflection' => 'Tujuan tercapai.'],
+            ])
+            ->assertStatus(428)
+            ->assertJsonPath('code', 'PRECONDITION_REQUIRED');
+
+        $this->withHeader('If-Match', '"1"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'presentCount' => 31,
+                'absentCount' => 1,
+                'attendanceNotes' => 'Satu siswa tidak hadir; detail presensi tetap di HADIRA.',
+                'commonContent' => [
+                    'objective' => 'Menguji DOM',
+                    'material' => 'DOM dasar',
+                    'resources' => 'Browser dan editor',
+                    'issues' => null,
+                    'followUp' => 'Latihan lanjutan',
+                    'outcomeReflection' => 'Tujuan tercapai.',
+                ],
+                'typeSpecificContent' => [
+                    'topic' => 'DOM',
+                    'steps' => 'Query elemen lalu ubah isi.',
+                    'softwareTools' => 'VS Code, browser',
+                    'learningOutcome' => 'Siswa mampu memanipulasi DOM.',
+                ],
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.attendance.presentCount', 31)
+            ->assertJsonPath('data.timeline.1.eventType', 'activity_report.updated');
+
+        $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/submit')
+            ->assertOk()
+            ->assertHeader('ETag', '"3"')
+            ->assertJsonPath('data.status', 'submitted');
+
+        $this->withHeader('If-Match', '"3"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/verify')
+            ->assertForbidden()
+            ->assertJsonPath('code', 'FORBIDDEN');
+
+        $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');
+        $this->getJson('/api/v1/activity-reports/'.$reportId)
+            ->assertNotFound()
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_NOT_FOUND');
+
+        [$reviewer] = $this->actingAsRole($school, 'kepala-lab');
+
+        $this->withHeader('If-Match', '"3"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/request-revision', [
+                'reason' => 'Tambahkan tindak lanjut yang lebih spesifik.',
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"4"')
+            ->assertJsonPath('data.status', 'revision_required');
+
+        Sanctum::actingAs($guru);
+
+        $this->withHeader('If-Match', '"4"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/reopen')
+            ->assertOk()
+            ->assertHeader('ETag', '"5"')
+            ->assertJsonPath('data.status', 'draft')
+            ->assertJsonPath('data.timeline.4.eventType', 'activity_report.reopened');
+
+        $this->withHeader('If-Match', '"5"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/submit')
+            ->assertOk()
+            ->assertHeader('ETag', '"6"')
+            ->assertJsonPath('data.status', 'submitted');
+
+        Sanctum::actingAs($reviewer);
+
+        $this->withHeader('If-Match', '"6"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/verify')
+            ->assertOk()
+            ->assertHeader('ETag', '"7"')
+            ->assertJsonPath('data.status', 'verified')
+            ->assertJsonPath('data.timeline.6.eventType', 'activity_report.verified');
+
+        $this->assertSame(
+            ['activity-reports.edit', 'activity-reports.submit', 'activity-reports.view'],
+            Role::query()->where('key', 'guru')->firstOrFail()
+                ->permissions()->where('key', 'like', 'activity-reports.%')->pluck('key')->sort()->values()->all(),
+        );
+
+        $this->assertSame(
+            [
+                'activity-reports.create-backfill',
+                'activity-reports.edit',
+                'activity-reports.export',
+                'activity-reports.request-revision',
+                'activity-reports.submit',
+                'activity-reports.verify',
+                'activity-reports.view',
+                'activity-reports.view-all',
+            ],
+            Role::query()->where('key', 'admin-lab')->firstOrFail()
+                ->permissions()->where('key', 'like', 'activity-reports.%')->pluck('key')->sort()->values()->all(),
+        );
+    }
+
+    public function test_manual_backfill_is_elevated_audited_and_never_creates_a_fake_session(): void
+    {
+        [$admin, $school] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'admin-lab',
+        );
+        $fixture = $this->fixture($school);
+        $beforeSessions = \App\Models\LaboratorySession::query()->count();
+
+        $backfill = $this->postJson('/api/v1/activity-reports/backfill', [
+            'reportType' => 'general',
+            'laboratoryId' => $fixture['labA']->id,
+            'occurredOn' => '2026-09-01',
+            'manualBackfillReason' => 'Migrasi jurnal kertas sebelum cutover S3.',
+            'responsibleName' => 'Guru Arsip',
+            'activityDescription' => 'Penggunaan laboratorium historis.',
+            'plannedParticipantCount' => 30,
+            'presentCount' => 29,
+            'absentCount' => 1,
+            'commonContent' => [
+                'objective' => 'Dokumentasi aktivitas historis',
+                'outcomeReflection' => 'Bukti telah direkonsiliasi.',
+            ],
+            'typeSpecificContent' => [
+                'activityOwner' => 'PPLG',
+                'result' => 'Kegiatan selesai.',
+            ],
+        ])
+            ->assertCreated()
+            ->assertHeader('ETag', '"1"')
+            ->assertJsonPath('data.origin', 'manual_backfill')
+            ->assertJsonPath('data.sessionId', null)
+            ->assertJsonPath('data.timeline.0.eventType', 'activity_report.manual_backfill_created')
+            ->json('data');
+
+        $this->assertSame($beforeSessions, \App\Models\LaboratorySession::query()->count());
+        $this->assertDatabaseHas('activity_reports', [
+            'id' => $backfill['id'],
+            'origin' => 'manual_backfill',
+            'session_id' => null,
+            'created_by_user_id' => $admin->id,
+        ]);
+
+        $this->withHeader('If-Match', '"1"')
+            ->patchJson('/api/v1/activity-reports/'.$backfill['id'], [
+                'reportType' => 'exam',
+                'typeSpecificContent' => ['activityOwner' => 'invalid for exam'],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $this->actingAsRole($school, 'guru');
+
+        $this->postJson('/api/v1/activity-reports/backfill', [
+            'reportType' => 'general',
+            'laboratoryId' => $fixture['labA']->id,
+            'occurredOn' => '2026-09-01',
+            'manualBackfillReason' => 'Tidak boleh',
+            'responsibleName' => 'Guru',
+            'activityDescription' => 'Bypass',
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'FORBIDDEN');
     }
 
     /** @return array<string,mixed> */

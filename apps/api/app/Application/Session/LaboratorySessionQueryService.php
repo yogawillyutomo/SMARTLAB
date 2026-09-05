@@ -78,6 +78,7 @@ class LaboratorySessionQueryService
             'academicClass:id,school_id,code,name,student_count',
             'subject:id,school_id,code,name',
             'sourcePublication:id,school_id,source_publication_id,source_version,status',
+            'activityReport:id,school_id,session_id,report_number,report_type,status,version',
             'events' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Application\Session;
 
+use App\Application\ActivityReport\ActivityReportMutationService;
 use App\Application\Availability\LaboratoryAvailabilityQueryService;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Session\LaboratorySessionDomainException;
@@ -17,6 +18,7 @@ class LaboratorySessionMutationService
         private readonly LaboratorySessionSourceResolver $sources,
         private readonly LaboratoryAvailabilityQueryService $availability,
         private readonly LaboratorySessionEventRecorder $recorder,
+        private readonly ActivityReportMutationService $reports,
     ) {
     }
 
@@ -226,11 +228,12 @@ class LaboratorySessionMutationService
                     'endOutcome' => (string) $session->end_outcome,
                     'actualStartedAt' => $session->actual_started_at?->toISOString(),
                     'actualEndedAt' => $session->actual_ended_at?->toISOString(),
-                    'activityReportPendingS3_3' => true,
                 ],
                 $before,
                 $session->version,
             );
+
+            $this->reports->createSessionDraft($context, $actor, $session);
 
             return $this->reload($session);
         });
@@ -336,6 +339,7 @@ class LaboratorySessionMutationService
             'academicClass:id,school_id,code,name,student_count',
             'subject:id,school_id,code,name',
             'sourcePublication:id,school_id,source_publication_id,source_version,status',
+            'activityReport:id,school_id,session_id,report_number,report_type,status,version',
             'events' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
         ]);
     }

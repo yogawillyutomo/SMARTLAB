@@ -2,6 +2,7 @@
 
 use App\Application\Identity\SpaAuthenticationException;
 use App\Domain\Academic\AcademicMasterException;
+use App\Domain\ActivityReport\ActivityReportDomainException;
 use App\Domain\Device\DeviceDomainException;
 use App\Domain\DeviceTransfer\TransferDomainException;
 use App\Domain\Identity\IdentityAdministrationException;
@@ -208,6 +209,23 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json($body, $exception->status);
         });
         $exceptions->render(function (PriorityEventDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $body = [
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ];
+
+            if ($exception->details !== []) {
+                $body['details'] = $exception->details;
+            }
+
+            return response()->json($body, $exception->status);
+        });
+
+        $exceptions->render(function (ActivityReportDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
