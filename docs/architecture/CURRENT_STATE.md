@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** repository state including S2.8 Priority Events and Timetable Publication Reconciliation
+**Baseline:** repository state including S2.8 canonical scheduling plus the locked S3.1 Laboratory Session and Activity Report contract
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -27,7 +27,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Laboratory Reservations | PostgreSQL reservation lifecycle with serialized availability checks, approval re-check, ETag versioning, audit timeline, and canonical `/bookings` frontend |
 | Dated Schedule Exceptions | immutable occurrence overlay for one-date cancel/relocate, availability integration, safe restoration, versioning, and audit |
 | Priority Events | canonical submitted/approved/rejected/cancelled workflow; submission may expose conflicts but approval is fail-closed until explicit reconciliation; canonical `/priority-events` frontend |
-| Timetable publication reconciliation | future-only schedule diff + operational impact preview; activation recalculates impact transactionally and refuses unresolved Reservation, Priority Event, Schedule Exception, Calendar, Laboratory status/capacity drift |
+| Timetable publication reconciliation | future-only schedule diff + operational impact preview; activation recalculates impact transactionally and refuses unresolved Reservation, Priority Event, Schedule Exception, Calendar, or Laboratory status drift |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -54,12 +54,13 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S3: Laboratory Session + Journal.
-2. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-3. Phase S5: Corrective Work Orders.
-4. Phase S6: PC monitoring telemetry.
-5. Phase S7: Notifications, Reporting, final Dashboard/global search.
-6. Phase S8: remove browser-local business persistence and compatibility layers.
+1. Phase S3.2: canonical LaboratorySession backend, source eligibility/revalidation, occupancy, and reconciliation guards.
+2. Phase S3.3–S3.6: ActivityReport backend, unified Pelaksanaan Lab frontend, explicit Incident/attachment linkage, offline draft sync/UAT.
+3. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+4. Phase S5: Corrective Work Orders.
+5. Phase S6: PC monitoring telemetry.
+6. Phase S7: Notifications, Reporting, final Dashboard/global search.
+7. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -94,6 +95,7 @@ The locked target boundary is:
 - S2.6 makes Laboratory Reservations canonical: submitted/approved reservations block availability, Laboratory-row locking serializes competing mutations, approval re-checks current availability, requester identity is session-derived, and `/bookings` no longer reads browser-local state.
 - S2.7 makes dated Schedule Exceptions canonical: only one-date cancel/relocate is supported; source occurrences remain immutable; relocation uses the same availability engine; exception cancellation fails closed if restoring the source plan would conflict.
 - S2.8 makes Priority Events canonical and closes timetable-revision safety: priority submission may record conflicts, approval requires a clear Unified Availability result, approved events become blockers, new TESSELA publications expose deterministic impact previews, active exceptions never migrate silently, operational writes share a School-scoped write mutex with activation, and activation fails closed until impact is clear.
+- S3.1 locks the execution/report boundary in [Laboratory Session and Activity Report Contract](./laboratory-session-activity-report-contract.md): normal Sessions originate only from current operational ScheduleOccurrence/approved Reservation/approved Priority Event; source evidence is revalidated before start; in-progress Sessions become operational occupancy; normal ended Sessions own exactly one ActivityReport draft; individual attendance stays outside SmartLab authority; Incident creation from execution observations is explicit; offline report drafts retain server/version authority.
 
 ## Validation contract
 

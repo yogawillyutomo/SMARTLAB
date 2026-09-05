@@ -58,7 +58,7 @@ The application is in a staged source-of-truth migration.
 
 ### Transitional browser-local domains
 
-Laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered.
+Laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered. The S3.1 execution/report semantics are already locked in [Laboratory Session and Activity Report Contract](docs/architecture/laboratory-session-activity-report-contract.md); implementation begins with the S3.2 LaboratorySession backend.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 

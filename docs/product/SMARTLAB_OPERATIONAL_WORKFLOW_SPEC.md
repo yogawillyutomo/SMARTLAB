@@ -194,7 +194,7 @@ Laporan manual hanya untuk backfill, migrasi, darurat, atau data legacy yang dii
 | --- | --- |
 | Implementasi saat ini | Sesi Praktikum dan Jurnal Praktikum adalah menu/route terpisah; menyelesaikan sesi dapat membuat jurnal draft. |
 | Perilaku target yang disetujui | Pengguna mengalami satu workflow Pelaksanaan Lab dengan laporan wajib dan verifikasi. |
-| Implementasi masa depan | Antarmuka terpadu, migrasi terkontrol, status, draft, notifikasi terkonfigurasi, dan kebijakan verifikasi. |
+| Implementasi masa depan | S3.1 sudah mengunci Session/ActivityReport contract; berikutnya S3.2–S3.6 membangun backend Session, ActivityReport, antarmuka terpadu, explicit Incident/attachment linkage, offline draft sync, dan UAT. |
 | Di luar scope PR dokumentasi | Menghapus jurnal/sesi lama atau menetapkan SLA pengingat yang belum disetujui. |
 
 ## 6. Denah laboratorium
@@ -401,12 +401,18 @@ Gunakan daftar ini untuk setiap PR implementasi yang relevan.
 | DEC-012 | Laravel Policies adalah batas keamanan otoritatif. | Disetujui | Guard frontend dapat dilewati. | Backend memvalidasi permission dan perubahan. | Tahap 12. |
 | DEC-013 | TESSELA adalah satu-satunya solver jadwal; SmartLab mengonsumsi published timetable dan mengelola operasional lab. | Disetujui | Mencegah dual source of truth dan solver ganda. | BP Master Data menjadi target authority referensi akademik; Laboratory tetap milik SmartLab; exception bertanggal tidak mengubah recurring timetable. | ADR-001, Tahap 8–10. |
 | DEC-014 | Published timetable adalah full School+Semester snapshot berversi; SmartLab materialize immutable ScheduleOccurrence sebelum atomic activation. | Disetujui | Idempotensi, history, availability, dan exception membutuhkan source version serta occurrence ID stabil. | Tidak ada partial activation; Excel/file hanya adapter; struktur jadwal diubah melalui publikasi TESSELA baru. | Kontrak S2.1, Tahap 8. |
+| DEC-015 | Session normal hanya berasal dari current operational ScheduleOccurrence, approved Reservation, atau approved Priority Event. | Disetujui | Pelaksanaan tidak boleh menjadi bypass availability/approval. | Tidak ada general manual Session; ad-hoc use harus lewat source operational yang sah. | S3.1. |
+| DEC-016 | Session revalidasi source sebelum start dan memisahkan planned source evidence dari actual execution evidence. | Disetujui | Jadwal/reservasi/event dapat berubah setelah preparation. | Start stale fail-closed; source tidak pernah silently diganti. | S3.1. |
+| DEC-017 | Session in-progress menjadi occupancy operasional aktual. | Disetujui | Overrun tidak boleh membuat Lab terlihat bebas setelah planned window selesai. | Unified Availability dan source mutation guards diperluas di S3.2. | S3.1–S3.2. |
+| DEC-018 | Normal Session ended memiliki tepat satu ActivityReport; manual backfill report tidak membuat Session palsu. | Disetujui | Bukti pelaksanaan wajib tetapi legacy tidak boleh memalsukan provenance. | End membuat/menautkan draft secara atomik; backfill punya permission/reason khusus. | S3.1–S3.3. |
+| DEC-019 | SmartLab menyimpan aggregate attendance, bukan ledger presensi individual. | Disetujui | HADIRA adalah produk presensi; duplikasi per-siswa menciptakan dual authority. | Optional external attendance reference + present/absent aggregate. | S3.1, future HADIRA integration. |
+| DEC-020 | Temuan perangkat saat Session tidak otomatis menjadi Incident. | Disetujui | Free text tidak cukup untuk membuat tiket canonical dan dapat menduplikasi incident. | Observation → explicit permission-checked Incident promotion/link. | S3.1, S3.5. |
 
 ## 14. Pertanyaan terbuka
 
 1. Rantai persetujuan override prioritas yang tepat, termasuk eskalasi saat approver tidak tersedia.
 2. Kebijakan kapasitas: jumlah terdaftar, hadir, workstation, aksesibilitas, atau kombinasi.
-3. Pengingat/SLA laporan yang dapat dikonfigurasi dan kebutuhan verifikasi menurut jenis laporan.
+3. Pengingat/SLA laporan yang dapat dikonfigurasi dan kapan tenant boleh merelaksasi baseline verifikasi laporan.
 4. Model induk kegiatan khusus yang memakai lebih dari satu laboratorium.
 5. Workflow publikasi/versioning denah aktif.
 6. Retensi rollback dan hasil import.
