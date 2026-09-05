@@ -19,7 +19,7 @@ use App\Models\Teacher;
 use App\Models\TimetableEntry;
 use App\Models\TimetablePublication;
 use App\Models\User;
-use Carbon\CarbonImmutable;
+use Illuminate\Support\Carbon;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -33,12 +33,12 @@ class LaboratorySessionApiTest extends TestCase
     {
         parent::setUp();
         $this->seed(DatabaseSeeder::class);
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 07:05:00', 'Asia/Jakarta'));
+        Carbon::setTestNow(Carbon::parse('2026-09-14 07:05:00', 'Asia/Jakarta'));
     }
 
     protected function tearDown(): void
     {
-        CarbonImmutable::setTestNow();
+        Carbon::setTestNow();
         parent::tearDown();
     }
 
@@ -143,7 +143,7 @@ class LaboratorySessionApiTest extends TestCase
             ->assertJsonPath('data.blockers.0.sourceId', $started['id'])
             ->assertJsonPath('data.sourceCoverage.laboratorySessions.status', 'covered');
 
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 09:10:00', 'Asia/Jakarta'));
+        Carbon::setTestNow(Carbon::parse('2026-09-14 09:10:00', 'Asia/Jakarta'));
 
         $ended = $this->withHeader('If-Match', '"2"')
             ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', [
@@ -209,7 +209,7 @@ class LaboratorySessionApiTest extends TestCase
             'sourceId' => $event->id,
         ])->assertCreated()->json('data');
 
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 10:05:00', 'Asia/Jakarta'));
+        Carbon::setTestNow(Carbon::parse('2026-09-14 10:05:00', 'Asia/Jakarta'));
 
         $this->withHeader('If-Match', '"1"')
             ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
