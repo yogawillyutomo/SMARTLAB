@@ -1018,6 +1018,18 @@ export function SessionsPage() {
         return;
       }
 
+      if (result.report.version !== result.sync.appliedVersion) {
+        setDraftEditorFromServer(result.report);
+        toast(
+          submitAfter
+            ? 'Mutation lokal sudah pernah diterapkan, tetapi server berubah lagi setelahnya. Periksa versi terbaru sebelum mengajukan.'
+            : 'Mutation lokal sudah pernah diterapkan dan server memiliki perubahan lebih baru. Editor dimuat dari versi terbaru.',
+          'info',
+        );
+        await load();
+        return;
+      }
+
       if (submitAfter) {
         const submitted = await activityReportGateway.submit(result.report.id, result.report.version);
         closeDraftEditor();
@@ -1031,7 +1043,8 @@ export function SessionsPage() {
       toast(result.sync.replayed ? 'Retry sinkronisasi dikonfirmasi tanpa duplikasi.' : 'Draft tersinkron ke server.', 'success');
       await load();
     } catch (cause) {
-      if (cause instanceof ApiClientError && cause.code === 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT') {
+      if (cause instanceof ApiClientError
+        && (cause.code === 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT' || cause.code === 'ACTIVITY_REPORT_STATE_CONFLICT')) {
         const server = await activityReportGateway.show(editingReport.id).catch(() => null);
         if (server) {
           setEditingReport(server);
@@ -1045,7 +1058,12 @@ export function SessionsPage() {
             ),
           });
           setDraftSyncStatus('conflict');
-          toast('Versi server lebih baru. Draft lokal dipertahankan sampai konflik diselesaikan.', 'info');
+          toast(
+            server.status === 'draft'
+              ? 'Versi server lebih baru. Draft lokal dipertahankan sampai konflik diselesaikan.'
+              : 'Lifecycle laporan berubah di server. Draft lokal dipertahankan untuk ditinjau, tetapi tidak dapat disinkronkan ke status ini.',
+            'info',
+          );
           return;
         }
       }
@@ -1096,6 +1114,10 @@ export function SessionsPage() {
 
   function rebaseLocalConflictVersion(): void {
     if (!draftConflict || !offlineIdentity) return;
+    if (draftConflict.server.status !== 'draft') {
+      toast('Rebase hanya dapat dilakukan ketika versi kanonik server masih berstatus draft.', 'info');
+      return;
+    }
 
     const serverSnapshot = editableSnapshotFromReport(draftConflict.server);
     const rebased = rebaseEditableSnapshot(
@@ -1548,7 +1570,9 @@ export function SessionsPage() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="secondary" onClick={useServerConflictVersion}>Gunakan Versi Server</Button>
-                    <Button type="button" size="sm" onClick={rebaseLocalConflictVersion}>Rebase Draft Lokal</Button>
+                    {draftConflict.server.status === 'draft' && (
+                      <Button type="button" size="sm" onClick={rebaseLocalConflictVersion}>Rebase Draft Lokal</Button>
+                    )}
                   </div>
                 </div>
               )}
