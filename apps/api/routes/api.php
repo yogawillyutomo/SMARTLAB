@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ScheduleOccurrenceController;
+use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
@@ -66,6 +67,14 @@ Route::prefix('v1')->group(function (): void {
         Route::post('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'storeLessonPeriod'])->middleware('permission:master-data.create');
         Route::get('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'showLessonPeriod'])->middleware('permission:master-data.view');
         Route::patch('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'updateLessonPeriod'])->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+
+        Route::get('calendar-events', [OperationalCalendarEventController::class, 'index'])->middleware('permission:calendar.view');
+        Route::post('calendar-events', [OperationalCalendarEventController::class, 'store'])->middleware('permission:calendar.create');
+        Route::get('calendar-events/{calendarEventId}', [OperationalCalendarEventController::class, 'show'])->middleware('permission:calendar.view');
+        Route::patch('calendar-events/{calendarEventId}', [OperationalCalendarEventController::class, 'update'])
+            ->middleware(['permission:calendar.update', \App\Http\Middleware\RequireCalendarEventVersionPrecondition::class]);
+        Route::post('calendar-events/{calendarEventId}/cancel', [OperationalCalendarEventController::class, 'cancel'])
+            ->middleware(['permission:calendar.cancel', \App\Http\Middleware\RequireCalendarEventVersionPrecondition::class]);
 
         Route::get('schedule-occurrences', [ScheduleOccurrenceController::class, 'index'])->middleware('permission:schedules.view');
 
