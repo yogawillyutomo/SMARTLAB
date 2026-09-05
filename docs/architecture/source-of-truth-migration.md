@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.4 Operational Calendar & Closure
+**Baseline:** repository state including S2.5 Unified Laboratory Availability
 
 ## Goal
 
@@ -27,6 +27,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
 | Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
 | Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
+| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar | API + typed web gateway; consumed by reservation slice next | canonical backend |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -46,7 +47,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 | `/work-orders` | corrective work orders | work-order domain linked to Incident |
 | `/maintenance` | preventive maintenance | maintenance plan/execution domain |
 | `/loans` | item loans | custody/loan domain |
-| `/calendar` | academic calendar/closures | calendar/closure domain |
 | `/reports` | reporting | validated aggregate/reporting queries |
 | `/notifications` | user notifications | notification domain |
 | `/audit-logs` | audit evidence | canonical append-oriented audit query API |
@@ -165,10 +165,20 @@ Delivered in S2.4:
 - canonical `/calendar` cutover with role-safe Laboratory lookup;
 - OpenAPI 0.15 and source-of-truth regression coverage.
 
+Delivered in S2.5:
+
+- tenant-scoped exact-window Unified Laboratory Availability API;
+- explicit `available`, `scheduled`, `blocked`, `mixed`, and fail-closed `unknown` states;
+- active TESSELA publication coverage detection so missing schedule data is never interpreted as free capacity;
+- half-open overlap semantics for adjacent schedule/calendar windows;
+- Laboratory inactive status as an operational blocker;
+- active ScheduleOccurrence blockers with source publication/schedule provenance and snapshot-aware labels;
+- blocked Operational Calendar evidence as blockers and informational events as notices;
+- `availability.view` server permission and typed frontend gateway;
+- OpenAPI 0.16 and integration/regression coverage.
+
 Next implementation slices:
 
-- S2.5 unified Laboratory availability;
-- S2.5 unified Laboratory availability;
 - S2.6 reservations and approval;
 - S2.7 dated schedule exceptions;
 - S2.8 priority event override/integration UAT.

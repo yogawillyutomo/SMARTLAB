@@ -84,6 +84,9 @@ class PermissionSeeder extends Seeder
             'cancel' => 'Batalkan Event Kalender',
             'export' => 'Ekspor Kalender',
         ],
+        'availability' => [
+            'view' => 'Lihat Ketersediaan Laboratorium',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',

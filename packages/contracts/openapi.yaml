@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.15.0
-  description: Canonical SmartLab API v1 contract. Version 0.15 preserves the complete 0.14 surface and adds S2.4 Operational Calendar and Closure.
+  version: 0.16.0
+  description: Canonical SmartLab API v1 contract. Version 0.16 preserves the complete 0.15 surface and adds S2.5 Unified Laboratory Availability.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -33,6 +33,7 @@ paths:
   /identity/memberships: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships' }
   /identity/memberships/{membershipId}: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships~1{membershipId}' }
   /identity/roles: { $ref: './openapi-0.11.yaml#/paths/~1identity~1roles' }
+  /laboratory-availability: { $ref: './openapi-availability.yaml#/paths/~1laboratory-availability' }
   /calendar-events: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events' }
   /calendar-events/{calendarEventId}: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events~1{calendarEventId}' }
   /calendar-events/{calendarEventId}/cancel: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events~1{calendarEventId}~1cancel' }
