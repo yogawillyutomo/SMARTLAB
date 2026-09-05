@@ -4,6 +4,7 @@ namespace App\Application\Reservation;
 
 use App\Application\Availability\LaboratoryAvailabilityQueryService;
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Session\LaboratorySessionSourceGuard;
 use App\Domain\Reservation\LaboratoryReservationException;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
@@ -18,6 +19,7 @@ class LaboratoryReservationMutationService
     public function __construct(
         private readonly LaboratoryAvailabilityQueryService $availability,
         private readonly LaboratoryReservationEventRecorder $recorder,
+        private readonly LaboratorySessionSourceGuard $sessionGuard,
     ) {
     }
 
@@ -213,6 +215,13 @@ class LaboratoryReservationMutationService
             if (! in_array($reservation->status, ['submitted', 'approved'], true)) {
                 throw LaboratoryReservationException::stateConflict('Only submitted or approved reservations may be cancelled.');
             }
+
+            $this->sessionGuard->assertMutable(
+                (string) $context->membership->school_id,
+                'laboratory_reservation',
+                (string) $reservation->id,
+                'cancel_reservation',
+            );
 
             $beforeStatus = $reservation->status;
             $before = $reservation->version;
