@@ -111,6 +111,10 @@ export function StatusBadge({ status }: { status: string }) {
     'Perlu Perbaikan': { tone: 'warning', icon: <AlertTriangle className="h-3 w-3" /> },
     Dibatalkan: { tone: 'danger', icon: <XCircle className="h-3 w-3" /> },
     // Booking / Loan
+    submitted: { tone: 'info', icon: <Info className="h-3 w-3" /> },
+    approved: { tone: 'success', icon: <CheckCircle2 className="h-3 w-3" /> },
+    rejected: { tone: 'danger', icon: <XCircle className="h-3 w-3" /> },
+    cancelled: { tone: 'danger', icon: <XCircle className="h-3 w-3" /> },
     Diajukan: { tone: 'info', icon: <Info className="h-3 w-3" /> },
     'Menunggu Persetujuan': { tone: 'warning', icon: <Clock className="h-3 w-3" /> },
     Disetujui: { tone: 'success', icon: <CheckCircle2 className="h-3 w-3" /> },

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Laboratory Availability API module
-  version: 0.16.0
+  version: 0.17.0
 paths:
   /laboratory-availability:
     get:
@@ -40,7 +40,7 @@ components:
       properties:
         type:
           type: string
-          enum: [schedule_occurrence, calendar_event, laboratory_status]
+          enum: [schedule_occurrence, calendar_event, laboratory_status, reservation]
         sourceId: { type: string }
         title: { type: string }
         allDay: { type: boolean }

@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.5 Unified Laboratory Availability
+**Baseline:** repository state including S2.6 Canonical Laboratory Reservations
 
 ## Goal
 
@@ -27,7 +27,8 @@ This roadmap follows the approved operational workflow specification and the rep
 | Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
 | Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
 | Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
-| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar | API + typed web gateway; consumed by reservation slice next | canonical backend |
+| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar + submitted/approved reservations | typed web gateway + reservation integration | canonical |
+| Laboratory reservations | PostgreSQL reservation + append-oriented events | canonical `/bookings` UI | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -38,7 +39,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/bookings` | laboratory reservations | availability + reservation domain |
 | `/sessions` | laboratory execution | occurrence/session domain |
 | `/journals` | execution report/journal | session/report domain |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
@@ -177,9 +177,23 @@ Delivered in S2.5:
 - `availability.view` server permission and typed frontend gateway;
 - OpenAPI 0.16 and integration/regression coverage.
 
+Delivered in S2.6:
+
+- tenant-scoped Laboratory Reservation persistence and append-oriented audit events;
+- human-readable reservation number separated from stable ULID identity;
+- requester identity derived from authenticated user/membership, never client-provided;
+- submitted/approved reservation blockers integrated into Unified Availability;
+- serialized Laboratory-row lock around reservation mutation paths to prevent overlapping submit/approve races;
+- participant-capacity validation;
+- approval-time availability re-check excluding the reservation itself;
+- submitted/approved cancellation and submitted rejection with explicit reasons;
+- ETag/If-Match optimistic versioning;
+- own-vs-school visibility through `bookings.view-all`;
+- canonical `/bookings` cutover and typed frontend gateway;
+- OpenAPI 0.17 and source-of-truth regression coverage.
+
 Next implementation slices:
 
-- S2.6 reservations and approval;
 - S2.7 dated schedule exceptions;
 - S2.8 priority event override/integration UAT.
 

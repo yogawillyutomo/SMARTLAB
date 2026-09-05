@@ -14,12 +14,14 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ScheduleOccurrenceController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
+use App\Http\Controllers\Api\V1\LaboratoryReservationController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
+use App\Http\Middleware\RequireReservationVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -68,6 +70,16 @@ Route::prefix('v1')->group(function (): void {
         Route::post('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'storeLessonPeriod'])->middleware('permission:master-data.create');
         Route::get('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'showLessonPeriod'])->middleware('permission:master-data.view');
         Route::patch('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'updateLessonPeriod'])->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+
+        Route::get('laboratory-reservations', [LaboratoryReservationController::class, 'index'])->middleware('permission:bookings.view');
+        Route::post('laboratory-reservations', [LaboratoryReservationController::class, 'store'])->middleware('permission:bookings.create');
+        Route::get('laboratory-reservations/{reservationId}', [LaboratoryReservationController::class, 'show'])->middleware('permission:bookings.view');
+        Route::post('laboratory-reservations/{reservationId}/approve', [LaboratoryReservationController::class, 'approve'])
+            ->middleware(['permission:bookings.approve', RequireReservationVersionPrecondition::class]);
+        Route::post('laboratory-reservations/{reservationId}/reject', [LaboratoryReservationController::class, 'reject'])
+            ->middleware(['permission:bookings.approve', RequireReservationVersionPrecondition::class]);
+        Route::post('laboratory-reservations/{reservationId}/cancel', [LaboratoryReservationController::class, 'cancel'])
+            ->middleware(['permission:bookings.cancel', RequireReservationVersionPrecondition::class]);
 
         Route::get('laboratory-availability', LaboratoryAvailabilityController::class)->middleware('permission:availability.view');
 

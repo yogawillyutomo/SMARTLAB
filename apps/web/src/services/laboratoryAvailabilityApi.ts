@@ -2,7 +2,7 @@ import { apiClient, type ApiClient } from '@/lib/apiClient';
 import { isUlid } from '@/lib/ulid';
 
 export type AvailabilityState = 'available' | 'scheduled' | 'blocked' | 'mixed' | 'unknown';
-export type AvailabilityBlockerType = 'schedule_occurrence' | 'calendar_event' | 'laboratory_status';
+export type AvailabilityBlockerType = 'schedule_occurrence' | 'calendar_event' | 'laboratory_status' | 'reservation';
 export type ScheduleCoverageStatus = 'covered' | 'missing' | 'ambiguous';
 
 export interface AvailabilityReferenceDto { id:string; code:string; name:string }
@@ -35,6 +35,7 @@ export interface LaboratoryAvailabilityDto {
   sourceCoverage:{
     schedule:{status:ScheduleCoverageStatus;activePublicationCount:number};
     operationalCalendar:{status:'covered'};
+    reservations:{status:'covered'};
     laboratoryStatus:{status:'covered'};
   };
   issues:{code:'schedule_coverage_missing'|'schedule_coverage_ambiguous';message:string}[];
@@ -51,7 +52,7 @@ const INPUT_TIME=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
 function record(v:unknown):v is Record<string,unknown>{return typeof v==='object'&&v!==null&&!Array.isArray(v);}
 function integer(v:unknown):v is number{return Number.isSafeInteger(v)&&(v as number)>=0;}
 function parseEvidence(v:unknown):AvailabilityBlockerDto{
-  if(!record(v)||!['schedule_occurrence','calendar_event','laboratory_status'].includes(String(v.type)))throw new LaboratoryAvailabilityContractError();
+  if(!record(v)||!['schedule_occurrence','calendar_event','laboratory_status','reservation'].includes(String(v.type)))throw new LaboratoryAvailabilityContractError();
   if(typeof v.sourceId!=='string'||v.sourceId.trim()===''||typeof v.title!=='string'||typeof v.allDay!=='boolean'||!record(v.details))throw new LaboratoryAvailabilityContractError();
   if(v.startsAt!==null&&(typeof v.startsAt!=='string'||!TIME.test(v.startsAt)))throw new LaboratoryAvailabilityContractError();
   if(v.endsAt!==null&&(typeof v.endsAt!=='string'||!TIME.test(v.endsAt)))throw new LaboratoryAvailabilityContractError();
@@ -73,8 +74,9 @@ export function parseLaboratoryAvailability(value:unknown):LaboratoryAvailabilit
   if(blockers.length!==d.blockerCount||notices.length!==d.noticeCount)throw new LaboratoryAvailabilityContractError();
   const schedule=(d.sourceCoverage as Record<string,unknown>).schedule;
   const calendar=(d.sourceCoverage as Record<string,unknown>).operationalCalendar;
+  const reservations=(d.sourceCoverage as Record<string,unknown>).reservations;
   const labStatus=(d.sourceCoverage as Record<string,unknown>).laboratoryStatus;
-  if(!record(schedule)||!['covered','missing','ambiguous'].includes(String(schedule.status))||!integer(schedule.activePublicationCount)||!record(calendar)||calendar.status!=='covered'||!record(labStatus)||labStatus.status!=='covered')throw new LaboratoryAvailabilityContractError();
+  if(!record(schedule)||!['covered','missing','ambiguous'].includes(String(schedule.status))||!integer(schedule.activePublicationCount)||!record(calendar)||calendar.status!=='covered'||!record(reservations)||reservations.status!=='covered'||!record(labStatus)||labStatus.status!=='covered')throw new LaboratoryAvailabilityContractError();
   if(d.available!==(d.state==='available'))throw new LaboratoryAvailabilityContractError();
   return d as unknown as LaboratoryAvailabilityDto;
 }

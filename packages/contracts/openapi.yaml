@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.16.0
-  description: Canonical SmartLab API v1 contract. Version 0.16 preserves the complete 0.15 surface and adds S2.5 Unified Laboratory Availability.
+  version: 0.17.0
+  description: Canonical SmartLab API v1 contract. Version 0.17 preserves the complete 0.16 surface and adds S2.6 canonical Laboratory Reservations.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -33,6 +33,11 @@ paths:
   /identity/memberships: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships' }
   /identity/memberships/{membershipId}: { $ref: './openapi-0.11.yaml#/paths/~1identity~1memberships~1{membershipId}' }
   /identity/roles: { $ref: './openapi-0.11.yaml#/paths/~1identity~1roles' }
+  /laboratory-reservations: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations' }
+  /laboratory-reservations/{reservationId}: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}' }
+  /laboratory-reservations/{reservationId}/approve: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}~1approve' }
+  /laboratory-reservations/{reservationId}/reject: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}~1reject' }
+  /laboratory-reservations/{reservationId}/cancel: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}~1cancel' }
   /laboratory-availability: { $ref: './openapi-availability.yaml#/paths/~1laboratory-availability' }
   /calendar-events: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events' }
   /calendar-events/{calendarEventId}: { $ref: './openapi-calendar.yaml#/paths/~1calendar-events~1{calendarEventId}' }

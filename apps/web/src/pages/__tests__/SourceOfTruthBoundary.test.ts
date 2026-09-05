@@ -4,6 +4,7 @@ import dashboardSource from '@/pages/DashboardPage.tsx?raw';
 import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
 import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import calendarSource from '@/pages/CalendarPage.tsx?raw';
+import bookingsSource from '@/pages/BookingsPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -82,6 +83,19 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="calendar.view"');
     expect(navSource).toContain("calendar: 'calendar.view'");
     expect(navSource).toContain("serverPermission: 'calendar.view'");
+  });
+
+  it('keeps the bookings route server-authoritative and removes browser-local booking conflicts', () => {
+    expect(bookingsSource).not.toContain('useAppData');
+    expect(bookingsSource).not.toContain('db.bookings');
+    expect(bookingsSource).not.toContain('mutate((d)');
+    expect(bookingsSource).not.toContain('checkConflict');
+    expect(bookingsSource).toContain("from '@/services/laboratoryReservationApi'");
+    expect(bookingsSource).toContain('laboratoryReservationGateway');
+    expect(bookingsSource).toContain('laboratoryAvailabilityGateway.check');
+    expect(appSource).toContain('RequireServerPermission permission="bookings.view"');
+    expect(navSource).toContain("bookings: 'bookings.view'");
+    expect(navSource).toContain("serverPermission: 'bookings.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
