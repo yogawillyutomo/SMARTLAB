@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.8 Priority Events and Timetable Publication Reconciliation
+**Baseline:** repository state including S2.8 canonical scheduling plus locked S3.1 execution/report semantics
 
 ## Goal
 
@@ -111,7 +111,7 @@ Still pending or intentionally deferred:
 - tenant-specific permission override editor/contract;
 - canonical audit query UI/API completion.
 
-### Phase S2 - Scheduling and availability — active
+### Phase S2 - Scheduling and availability — complete
 
 **S2.1 contract locked:** [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
@@ -223,7 +223,7 @@ Delivered in S2.8:
 - School-scoped operational write serialization coordinates publication activation with Reservation, Schedule Exception, Calendar, Priority Event, and Laboratory-state mutations;
 - activation recalculates impact inside the same transaction and exposes no force-activation path;
 - activation audit records impact fingerprint and schedule diff;
-- automated TESSELA revision UAT covers Reservation, Priority Event, Schedule Exception, Calendar/Laboratory drift, and capacity drift;
+- automated TESSELA revision UAT covers Reservation, Priority Event, Schedule Exception, and Calendar/Laboratory status drift;
 - OpenAPI 0.19.
 
 Next implementation phase:
@@ -236,14 +236,35 @@ Excel/file schedule ingestion, if later required, must be an adapter into the sa
 
 **Entry gate satisfied:** ownership is locked by ADR-001 and S2.1 semantics are locked by the published timetable contract.
 
-### Phase S3 - Laboratory execution and reporting
+### Phase S3 - Laboratory execution and reporting — contract locked, implementation pending
 
-Build canonical domains for:
+**S3.1 contract locked:** [Laboratory Session and Activity Report Contract](./laboratory-session-activity-report-contract.md).
 
-- laboratory execution/session;
-- required completion report/journal;
-- verification workflow;
-- offline-safe draft/sync contract if implemented for PWA/mobile.
+Locked semantics:
+
+- one normal LaboratorySession source: current operational ScheduleOccurrence, approved LaboratoryReservation, or approved PriorityEvent;
+- no general manual operational Session bypass;
+- source identity/version/Laboratory/date/time evidence is snapshotted and revalidated before start;
+- planned source facts remain distinct from actual start/end execution evidence;
+- one non-cancelled canonical execution per source;
+- in-progress Session becomes actual operational occupancy and can extend beyond the planned source window;
+- source mutations and timetable activation must not silently invalidate prepared/in-progress Sessions;
+- normal Session end atomically creates/confirms exactly one ActivityReport draft;
+- ActivityReport variants: practicum, exam, workshop, general;
+- report lifecycle: draft → submitted → verified/revision_required → draft;
+- manual backfill creates a report without inventing a fake Session;
+- SmartLab stores attendance aggregates only; individual attendance remains a HADIRA concern when integrated;
+- execution issue observations do not silently create Incidents;
+- offline report drafts retain canonical server ID/version authority and fail on conflicts rather than last-write-wins;
+- `/sessions` becomes the unified canonical experience; `/journals` remains a compatibility/deep-link path during migration.
+
+Next slices:
+
+- S3.2 LaboratorySession backend + source guards + availability/publication-reconciliation integration;
+- S3.3 ActivityReport backend;
+- S3.4 unified Pelaksanaan Lab frontend cutover;
+- S3.5 explicit observation/Incident linkage + attachments;
+- S3.6 offline draft sync + operational UAT.
 
 ### Phase S4 - Asset and inventory operations
 
