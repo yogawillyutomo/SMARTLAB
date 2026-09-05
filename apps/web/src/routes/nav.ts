@@ -96,7 +96,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function getNavGroupsForPermissions(_permissions: PermissionMatrix, _role: RoleName): NavGroup[] {
+export function getNavGroupsForPermissions(permissions: PermissionMatrix, role: RoleName): NavGroup[] {
+  void permissions;
+  void role;
   return NAV_GROUPS;
 }
 

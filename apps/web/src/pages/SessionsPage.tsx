@@ -301,7 +301,7 @@ export function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canBackfill, canExportReports, canViewAllReports, canViewAllSessions, canViewReports, historyFrom, historyTo, today]);
+  }, [canBackfill, canViewAllReports, canViewAllSessions, canViewReports, historyFrom, historyTo, today]);
 
   useEffect(() => {
     void load();
