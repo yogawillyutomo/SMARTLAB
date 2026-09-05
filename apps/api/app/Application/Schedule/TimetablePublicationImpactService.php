@@ -5,6 +5,7 @@ namespace App\Application\Schedule;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Schedule\PublishedTimetableException;
 use App\Models\LaboratoryReservation;
+use App\Models\LaboratorySession;
 use App\Models\OperationalCalendarEvent;
 use App\Models\PriorityEvent;
 use App\Models\ScheduleException;
@@ -116,6 +117,48 @@ class TimetablePublicationImpactService
                         'sourceChanged' => $candidate !== null && $source !== null
                             ? $this->signature($candidate) !== $this->signature($source)
                             : null,
+                    ],
+                ]);
+            }
+
+            $sessions = LaboratorySession::query()
+                ->where('school_id', $schoolId)
+                ->where('source_type', 'schedule_occurrence')
+                ->where('source_publication_id', $current->id)
+                ->whereIn('status', ['prepared', 'in_progress'])
+                ->where(function ($query) use ($from, $to): void {
+                    $query
+                        ->where(function ($prepared) use ($from, $to): void {
+                            $prepared
+                                ->where('status', 'prepared')
+                                ->whereBetween('source_date', [$from, $to]);
+                        })
+                        ->orWhere(function ($inProgress) use ($to): void {
+                            $inProgress
+                                ->where('status', 'in_progress')
+                                ->whereDate('source_date', '<=', $to);
+                        });
+                })
+                ->orderBy('source_date')
+                ->orderBy('id')
+                ->get();
+
+            foreach ($sessions as $session) {
+                $evidence = is_array($session->source_evidence) ? $session->source_evidence : [];
+
+                $this->pushBlocker($blockers, $fingerprintItems, [
+                    'type' => 'active_session_conflict',
+                    'entityId' => (string) $session->id,
+                    'date' => max($from, $session->source_date->format('Y-m-d')),
+                    'laboratoryId' => (string) $session->laboratory_id,
+                    'title' => 'Pelaksanaan Lab prepared/in-progress harus direkonsiliasi sebelum publikasi baru diaktifkan.',
+                    'details' => [
+                        'sessionNumber' => (string) $session->session_number,
+                        'sessionStatus' => (string) $session->status,
+                        'sourceOccurrenceId' => (string) $session->schedule_occurrence_id,
+                        'sourceScheduleId' => $evidence['sourceScheduleId'] ?? null,
+                        'sourceDate' => $session->source_date->format('Y-m-d'),
+                        'actualStartedAt' => $session->actual_started_at?->toISOString(),
                     ],
                 ]);
             }
