@@ -47,6 +47,7 @@ const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
   roles: 'roles.view',
   'master-data': 'master-data.view',
   schedules: 'schedules.view',
+  calendar: 'calendar.view',
 };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -76,7 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Informasi',
     items: [
-      { to: '/calendar', label: 'Kalender Akademik', icon: CalendarRange, module: 'calendar' },
+      { to: '/calendar', label: 'Kalender Operasional', icon: CalendarRange, module: 'calendar', serverPermission: 'calendar.view' },
       { to: '/reports', label: 'Laporan & Analitik', icon: BarChart3, module: 'reports' },
       { to: '/notifications', label: 'Notifikasi', icon: Bell, module: 'notifications' },
     ],
