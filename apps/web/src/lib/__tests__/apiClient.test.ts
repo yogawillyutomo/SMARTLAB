@@ -192,6 +192,22 @@ describe('API transport contracts', () => {
     expect(headers.get('If-Match')).toBe('"1"');
   });
 
+  it('preserves structured API error details for conflict UX', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      message: 'Conflict',
+      code: 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT',
+      details: { reportId: '01REPORT', currentVersion: 4, currentStatus: 'draft' },
+    }, 409));
+    const client = createApiClient({ fetchImpl: fetchMock as typeof fetch });
+
+    await expect(client.post('/activity-reports/01REPORT/sync-draft', {})).rejects.toMatchObject({
+      kind: 'api',
+      status: 409,
+      code: 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT',
+      details: { reportId: '01REPORT', currentVersion: 4, currentStatus: 'draft' },
+    });
+  });
+
   it('parses stable API errors and Retry-After metadata', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       message: 'Too many login attempts. Please try again later.',

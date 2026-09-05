@@ -70,7 +70,17 @@ describe('activity report API contract', () => {
 
   it('uses canonical report endpoints and version preconditions', async () => {
     const get = vi.fn(async () => ({ data: [report], meta: { page: 1, perPage: 500, total: 1, lastPage: 1, from: '2026-09-01', to: '2026-09-30' } })) as ApiClient['get'];
-    const post = vi.fn(async () => ({ data: report })) as ApiClient['post'];
+    const post = vi.fn(async (path: string) => path.endsWith('/sync-draft')
+      ? {
+          data: { ...report, version: 2 },
+          sync: {
+            clientMutationId: '550e8400-e29b-41d4-a716-446655440000',
+            baseVersion: 1,
+            appliedVersion: 2,
+            replayed: false,
+          },
+        }
+      : { data: report }) as ApiClient['post'];
     const patch = vi.fn(async () => ({ data: report })) as ApiClient['patch'];
     const postForm = vi.fn(async () => ({
       data: {
@@ -91,6 +101,12 @@ describe('activity report API contract', () => {
 
     await gateway.listAll({ from: '2026-09-01', to: '2026-09-30', scope: 'mine' });
     await gateway.update(ids.report, 1, { presentCount: 31, absentCount: 1 });
+    const sync = await gateway.syncDraft(ids.report, {
+      clientMutationId: '550e8400-e29b-41d4-a716-446655440000',
+      baseVersion: 1,
+      patch: { attendanceNotes: 'Offline' },
+    });
+    expect(sync.sync.appliedVersion).toBe(2);
     await gateway.submit(ids.report, 2);
     await gateway.requestRevision(ids.report, 3, 'Lengkapi refleksi');
     await gateway.reopen(ids.report, 4);
@@ -108,6 +124,14 @@ describe('activity report API contract', () => {
     expect(upload.reportVersion).toBe(2);
 
     expect(patch).toHaveBeenCalledWith(`/activity-reports/${ids.report}`, { presentCount: 31, absentCount: 1 }, { ifMatch: '"1"' });
+    expect(post).toHaveBeenCalledWith(
+      `/activity-reports/${ids.report}/sync-draft`,
+      {
+        clientMutationId: '550e8400-e29b-41d4-a716-446655440000',
+        baseVersion: 1,
+        patch: { attendanceNotes: 'Offline' },
+      },
+    );
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/submit`, undefined, { ifMatch: '"2"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/request-revision`, { reason: 'Lengkapi refleksi' }, { ifMatch: '"3"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/reopen`, undefined, { ifMatch: '"4"' });

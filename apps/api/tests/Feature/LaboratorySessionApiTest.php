@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademicClass;
 use App\Models\AcademicYear;
 use App\Models\ActivityReportAttachment;
+use App\Models\ActivityReportEvent;
 use App\Models\Device;
 use App\Models\Incident;
 use App\Models\Laboratory;
@@ -25,6 +26,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -1040,6 +1042,220 @@ class LaboratorySessionApiTest extends TestCase
         $this->get('/api/v1/activity-reports/'.$reportId.'/attachments/'.$attachment['id'].'/download', ['Accept' => 'application/json'])
             ->assertStatus(410)
             ->assertJsonPath('code', 'ACTIVITY_REPORT_ATTACHMENT_UNAVAILABLE');
+    }
+
+    public function test_offline_activity_report_draft_sync_is_idempotent_and_audited(): void
+    {
+        [, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-14 08:40:00', 'Asia/Jakarta'));
+
+        $ended = $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', ['endOutcome' => 'completed'])
+            ->assertOk()
+            ->json('data');
+
+        $reportId = $ended['activityReport']['id'];
+        $mutationId = Str::uuid()->toString();
+        $payload = [
+            'clientMutationId' => $mutationId,
+            'baseVersion' => 1,
+            'patch' => [
+                'presentCount' => 31,
+                'absentCount' => 1,
+                'attendanceNotes' => 'Draft disimpan ketika koneksi tidak stabil.',
+                'commonContent' => [
+                    'objective' => 'Praktikum DOM',
+                    'outcomeReflection' => 'Draft offline tersimpan dan disinkronkan.',
+                ],
+                'typeSpecificContent' => [
+                    'topic' => 'DOM',
+                    'learningOutcome' => 'Siswa memahami DOM.',
+                ],
+            ],
+        ];
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', $payload)
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('sync.clientMutationId', $mutationId)
+            ->assertJsonPath('sync.baseVersion', 1)
+            ->assertJsonPath('sync.appliedVersion', 2)
+            ->assertJsonPath('sync.replayed', false)
+            ->assertJsonPath('data.version', 2)
+            ->assertJsonPath('data.attendance.presentCount', 31)
+            ->assertJsonPath('data.timeline.1.eventType', 'activity_report.offline_sync_applied');
+
+        $this->assertDatabaseHas('activity_report_draft_sync_mutations', [
+            'school_id' => $school->id,
+            'report_id' => $reportId,
+            'client_mutation_id' => $mutationId,
+            'base_version' => 1,
+            'resulting_version' => 2,
+        ]);
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', $payload)
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('sync.replayed', true)
+            ->assertJsonPath('sync.appliedVersion', 2)
+            ->assertJsonPath('data.version', 2);
+
+        $this->assertDatabaseCount('activity_report_draft_sync_mutations', 1);
+        $this->assertSame(
+            1,
+            ActivityReportEvent::query()
+                ->where('report_id', $reportId)
+                ->where('event_type', 'activity_report.offline_sync_applied')
+                ->count(),
+        );
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', [
+            ...$payload,
+            'patch' => [
+                ...$payload['patch'],
+                'attendanceNotes' => 'Payload berbeda memakai mutation ID yang sama.',
+            ],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_SYNC_MUTATION_REUSED');
+
+        $this->assertDatabaseHas('activity_reports', [
+            'id' => $reportId,
+            'version' => 2,
+            'attendance_notes' => 'Draft disimpan ketika koneksi tidak stabil.',
+        ]);
+
+        $this->withHeader('If-Match', '"2"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'attendanceNotes' => 'Perubahan server sesudah mutation offline sudah applied.',
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"');
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', $payload)
+            ->assertOk()
+            ->assertHeader('ETag', '"3"')
+            ->assertJsonPath('sync.replayed', true)
+            ->assertJsonPath('sync.appliedVersion', 2)
+            ->assertJsonPath('data.version', 3)
+            ->assertJsonPath('data.attendance.notes', 'Perubahan server sesudah mutation offline sudah applied.');
+
+        $this->assertDatabaseCount('activity_report_draft_sync_mutations', 1);
+        $this->assertSame(
+            1,
+            ActivityReportEvent::query()
+                ->where('report_id', $reportId)
+                ->where('event_type', 'activity_report.offline_sync_applied')
+                ->count(),
+        );
+    }
+
+    public function test_offline_activity_report_sync_conflict_never_overwrites_newer_server_state(): void
+    {
+        [, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $session = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->withHeader('If-Match', '"1"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/start')
+            ->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-14 08:40:00', 'Asia/Jakarta'));
+
+        $ended = $this->withHeader('If-Match', '"2"')
+            ->postJson('/api/v1/laboratory-sessions/'.$session['id'].'/end', ['endOutcome' => 'completed'])
+            ->assertOk()
+            ->json('data');
+
+        $reportId = $ended['activityReport']['id'];
+
+        $this->withHeader('If-Match', '"1"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'attendanceNotes' => 'Perubahan kanonik dari perangkat lain.',
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"');
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', [
+            'clientMutationId' => Str::uuid()->toString(),
+            'baseVersion' => 1,
+            'patch' => [
+                'attendanceNotes' => 'Draft offline lama yang tidak boleh overwrite.',
+            ],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT')
+            ->assertJsonPath('details.reportId', $reportId)
+            ->assertJsonPath('details.currentVersion', 2)
+            ->assertJsonPath('details.currentStatus', 'draft');
+
+        $this->assertDatabaseMissing('activity_report_draft_sync_mutations', [
+            'report_id' => $reportId,
+            'base_version' => 1,
+        ]);
+        $this->assertDatabaseHas('activity_reports', [
+            'id' => $reportId,
+            'version' => 2,
+            'attendance_notes' => 'Perubahan kanonik dari perangkat lain.',
+        ]);
+
+        $this->withHeader('If-Match', '"2"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'commonContent' => [
+                    'objective' => 'Praktikum DOM',
+                    'outcomeReflection' => 'Kegiatan selesai.',
+                ],
+                'typeSpecificContent' => [
+                    'topic' => 'DOM',
+                    'learningOutcome' => 'Siswa memahami DOM.',
+                ],
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"');
+
+        $this->withHeader('If-Match', '"3"')
+            ->postJson('/api/v1/activity-reports/'.$reportId.'/submit')
+            ->assertOk()
+            ->assertHeader('ETag', '"4"');
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', [
+            'clientMutationId' => Str::uuid()->toString(),
+            'baseVersion' => 4,
+            'patch' => ['attendanceNotes' => 'Tidak boleh diterapkan setelah submit.'],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ACTIVITY_REPORT_STATE_CONFLICT');
+
+        $this->assertDatabaseHas('activity_reports', [
+            'id' => $reportId,
+            'version' => 4,
+            'status' => 'submitted',
+        ]);
     }
 
     /** @return array<string,mixed> */

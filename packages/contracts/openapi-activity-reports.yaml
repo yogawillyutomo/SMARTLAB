@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: SmartLab Activity Report API module
-  version: 0.23.0
+  version: 0.24.0
   description: |
     Canonical ActivityReport lifecycle through S3.5. Normal reports are created atomically
     by LaboratorySession end; manual backfill never invents a Session. SmartLab stores
     participant aggregates only. S3.5 adds immutable private evidence attachments whose
-    storage keys are never exposed by the API.
+    storage keys are never exposed by the API. S3.6 adds an idempotent draft-sync endpoint
+    for controlled offline working copies; the browser cache never becomes canonical truth.
 paths:
   /activity-reports:
     get:
@@ -71,6 +72,53 @@ paths:
         '412': { description: Version conflict }
         '422': { description: Content invalid }
         '428': { description: Missing or malformed If-Match }
+
+  /activity-reports/{reportId}/sync-draft:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+    post:
+      operationId: syncActivityReportDraft
+      summary: Idempotently apply a controlled offline draft working copy
+      description: |
+        Requires activity-reports.edit. The client sends a stable UUID clientMutationId,
+        the canonical baseVersion from which its local working copy was derived, and a
+        non-empty patch containing only ordinary editable ActivityReport draft fields.
+
+        A new mutation is accepted only when the report is still draft and its current
+        version exactly equals baseVersion. The server stores a receipt containing the
+        canonical payload SHA-256 and resulting version. Retrying the same report,
+        clientMutationId, baseVersion, and canonical patch returns the already-applied
+        result without another version bump or audit event. Reusing a clientMutationId
+        for different content is rejected.
+
+        If the canonical report changed since the working copy was created, the server
+        returns ACTIVITY_REPORT_OFFLINE_SYNC_CONFLICT and does not merge or overwrite.
+        Conflict resolution is an explicit client/user operation against a newly loaded
+        server version. Session lifecycle, observations/Incidents, submission/verification,
+        backfill, and attachment transfer remain online-only and are not queued here.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncActivityReportDraftInput' }
+      responses:
+        '200':
+          description: Draft mutation applied once, or an exact retry replayed safely
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, sync]
+                properties:
+                  data:
+                    type: object
+                    description: Canonical ActivityReport resource after synchronization.
+                  sync: { $ref: '#/components/schemas/ActivityReportDraftSyncMeta' }
+        '404': { description: Report missing, cross-School, or outside caller scope }
+        '409':
+          description: Report is not draft, baseVersion is stale, or clientMutationId was reused with different base/content.
+        '422': { description: UUID, baseVersion, patch, content, or aggregate attendance is invalid }
 
   /activity-reports/{reportId}/submit:
     parameters:
@@ -270,6 +318,39 @@ components:
         externalAttendanceReferenceId: { type: [string, 'null'], maxLength: 255 }
         commonContent: { $ref: '#/components/schemas/CommonContent' }
         typeSpecificContent: { $ref: '#/components/schemas/TypeSpecificContent' }
+
+    SyncActivityReportDraftInput:
+      type: object
+      additionalProperties: false
+      required: [clientMutationId, baseVersion, patch]
+      properties:
+        clientMutationId:
+          type: string
+          format: uuid
+          description: Stable identifier reused unchanged when retrying the same local mutation.
+        baseVersion:
+          type: integer
+          minimum: 1
+          description: Canonical ActivityReport version from which the local working copy was derived.
+        patch:
+          allOf:
+            - $ref: '#/components/schemas/UpdateActivityReportInput'
+          description: Non-empty editable draft fields only. Attachments are intentionally excluded.
+
+    ActivityReportDraftSyncMeta:
+      type: object
+      additionalProperties: false
+      required: [clientMutationId, baseVersion, appliedVersion, replayed]
+      properties:
+        clientMutationId: { type: string, format: uuid }
+        baseVersion: { type: integer, minimum: 1 }
+        appliedVersion:
+          type: integer
+          minimum: 2
+          description: Exactly baseVersion + 1 for the stored mutation receipt.
+        replayed:
+          type: boolean
+          description: true when this exact client mutation was previously applied and no new write occurred.
 
     ReasonInput:
       type: object
