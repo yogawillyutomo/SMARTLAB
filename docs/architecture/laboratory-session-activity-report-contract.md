@@ -850,6 +850,7 @@ activity_report.revision_requested
 activity_report.reopened
 activity_report.verified
 activity_report.manual_backfill_created
+activity_report.attachment_added
 ```
 
 Audit payloads store meaningful transition evidence and versions, not full uncontrolled copies of sensitive report content.
@@ -866,6 +867,11 @@ sessions.start
 sessions.end
 sessions.cancel
 sessions.export
+
+session-observations.view
+session-observations.view-all
+session-observations.create
+session-observations.promote
 
 activity-reports.view
 activity-reports.view-all
@@ -885,19 +891,19 @@ All Session and ActivityReport permissions.
 
 ### Admin Lab
 
-All normal Session/Report operations, including verification and controlled backfill.
+All normal Session/Report operations, including verification and controlled backfill. May record observations and explicitly promote eligible observations to Incidents.
 
 ### Kepala Lab
 
-View all, normal execution operations where appropriate, verification/revision, export.
+View all, normal execution operations where appropriate, verification/revision, export, and record observations. No Incident promotion baseline unless Incident-create authority is explicitly granted.
 
 ### Guru
 
-View own eligible executions, prepare/start/end own permitted source, edit/submit own report. No verification and no manual backfill.
+View own eligible executions, prepare/start/end own permitted source, edit/submit own report, record own execution observations, and explicitly promote them when the Guru also has Incident-create authority. No verification and no manual backfill.
 
 ### Teknisi
 
-Read baseline. Starting/ending on behalf of a Priority Event or technical activity requires a future explicit executor/delegation assignment rather than blanket mutation permission.
+Read-all baseline for execution observations and reports. Starting/ending or recording observations on behalf of another execution requires a future explicit executor/delegation assignment rather than blanket mutation permission.
 
 ### Ketua Kelas
 
@@ -909,7 +915,7 @@ No Session/Report mutation.
 
 ### Pimpinan
 
-Read all/export; no operational mutation.
+Read all/export, including linked observation evidence; no operational mutation.
 
 This intentionally defaults ambiguous delegated execution to deny rather than broad role access.
 
