@@ -77,6 +77,11 @@ class PermissionSeeder extends Seeder
             'ingest' => 'Terima Publikasi Jadwal',
             'activate' => 'Aktifkan Publikasi Jadwal',
         ],
+        'schedule-exceptions' => [
+            'view' => 'Lihat Pengecualian Jadwal',
+            'create' => 'Terapkan Pengecualian Jadwal',
+            'cancel' => 'Batalkan Pengecualian Jadwal',
+        ],
         'calendar' => [
             'view' => 'Lihat Kalender Operasional',
             'create' => 'Buat Event Kalender',
