@@ -17,6 +17,7 @@ import LaboratoryLayoutApiPage from '@/pages/LaboratoryLayoutApiPage';
 import { DevicesPage, DeviceDetailPage } from '@/pages/DeviceApiPages';
 import { SchedulesPage } from '@/pages/SchedulesPage';
 import { BookingsPage } from '@/pages/BookingsPage';
+import { PriorityEventsPage } from '@/pages/PriorityEventsPage';
 import { SessionsPage } from '@/pages/SessionsPage';
 import { JournalsPage } from '@/pages/JournalsPage';
 import { AssetsPage, AssetDetailPage } from '@/pages/AssetsPage';
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="/devices/:id" element={<RequireServerPermission permission="devices.view"><DeviceDetailPage /></RequireServerPermission>} />
         <Route path="/schedules" element={<RequireServerPermission permission="schedules.view"><SchedulesPage /></RequireServerPermission>} />
         <Route path="/bookings" element={<RequireServerPermission permission="bookings.view"><BookingsPage /></RequireServerPermission>} />
+        <Route path="/priority-events" element={<RequireServerPermission permission="priority-events.view"><PriorityEventsPage /></RequireServerPermission>} />
         <Route path="/sessions" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />
         <Route path="/sessions/:id" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />
         <Route path="/journals" element={<RequirePermission module="journals"><JournalsPage /></RequirePermission>} />

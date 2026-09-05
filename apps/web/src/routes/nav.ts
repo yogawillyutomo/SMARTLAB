@@ -20,6 +20,7 @@ import {
   ScrollText,
   Settings,
   FlaskConical,
+  Megaphone,
   Laptop,
   type LucideIcon,
 } from 'lucide-react';
@@ -59,6 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/laboratories', label: 'Laboratorium', icon: FlaskConical, module: 'laboratories', serverPermission: 'laboratories.view' },
       { to: '/schedules', label: 'Jadwal Reguler', icon: CalendarDays, module: 'schedules', serverPermission: 'schedules.view' },
       { to: '/bookings', label: 'Reservasi Lab', icon: CalendarClock, module: 'bookings', serverPermission: 'bookings.view' },
+      { to: '/priority-events', label: 'Kegiatan Prioritas', icon: Megaphone, serverPermission: 'priority-events.view' },
       { to: '/sessions', label: 'Pelaksanaan Lab', icon: BookOpen, module: 'sessions' },
     ],
   },

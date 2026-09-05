@@ -1,30 +1,30 @@
 <?php
 
-namespace App\Application\Reservation;
+namespace App\Application\PriorityEvent;
 
 use App\Application\Availability\LaboratoryAvailabilityQueryService;
 use App\Application\Identity\CurrentMembershipContext;
-use App\Domain\Reservation\LaboratoryReservationException;
+use App\Domain\PriorityEvent\PriorityEventDomainException;
 use App\Models\Laboratory;
-use App\Models\LaboratoryReservation;
+use App\Models\PriorityEvent;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class LaboratoryReservationMutationService
+class PriorityEventMutationService
 {
     public function __construct(
         private readonly LaboratoryAvailabilityQueryService $availability,
-        private readonly LaboratoryReservationEventRecorder $recorder,
+        private readonly PriorityEventEventRecorder $recorder,
     ) {
     }
 
     /** @param array<string,mixed> $data */
-    public function create(CurrentMembershipContext $context, User $actor, array $data): LaboratoryReservation
+    public function create(CurrentMembershipContext $context, User $actor, array $data): PriorityEvent
     {
-        return DB::transaction(function () use ($context, $actor, $data): LaboratoryReservation {
+        return DB::transaction(function () use ($context, $actor, $data): PriorityEvent {
             $schoolId = (string) $context->membership->school_id;
             School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
@@ -34,9 +34,9 @@ class LaboratoryReservationMutationService
                 ->lockForUpdate()
                 ->first();
 
-            if ($laboratory === null) {
+            if ($laboratory === null || $laboratory->status !== 'active') {
                 throw ValidationException::withMessages([
-                    'laboratoryId' => ['The selected Laboratory is invalid.'],
+                    'laboratoryId' => ['The selected Laboratory must exist and be active in the current School.'],
                 ]);
             }
 
@@ -53,26 +53,22 @@ class LaboratoryReservationMutationService
                 'endsAt' => (string) $data['endsAt'],
             ]);
 
-            if (($availability['available'] ?? false) !== true) {
-                throw LaboratoryReservationException::unavailable($availability);
-            }
-
             $id = (string) Str::ulid();
-            $reservation = new LaboratoryReservation([
+            $event = new PriorityEvent([
                 'school_id' => $schoolId,
-                'reservation_number' => 'RSV-'.str_replace('-', '', (string) $data['date']).'-'.substr($id, -8),
+                'event_number' => 'PEV-'.str_replace('-', '', (string) $data['date']).'-'.substr($id, -8),
                 'laboratory_id' => $laboratory->id,
                 'requester_user_id' => $actor->id,
                 'requester_membership_id' => $context->membership->id,
                 'requester_name_snapshot' => $actor->name,
                 'requester_email_snapshot' => $actor->email,
-                'reservation_date' => $data['date'],
+                'event_date' => $data['date'],
                 'starts_at' => $this->seconds((string) $data['startsAt']),
                 'ends_at' => $this->seconds((string) $data['endsAt']),
-                'activity' => trim((string) $data['activity']),
+                'category' => $data['category'],
+                'title' => trim((string) $data['title']),
                 'participants' => (int) $data['participants'],
-                'device_needs' => $this->nullableTrim($data['deviceNeeds'] ?? null),
-                'notes' => $this->nullableTrim($data['notes'] ?? null),
+                'description' => $this->nullableTrim($data['description'] ?? null),
                 'pic_name' => trim((string) $data['picName']),
                 'status' => 'submitted',
                 'rejection_reason' => null,
@@ -80,17 +76,19 @@ class LaboratoryReservationMutationService
                 'cancelled_at' => null,
                 'version' => 1,
             ]);
-            $reservation->id = $id;
-            $reservation->save();
+            $event->id = $id;
+            $event->save();
 
             $this->recorder->record(
                 $context,
                 $actor,
-                $reservation,
-                'reservation.submitted',
+                $event,
+                'priority_event.submitted',
                 [
                     'availabilityAtSubmission' => [
+                        'available' => $availability['available'],
                         'state' => $availability['state'],
+                        'blockerCount' => $availability['blockerCount'],
                         'sourceCoverage' => $availability['sourceCoverage'],
                         'checkedAt' => now()->toISOString(),
                     ],
@@ -99,7 +97,7 @@ class LaboratoryReservationMutationService
                 1,
             );
 
-            return $this->reload($reservation);
+            return $this->reload($event);
         });
     }
 
@@ -108,41 +106,40 @@ class LaboratoryReservationMutationService
         User $actor,
         string $id,
         int $expectedVersion,
-    ): LaboratoryReservation {
-        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion): LaboratoryReservation {
-            [$laboratory, $reservation] = $this->lockForMutation($context, $id);
+    ): PriorityEvent {
+        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion): PriorityEvent {
+            [$laboratory, $event] = $this->lockForMutation($context, $id);
 
-            $this->assertVersion($reservation, $expectedVersion);
-            if ($reservation->status !== 'submitted') {
-                throw LaboratoryReservationException::stateConflict('Only submitted reservations may be approved.');
+            $this->assertVersion($event, $expectedVersion);
+            if ($event->status !== 'submitted') {
+                throw PriorityEventDomainException::stateConflict('Only submitted Priority Events may be approved.');
             }
 
             $availability = $this->availability->check(
                 $context,
                 [
                     'laboratoryId' => (string) $laboratory->id,
-                    'date' => $reservation->reservation_date->format('Y-m-d'),
-                    'startsAt' => substr((string) $reservation->starts_at, 0, 5),
-                    'endsAt' => substr((string) $reservation->ends_at, 0, 5),
+                    'date' => $event->event_date->format('Y-m-d'),
+                    'startsAt' => substr((string) $event->starts_at, 0, 5),
+                    'endsAt' => substr((string) $event->ends_at, 0, 5),
                 ],
-                (string) $reservation->id,
             );
 
             if (($availability['available'] ?? false) !== true) {
-                throw LaboratoryReservationException::unavailable($availability);
+                throw PriorityEventDomainException::reconciliationRequired($availability);
             }
 
-            $before = $reservation->version;
-            $reservation->status = 'approved';
-            $reservation->decided_at = now();
-            $reservation->version++;
-            $reservation->save();
+            $before = $event->version;
+            $event->status = 'approved';
+            $event->decided_at = now();
+            $event->version++;
+            $event->save();
 
             $this->recorder->record(
                 $context,
                 $actor,
-                $reservation,
-                'reservation.approved',
+                $event,
+                'priority_event.approved',
                 [
                     'availabilityAtApproval' => [
                         'state' => $availability['state'],
@@ -151,10 +148,10 @@ class LaboratoryReservationMutationService
                     ],
                 ],
                 $before,
-                $reservation->version,
+                $event->version,
             );
 
-            return $this->reload($reservation);
+            return $this->reload($event);
         });
     }
 
@@ -164,33 +161,33 @@ class LaboratoryReservationMutationService
         string $id,
         int $expectedVersion,
         string $reason,
-    ): LaboratoryReservation {
-        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $reason): LaboratoryReservation {
-            [, $reservation] = $this->lockForMutation($context, $id);
+    ): PriorityEvent {
+        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $reason): PriorityEvent {
+            [, $event] = $this->lockForMutation($context, $id);
 
-            $this->assertVersion($reservation, $expectedVersion);
-            if ($reservation->status !== 'submitted') {
-                throw LaboratoryReservationException::stateConflict('Only submitted reservations may be rejected.');
+            $this->assertVersion($event, $expectedVersion);
+            if ($event->status !== 'submitted') {
+                throw PriorityEventDomainException::stateConflict('Only submitted Priority Events may be rejected.');
             }
 
-            $before = $reservation->version;
-            $reservation->status = 'rejected';
-            $reservation->rejection_reason = trim($reason);
-            $reservation->decided_at = now();
-            $reservation->version++;
-            $reservation->save();
+            $before = $event->version;
+            $event->status = 'rejected';
+            $event->rejection_reason = trim($reason);
+            $event->decided_at = now();
+            $event->version++;
+            $event->save();
 
             $this->recorder->record(
                 $context,
                 $actor,
-                $reservation,
-                'reservation.rejected',
-                ['reason' => $reservation->rejection_reason],
+                $event,
+                'priority_event.rejected',
+                ['reason' => $event->rejection_reason],
                 $before,
-                $reservation->version,
+                $event->version,
             );
 
-            return $this->reload($reservation);
+            return $this->reload($event);
         });
     }
 
@@ -200,57 +197,57 @@ class LaboratoryReservationMutationService
         string $id,
         int $expectedVersion,
         string $reason,
-    ): LaboratoryReservation {
-        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $reason): LaboratoryReservation {
-            [, $reservation] = $this->lockForMutation($context, $id);
+    ): PriorityEvent {
+        return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $reason): PriorityEvent {
+            [, $event] = $this->lockForMutation($context, $id);
 
-            if ($reservation->requester_membership_id !== $context->membership->id
-                && ! $context->permissions->contains('bookings.view-all')) {
-                throw LaboratoryReservationException::notFound();
+            if ($event->requester_membership_id !== $context->membership->id
+                && ! $context->permissions->contains('priority-events.view-all')) {
+                throw PriorityEventDomainException::notFound();
             }
 
-            $this->assertVersion($reservation, $expectedVersion);
-            if (! in_array($reservation->status, ['submitted', 'approved'], true)) {
-                throw LaboratoryReservationException::stateConflict('Only submitted or approved reservations may be cancelled.');
+            $this->assertVersion($event, $expectedVersion);
+            if (! in_array($event->status, ['submitted', 'approved'], true)) {
+                throw PriorityEventDomainException::stateConflict('Only submitted or approved Priority Events may be cancelled.');
             }
 
-            $beforeStatus = $reservation->status;
-            $before = $reservation->version;
-            $reservation->status = 'cancelled';
-            $reservation->cancelled_at = now();
-            $reservation->version++;
-            $reservation->save();
+            $beforeStatus = $event->status;
+            $before = $event->version;
+            $event->status = 'cancelled';
+            $event->cancelled_at = now();
+            $event->version++;
+            $event->save();
 
             $this->recorder->record(
                 $context,
                 $actor,
-                $reservation,
-                'reservation.cancelled',
+                $event,
+                'priority_event.cancelled',
                 [
                     'reason' => trim($reason),
                     'previousStatus' => $beforeStatus,
                 ],
                 $before,
-                $reservation->version,
+                $event->version,
             );
 
-            return $this->reload($reservation);
+            return $this->reload($event);
         });
     }
 
-    /** @return array{Laboratory,LaboratoryReservation} */
+    /** @return array{Laboratory,PriorityEvent} */
     private function lockForMutation(CurrentMembershipContext $context, string $id): array
     {
         $schoolId = (string) $context->membership->school_id;
         School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
-        $candidate = LaboratoryReservation::query()
+        $candidate = PriorityEvent::query()
             ->where('school_id', $schoolId)
             ->whereKey($id)
             ->first();
 
         if ($candidate === null) {
-            throw LaboratoryReservationException::notFound();
+            throw PriorityEventDomainException::notFound();
         }
 
         $laboratory = Laboratory::query()
@@ -260,32 +257,32 @@ class LaboratoryReservationMutationService
             ->first();
 
         if ($laboratory === null) {
-            throw LaboratoryReservationException::stateConflict('The reservation Laboratory is no longer resolvable.');
+            throw PriorityEventDomainException::stateConflict('The Priority Event Laboratory is no longer resolvable.');
         }
 
-        $reservation = LaboratoryReservation::query()
+        $event = PriorityEvent::query()
             ->where('school_id', $schoolId)
             ->whereKey($id)
             ->lockForUpdate()
             ->first();
 
-        if ($reservation === null) {
-            throw LaboratoryReservationException::notFound();
+        if ($event === null) {
+            throw PriorityEventDomainException::notFound();
         }
 
-        return [$laboratory, $reservation];
+        return [$laboratory, $event];
     }
 
-    private function assertVersion(LaboratoryReservation $reservation, int $expectedVersion): void
+    private function assertVersion(PriorityEvent $event, int $expectedVersion): void
     {
-        if ($reservation->version !== $expectedVersion) {
-            throw LaboratoryReservationException::versionConflict();
+        if ($event->version !== $expectedVersion) {
+            throw PriorityEventDomainException::versionConflict();
         }
     }
 
-    private function reload(LaboratoryReservation $reservation): LaboratoryReservation
+    private function reload(PriorityEvent $event): PriorityEvent
     {
-        return $reservation->refresh()->load([
+        return $event->refresh()->load([
             'laboratory:id,school_id,code,name,capacity,status',
             'events' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
         ]);

@@ -5,6 +5,7 @@ import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
 import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import calendarSource from '@/pages/CalendarPage.tsx?raw';
 import bookingsSource from '@/pages/BookingsPage.tsx?raw';
+import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -100,6 +101,18 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="bookings.view"');
     expect(navSource).toContain("bookings: 'bookings.view'");
     expect(navSource).toContain("serverPermission: 'bookings.view'");
+  });
+
+  it('keeps Priority Events server-authoritative and explicit-reconciliation only', () => {
+    expect(priorityEventsSource).not.toContain('useAppData');
+    expect(priorityEventsSource).not.toContain('db.specialEvents');
+    expect(priorityEventsSource).not.toContain('services/repositories');
+    expect(priorityEventsSource).toContain("from '@/services/priorityEventApi'");
+    expect(priorityEventsSource).toContain('priorityEventGateway');
+    expect(priorityEventsSource).toContain("hasServerPermission(user, 'priority-events.approve')");
+    expect(priorityEventsSource).toContain('Priority tidak berarti force override');
+    expect(appSource).toContain('RequireServerPermission permission="priority-events.view"');
+    expect(navSource).toContain("serverPermission: 'priority-events.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {

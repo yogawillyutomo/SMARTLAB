@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab Published Timetable API module
-  version: 0.18.0
-  description: Published timetable ingestion/activation plus current-plan Schedule Occurrences with the S2.7 dated operational overlay.
+  version: 0.19.0
+  description: Published timetable ingestion/activation, current-plan Schedule Occurrences, and the S2.8 fail-closed publication impact/reconciliation gate.
 paths:
   /timetable-publications:
     get:
@@ -89,6 +89,29 @@ paths:
         '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/PublicationNotFound' }
 
+  /timetable-publications/{publicationId}/impact:
+    parameters:
+      - $ref: '#/components/parameters/PublicationId'
+    get:
+      operationId: previewTimetablePublicationImpact
+      summary: Preview operational impact before activating a validated timetable publication
+      description: |
+        Requires schedules.activate. The preview compares future occurrences against
+        the current active publication and evaluates operational commitments that would
+        become unsafe: active Schedule Exceptions, submitted/approved Reservations,
+        approved Priority Events, active Calendar blockers, inactive Laboratories. It never changes state and never proposes solver output.
+      security: *auth
+      responses:
+        '200':
+          description: Deterministic impact preview with schedule diff, blockers, and fingerprint.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationImpactEnvelope' }
+        '401': { $ref: './openapi-0.10.yaml#/components/responses/Unauthenticated' }
+        '403': { $ref: './openapi-0.10.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/PublicationNotFound' }
+        '409': { $ref: '#/components/responses/PublicationConflict' }
+
   /timetable-publications/{publicationId}/activate:
     parameters:
       - $ref: '#/components/parameters/PublicationId'
@@ -99,7 +122,10 @@ paths:
         Requires `schedules.activate`. Activation may supersede the current active
         publication for the same School + Semester. Future-effective and expired
         publications cannot be activated. Old source versions cannot roll back a newer
-        active source version.
+        active source version. Before superseding the current plan, SmartLab recalculates
+        the S2.8 operational impact inside the activation transaction. Any unresolved
+        blocker fails closed with TIMETABLE_PUBLICATION_RECONCILIATION_REQUIRED; there is
+        no force-activation endpoint.
       security: *auth
       responses:
         '200':
@@ -170,6 +196,95 @@ components:
       schema: { type: string, format: ulid }
 
   schemas:
+    PublicationImpactBlockerType:
+      type: string
+      enum:
+        - active_schedule_exception
+        - reservation_conflict
+        - priority_event_conflict
+        - calendar_blocker_conflict
+        - laboratory_status_conflict
+
+    PublicationScheduleDiff:
+      type: object
+      additionalProperties: false
+      required: [added, removed, changed, unchanged]
+      properties:
+        added: { type: integer, minimum: 0 }
+        removed: { type: integer, minimum: 0 }
+        changed: { type: integer, minimum: 0 }
+        unchanged: { type: integer, minimum: 0 }
+
+    PublicationImpactPublicationRef:
+      type: object
+      additionalProperties: false
+      required: [id, sourcePublicationId, sourceVersion]
+      properties:
+        id: { type: string, format: ulid }
+        sourcePublicationId: { type: string, minLength: 1 }
+        sourceVersion: { type: integer, minimum: 1 }
+        status: { type: string }
+
+    PublicationImpactBlocker:
+      type: object
+      additionalProperties: false
+      required: [type, entityId, date, laboratoryId, title, details]
+      properties:
+        type: { $ref: '#/components/schemas/PublicationImpactBlockerType' }
+        entityId: { type: string }
+        date: { type: string, format: date }
+        laboratoryId: { type: [string, 'null'] }
+        title: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    PublicationImpact:
+      type: object
+      additionalProperties: false
+      required:
+        - publication
+        - currentPublication
+        - window
+        - scheduleDiff
+        - clear
+        - blockerCount
+        - blockers
+        - truncated
+        - fingerprint
+      properties:
+        publication: { $ref: '#/components/schemas/PublicationImpactPublicationRef' }
+        currentPublication:
+          oneOf:
+            - { $ref: '#/components/schemas/PublicationImpactPublicationRef' }
+            - { type: 'null' }
+        window:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        scheduleDiff: { $ref: '#/components/schemas/PublicationScheduleDiff' }
+        clear: { type: boolean }
+        blockerCount: { type: integer, minimum: 0 }
+        blockers:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/PublicationImpactBlocker' }
+        truncated:
+          type: boolean
+          description: True when blockerCount exceeds the returned blocker list.
+        fingerprint:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Deterministic hash of candidate/current identity, future window, schedule diff, and all blockers.
+
+    PublicationImpactEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/PublicationImpact' }
+
     ScheduleReference:
       type: object
       additionalProperties: false

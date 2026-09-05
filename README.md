@@ -49,9 +49,11 @@ The application is in a staged source-of-truth migration.
 - published timetable ingestion/validation/activation and materialized schedule occurrences;
 - canonical `/schedules` current-plan read model backed by active Schedule Occurrences plus non-destructive dated operational overlays;
 - canonical Operational Calendar with school/laboratory blockers and non-destructive cancellation;
-- canonical Unified Laboratory Availability read model combining schedule coverage, ScheduleOccurrence occupancy, dated Schedule Exceptions, Laboratory status, Calendar blockers, and active reservations;
+- canonical Unified Laboratory Availability read model combining schedule coverage, ScheduleOccurrence occupancy, dated Schedule Exceptions, Laboratory status, Calendar blockers, active reservations, and approved Priority Events;
 - canonical Laboratory Reservations with transactional availability checks, approval re-check, versioning, and audit history;
 - canonical dated Schedule Exceptions for one-date occurrence cancellation or Laboratory relocation without rewriting TESSELA;
+- canonical Priority Events with explicit reconciliation before approval and a server-authoritative `/priority-events` workflow;
+- fail-closed TESSELA publication impact preview/reconciliation gate before activation, including operational drift and deterministic impact fingerprints;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains

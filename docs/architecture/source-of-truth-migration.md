@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.7 Dated Schedule Exceptions
+**Baseline:** repository state including S2.8 Priority Events and Timetable Publication Reconciliation
 
 ## Goal
 
@@ -27,9 +27,11 @@ This roadmap follows the approved operational workflow specification and the rep
 | Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
 | Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
 | Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
-| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar + submitted/approved reservations | typed web gateway + reservation integration | canonical |
+| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Schedule Exception + Operational Calendar + submitted/approved Reservation + approved Priority Event | typed web gateway used by schedule/reservation/priority workflows | canonical |
 | Laboratory reservations | PostgreSQL reservation + append-oriented events | canonical `/bookings` UI | canonical |
 | Dated Schedule Exceptions | PostgreSQL exception + append-oriented events over immutable active ScheduleOccurrence | operational overlay in canonical `/schedules` UI | canonical |
+| Priority Events | PostgreSQL request/approval lifecycle + append-oriented events | canonical `/priority-events` UI | canonical |
+| Timetable publication impact/reconciliation | future occurrence diff + cross-domain operational impact gate | API-first administration + automated TESSELA revision UAT | canonical backend |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -209,9 +211,24 @@ Delivered in S2.7:
 - canonical `/schedules` UI applies and restores dated operational overlays without browser-local schedule mutation;
 - OpenAPI 0.18 and integration/regression coverage.
 
-Next implementation slice:
+Delivered in S2.8:
 
-- S2.8 priority-event override, timetable-publication impact/reconciliation, and integration UAT.
+- canonical Priority Event submitted/approved/rejected/cancelled lifecycle;
+- Priority submission may carry conflicts into workflow, but approval re-checks Unified Availability and fails closed until explicit reconciliation;
+- approved Priority Events block Unified Availability;
+- permission-scoped canonical `/priority-events` frontend;
+- deterministic future-only timetable publication impact preview with schedule added/removed/changed/unchanged counts;
+- activation blockers for active Schedule Exceptions, submitted/approved Reservations, approved Priority Events, blocked Calendar Events, and inactive Laboratories;
+- active Schedule Exceptions never silently migrate across TESSELA source versions;
+- School-scoped operational write serialization coordinates publication activation with Reservation, Schedule Exception, Calendar, Priority Event, and Laboratory-state mutations;
+- activation recalculates impact inside the same transaction and exposes no force-activation path;
+- activation audit records impact fingerprint and schedule diff;
+- automated TESSELA revision UAT covers Reservation, Priority Event, Schedule Exception, Calendar/Laboratory drift, and capacity drift;
+- OpenAPI 0.19.
+
+Next implementation phase:
+
+- S3 Laboratory Session + Journal execution workflow.
 
 No recurring schedule is destructively rewritten for a one-date exception.
 

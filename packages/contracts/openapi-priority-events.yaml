@@ -1,0 +1,128 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Priority Event API module
+  version: 0.19.0
+  description: S2.8 Priority Event request/approval workflow with explicit operational reconciliation.
+paths:
+  /priority-events:
+    get:
+      operationId: listPriorityEvents
+      summary: List Priority Events for the active School
+      description: Requires priority-events.view. Scope defaults to all for view-all users and mine otherwise.
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PriorityEventStatus' } }
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200': { description: Paginated Priority Event collection }
+        '403': { description: Requested all-School scope without priority-events.view-all }
+    post:
+      operationId: createPriorityEvent
+      summary: Submit a Priority Event request
+      description: |
+        Requires priority-events.create. Submission may intentionally coexist with
+        current schedule/booking/calendar conflicts so that the event can enter an
+        explicit reconciliation workflow. Submission never overrides existing occupancy.
+        The server records an availability snapshot for audit.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePriorityEventInput' }
+      responses:
+        '201': { description: Priority Event submitted with entity ETag version }
+        '422': { description: Invalid School Laboratory, capacity, time, or request shape }
+  /priority-events/{priorityEventId}:
+    parameters:
+      - { name: priorityEventId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getPriorityEvent
+      security: *auth
+      responses:
+        '200': { description: Priority Event detail with append-oriented audit timeline }
+        '404': { description: Unknown, cross-School, or out-of-scope Priority Event }
+  /priority-events/{priorityEventId}/approve:
+    parameters:
+      - { name: priorityEventId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: approvePriorityEvent
+      summary: Approve a reconciled Priority Event
+      description: |
+        Requires priority-events.approve. Approval re-checks Unified Laboratory
+        Availability transactionally. Any remaining blocker, including the current
+        TESSELA plan, Reservation, Calendar blocker, Schedule Exception relocation,
+        another approved Priority Event, inactive Laboratory, or incomplete schedule
+        coverage causes PRIORITY_EVENT_RECONCILIATION_REQUIRED. There is no force override.
+      security: *auth
+      responses:
+        '200': { description: Approved Priority Event; it now blocks Unified Availability }
+        '409': { description: Reconciliation required or invalid state transition }
+        '412': { description: Entity version conflict }
+        '428': { description: Missing or malformed If-Match }
+  /priority-events/{priorityEventId}/reject:
+    parameters:
+      - { name: priorityEventId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: rejectPriorityEvent
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Priority Event rejected }
+        '412': { description: Entity version conflict }
+        '428': { description: Missing or malformed If-Match }
+  /priority-events/{priorityEventId}/cancel:
+    parameters:
+      - { name: priorityEventId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: cancelPriorityEvent
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Submitted or approved Priority Event cancelled; approved blocker is released }
+        '412': { description: Entity version conflict }
+        '428': { description: Missing or malformed If-Match }
+components:
+  schemas:
+    PriorityEventStatus:
+      type: string
+      enum: [submitted, approved, rejected, cancelled]
+    PriorityEventCategory:
+      type: string
+      enum: [school_event, exam, competition, official_visit, emergency, other]
+    CreatePriorityEventInput:
+      type: object
+      additionalProperties: false
+      required: [laboratoryId, date, startsAt, endsAt, category, title, participants, picName]
+      properties:
+        laboratoryId: { type: string, format: ulid }
+        date: { type: string, format: date }
+        startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
+        endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
+        category: { $ref: '#/components/schemas/PriorityEventCategory' }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        participants: { type: integer, minimum: 1, maximum: 1000 }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        picName: { type: string, minLength: 1, maxLength: 255 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }

@@ -33,6 +33,7 @@ class PublishedTimetableMutationService
     public function __construct(
         private readonly PublishedTimetableCanonicalizer $canonicalizer,
         private readonly TimetablePublicationEventRecorder $eventRecorder,
+        private readonly TimetablePublicationImpactService $impactService,
     ) {}
 
     /**
@@ -278,6 +279,11 @@ class PublishedTimetableMutationService
                     );
                 }
 
+                $impact = $this->impactService->previewPublication($context, $publication);
+                if (($impact['clear'] ?? false) !== true) {
+                    throw PublishedTimetableException::reconciliationRequired($impact);
+                }
+
                 $current->forceFill([
                     'status' => 'superseded',
                     'superseded_at' => now(),
@@ -294,6 +300,11 @@ class PublishedTimetableMutationService
                         'supersededBySourceVersion' => $publication->source_version,
                     ],
                 );
+            } else {
+                $impact = $this->impactService->previewPublication($context, $publication);
+                if (($impact['clear'] ?? false) !== true) {
+                    throw PublishedTimetableException::reconciliationRequired($impact);
+                }
             }
 
             $publication->forceFill([
@@ -309,6 +320,9 @@ class PublishedTimetableMutationService
                 [
                     'previousPublicationId' => $current?->id,
                     'previousSourceVersion' => $current?->source_version,
+                    'impactFingerprint' => $impact['fingerprint'],
+                    'scheduleDiff' => $impact['scheduleDiff'],
+                    'impactBlockerCount' => $impact['blockerCount'],
                 ],
             );
 
