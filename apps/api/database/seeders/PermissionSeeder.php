@@ -77,6 +77,13 @@ class PermissionSeeder extends Seeder
             'ingest' => 'Terima Publikasi Jadwal',
             'activate' => 'Aktifkan Publikasi Jadwal',
         ],
+        'calendar' => [
+            'view' => 'Lihat Kalender Operasional',
+            'create' => 'Buat Event Kalender',
+            'update' => 'Ubah Event Kalender',
+            'cancel' => 'Batalkan Event Kalender',
+            'export' => 'Ekspor Kalender',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',

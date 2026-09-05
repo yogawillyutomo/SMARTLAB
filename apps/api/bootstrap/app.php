@@ -8,6 +8,7 @@ use App\Domain\Identity\IdentityAdministrationException;
 use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Layout\LayoutDomainException;
 use App\Domain\Schedule\PublishedTimetableException;
+use App\Domain\Calendar\OperationalCalendarException;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -148,5 +149,15 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return response()->json($body, $exception->status);
+        });
+        $exceptions->render(function (OperationalCalendarException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
         });
     })->create();

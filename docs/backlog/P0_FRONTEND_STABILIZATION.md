@@ -81,8 +81,8 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | IMP-01 Fondasi import Excel | belum | Template, mapping, preview, validasi, audit. | Ownership sudah dikunci oleh ADR-001; implementasi tetap perlu contract import terfokus. |
 | IMP-02 Import Master Data | belum | Referensi sederhana, akademik, laboratorium. | Sesudah IMP-01; academic authority mengikuti ADR-001 dan Laboratory tetap domain SmartLab. |
 | IMP-03 Integrasi published timetable | selesai baseline | Full snapshot TESSELA, stable refs, version/hash/idempotency, occurrence materialization, activation/audit, current-plan read API, canonical `/schedules`. | S2.2 + S2.3 delivered. Excel/file bila diperlukan hanya adapter, bukan authority; operational overlays lanjut di S2.4+. |
-| AV-01 Unified availability | belum | Published occurrences, reservasi, prioritas, closure, exception. | Sesudah S2.2–S2.4 canonical schedule/closure foundation. |
+| AV-01 Unified availability | siap dikerjakan | Published occurrences, reservasi, prioritas, closure, exception. | S2.2–S2.4 schedule + closure foundation sudah canonical; S2.5 berikutnya. |
 | OV-01 Override kegiatan prioritas | belum | Exception bertanggal non-destruktif. | Sesudah AV-01 dan kebijakan approver. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | belum | Satu UX, dua entitas terkait, laporan wajib. | Phase S3 sesudah occurrence/availability. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci, S2.2 backend dan S2.3 read-model/frontend cutover sudah delivered; pekerjaan berikutnya adalah S2.4 calendar/closure lalu unified availability, bukan solver dan bukan CRUD jadwal browser-local.
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci, S2.2 backend, S2.3 read-model/frontend cutover, dan S2.4 Calendar/Closure sudah delivered; pekerjaan berikutnya adalah S2.5 unified availability, bukan solver dan bukan CRUD jadwal browser-local.
