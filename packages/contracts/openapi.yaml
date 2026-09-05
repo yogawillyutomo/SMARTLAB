@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.23.0
-  description: Canonical SmartLab API v1 contract. Version 0.23 adds S3.5 immutable execution observations, explicit Observation-to-Incident promotion, and private ActivityReport evidence attachments while preserving all S3.4 surfaces.
+  version: 0.24.0
+  description: Canonical SmartLab API v1 contract. Version 0.24 adds S3.6 idempotent ActivityReport draft synchronization for controlled offline working copies while preserving server authority, explicit conflict resolution, and all S3.5 surfaces.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -50,6 +50,7 @@ paths:
   /activity-reports: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports' }
   /activity-reports/backfill: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1backfill' }
   /activity-reports/{reportId}: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}' }
+  /activity-reports/{reportId}/sync-draft: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1sync-draft' }
   /activity-reports/{reportId}/submit: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1submit' }
   /activity-reports/{reportId}/request-revision: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1request-revision' }
   /activity-reports/{reportId}/reopen: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1reopen' }
