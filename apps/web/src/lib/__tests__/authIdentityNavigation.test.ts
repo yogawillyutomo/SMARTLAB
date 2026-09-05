@@ -83,22 +83,23 @@ describe('dynamic navigation topology with server-authoritative Laboratory, Devi
     };
   }
 
-  it('preserves the journals-only shortcut in sidebar and global page items', () => {
-    const items = navigationItems(false, true, false);
+  it('does not expose canonical Pelaksanaan or Journal navigation from legacy local permissions', () => {
+    const items = navigationItems(true, true, false);
 
     for (const navigation of [items.sidebar, items.global]) {
-      expect(navigation).toEqual(expect.arrayContaining([
-        expect.objectContaining({ label: 'Riwayat & Laporan', to: '/journals' }),
-      ]));
+      expect(navigation.filter(({ label }) => label === 'Pelaksanaan Lab')).toHaveLength(0);
+      expect(navigation.filter(({ label }) => label === 'Riwayat & Laporan')).toHaveLength(0);
+      expect(navigation.filter(({ to }) => to === '/journals')).toHaveLength(0);
     }
   });
 
-  it('keeps the normal session route without an independent journal shortcut', () => {
-    const items = navigationItems(true, true, false);
+  it('shows one canonical Pelaksanaan route from exact sessions.view without an independent journal shortcut', () => {
+    const items = navigationItems(false, true, false, ['sessions.view']);
 
     for (const navigation of [items.sidebar, items.global]) {
       expect(navigation.filter(({ label }) => label === 'Pelaksanaan Lab')).toHaveLength(1);
       expect(navigation.filter(({ label }) => label === 'Riwayat & Laporan')).toHaveLength(0);
+      expect(navigation.filter(({ to }) => to === '/journals')).toHaveLength(0);
     }
   });
 
