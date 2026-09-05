@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AcademicDirectoryMasterController;
 use App\Http\Controllers\Api\V1\ActivityReportController;
+use App\Http\Controllers\Api\V1\ActivityReportAttachmentController;
 use App\Http\Controllers\Api\V1\AcademicPeriodMasterController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
@@ -116,6 +117,10 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:sessions.cancel', RequireLaboratorySessionVersionPrecondition::class]);
 
         Route::get('activity-reports', [ActivityReportController::class, 'index'])->middleware('permission:activity-reports.view');
+        Route::get('activity-reports/{reportId}/attachments', [ActivityReportAttachmentController::class, 'index'])->middleware('permission:activity-reports.view');
+        Route::post('activity-reports/{reportId}/attachments', [ActivityReportAttachmentController::class, 'store'])
+            ->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);
+        Route::get('activity-reports/{reportId}/attachments/{attachmentId}/download', [ActivityReportAttachmentController::class, 'download'])->middleware('permission:activity-reports.view');
         Route::post('activity-reports/backfill', [ActivityReportController::class, 'backfill'])->middleware('permission:activity-reports.create-backfill');
         Route::get('activity-reports/{reportId}', [ActivityReportController::class, 'show'])->middleware('permission:activity-reports.view');
         Route::patch('activity-reports/{reportId}', [ActivityReportController::class, 'update'])->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);

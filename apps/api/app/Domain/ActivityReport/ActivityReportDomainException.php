@@ -35,4 +35,19 @@ class ActivityReportDomainException extends RuntimeException
     {
         return new self('Activity Report has changed since it was loaded.', 'ACTIVITY_REPORT_VERSION_CONFLICT', 412);
     }
+
+    public static function attachmentNotFound(): self
+    {
+        return new self('Activity Report attachment not found.', 'ACTIVITY_REPORT_ATTACHMENT_NOT_FOUND', 404);
+    }
+
+    public static function attachmentUnavailable(): self
+    {
+        return new self('Activity Report attachment is temporarily unavailable.', 'ACTIVITY_REPORT_ATTACHMENT_UNAVAILABLE', 410);
+    }
+
+    public static function attachmentStorageFailed(string $message, int $status = 503): self
+    {
+        return new self($message, 'ACTIVITY_REPORT_ATTACHMENT_STORAGE_FAILED', $status);
+    }
 }
