@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Laboratory Session API module
+  version: 0.20.0
+  description: S3.2 canonical Laboratory execution lifecycle bound to an approved operational source.
+paths:
+  /laboratory-sessions:
+    get:
+      operationId: listLaboratorySessions
+      summary: List canonical Laboratory Sessions in the active School
+      description: Requires sessions.view. Users without sessions.view-all are limited to source ownership scope.
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: sourceType, in: query, schema: { $ref: '#/components/schemas/LaboratorySessionSourceType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/LaboratorySessionStatus' } }
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+      responses:
+        '200': { description: Paginated Laboratory Session collection }
+        '403': { description: all scope requested without sessions.view-all }
+    post:
+      operationId: prepareLaboratorySession
+      summary: Prepare one execution from an approved canonical source
+      description: |
+        Requires sessions.prepare. sourceType must be schedule_occurrence,
+        laboratory_reservation, or priority_event. There is no general manual Session
+        source. Users without sessions.view-all may prepare only a source owned by their
+        current membership; schedule ownership uses Teacher.membership_id.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrepareLaboratorySessionInput' }
+      responses:
+        '201': { description: Prepared Session with ETag version }
+        '404': { description: Source is missing or outside execution scope }
+        '409': { description: Source is ineligible or already has a non-cancelled Session }
+        '422': { description: Request validation failed }
+  /laboratory-sessions/{sessionId}:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getLaboratorySession
+      security: *auth
+      responses:
+        '200': { description: Session detail and append-oriented timeline }
+        '404': { description: Session is missing, cross-School, or out of scope }
+  /laboratory-sessions/{sessionId}/start:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: startLaboratorySession
+      summary: Start a prepared Session after source and availability revalidation
+      description: |
+        Requires sessions.start. The server re-resolves and fingerprints the source,
+        requires the School-local source date, and checks Unified Laboratory Availability
+        with only the canonical source itself excluded. Stale source evidence fails with
+        SESSION_SOURCE_CHANGED. No client-controlled blocker exclusion exists.
+      security: *auth
+      responses:
+        '200': { description: Session started and now contributes actual occupancy }
+        '409': { description: Source changed, source is not startable, or incompatible blockers remain }
+        '412': { description: Session version conflict }
+        '428': { description: Missing or malformed If-Match }
+  /laboratory-sessions/{sessionId}/end:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: endLaboratorySession
+      summary: End an in-progress Session
+      description: |
+        Requires sessions.end. S3.2 records actual completion/interruption evidence.
+        ActivityReport atomic creation is added by S3.3 before frontend cutover.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EndLaboratorySessionInput' }
+      responses:
+        '200': { description: Session ended }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Session version conflict }
+        '428': { description: Missing or malformed If-Match }
+  /laboratory-sessions/{sessionId}/cancel:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: cancelLaboratorySession
+      summary: Cancel a prepared Session before execution starts
+      description: In-progress Sessions cannot be cancelled; end them as interrupted.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Prepared Session cancelled }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Session version conflict }
+        '428': { description: Missing or malformed If-Match }
+components:
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+  schemas:
+    LaboratorySessionSourceType:
+      type: string
+      enum: [schedule_occurrence, laboratory_reservation, priority_event]
+    LaboratorySessionStatus:
+      type: string
+      enum: [prepared, in_progress, ended, cancelled]
+    PrepareLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [sourceType, sourceId]
+      properties:
+        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
+        sourceId: { type: string, format: ulid }
+        openingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    EndLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [endOutcome]
+      properties:
+        endOutcome: { type: string, enum: [completed, interrupted] }
+        closingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
