@@ -5,6 +5,7 @@ interface ApiClientErrorOptions {
   status?: number;
   code?: string;
   errors?: Record<string, string[]>;
+  details?: Record<string, unknown>;
   retryAfter?: number;
   cause?: unknown;
 }
@@ -14,6 +15,7 @@ export class ApiClientError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly errors?: Record<string, string[]>;
+  readonly details?: Record<string, unknown>;
   readonly retryAfter?: number;
   readonly originalCause?: unknown;
 
@@ -24,6 +26,7 @@ export class ApiClientError extends Error {
     this.status = options.status;
     this.code = options.code;
     this.errors = options.errors;
+    this.details = options.details;
     this.retryAfter = options.retryAfter;
     this.originalCause = options.cause;
   }
@@ -149,6 +152,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
       status: response.status,
       code: payload.code,
       errors: parseValidationErrors(payload.errors),
+      details: isRecord(payload.details) ? { ...payload.details } : undefined,
       retryAfter: parseRetryAfter(response.headers.get('retry-after')),
     });
   }
