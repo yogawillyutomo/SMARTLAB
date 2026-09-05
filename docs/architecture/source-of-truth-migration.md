@@ -27,7 +27,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
 | Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
 | Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
-| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar + submitted/approved reservations | typed web gateway + reservation integration | canonical |
+| Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Schedule Exception + Operational Calendar + submitted/approved Reservation + approved Priority Event | typed web gateway used by schedule/reservation/priority workflows | canonical |
 | Laboratory reservations | PostgreSQL reservation + append-oriented events | canonical `/bookings` UI | canonical |
 | Dated Schedule Exceptions | PostgreSQL exception + append-oriented events over immutable active ScheduleOccurrence | operational overlay in canonical `/schedules` UI | canonical |
 | Priority Events | PostgreSQL request/approval lifecycle + append-oriented events | canonical `/priority-events` UI | canonical |
