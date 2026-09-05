@@ -1,4 +1,4 @@
-import { apiClient, type ApiClient } from '@/lib/apiClient';
+import { apiClient, buildApiUrl, type ApiClient } from '@/lib/apiClient';
 import { isUlid } from '@/lib/ulid';
 
 export type ActivityReportType = 'practicum' | 'exam' | 'workshop' | 'general';
@@ -75,6 +75,19 @@ export interface ActivityReportPage {
   meta: { page: number; perPage: number; total: number; lastPage: number; from: string; to: string };
 }
 
+export interface ActivityReportAttachmentDto {
+  id: string;
+  reportId: string;
+  storageProvider: string;
+  fileName: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  available: boolean;
+  uploadedBy: { userId: string; membershipId: string; name: string };
+  createdAt: string;
+}
+
 export interface UpdateActivityReportInput {
   reportType?: ActivityReportType;
   presentCount?: number | null;
@@ -106,6 +119,8 @@ export interface ActivityReportGateway {
   reopen: (id: string, version: number) => Promise<ActivityReportDto>;
   verify: (id: string, version: number) => Promise<ActivityReportDto>;
   backfill: (input: CreateActivityReportBackfillInput) => Promise<ActivityReportDto>;
+  attachments: (reportId: string) => Promise<ActivityReportAttachmentDto[]>;
+  uploadAttachment: (reportId: string, version: number, file: File) => Promise<{ attachment: ActivityReportAttachmentDto; reportVersion: number }>;
 }
 
 export class ActivityReportContractError extends Error {
@@ -251,6 +266,42 @@ function parseEnvelope(value: unknown): ActivityReportDto {
   return parseActivityReport(value.data);
 }
 
+function parseAttachment(value: unknown): ActivityReportAttachmentDto {
+  if (!record(value)
+    || !string(value.id) || !isUlid(value.id)
+    || !string(value.reportId) || !isUlid(value.reportId)
+    || !string(value.storageProvider) || value.storageProvider.trim() === ''
+    || !string(value.fileName) || value.fileName.trim() === ''
+    || !string(value.mediaType) || value.mediaType.trim() === ''
+    || !positive(value.sizeBytes)
+    || !string(value.sha256) || !/^[a-f0-9]{64}$/.test(value.sha256)
+    || typeof value.available !== 'boolean'
+    || !record(value.uploadedBy)
+    || !string(value.uploadedBy.userId) || value.uploadedBy.userId.trim() === ''
+    || !string(value.uploadedBy.membershipId) || value.uploadedBy.membershipId.trim() === ''
+    || !string(value.uploadedBy.name)
+    || !datetime(value.createdAt)) {
+    throw new ActivityReportContractError('Metadata attachment laporan tidak sesuai kontrak API.');
+  }
+
+  return {
+    id: value.id,
+    reportId: value.reportId,
+    storageProvider: value.storageProvider,
+    fileName: value.fileName,
+    mediaType: value.mediaType,
+    sizeBytes: value.sizeBytes,
+    sha256: value.sha256,
+    available: value.available,
+    uploadedBy: {
+      userId: value.uploadedBy.userId,
+      membershipId: value.uploadedBy.membershipId,
+      name: value.uploadedBy.name,
+    },
+    createdAt: value.createdAt,
+  };
+}
+
 function assertRange(from: string, to: string): void {
   if (!validDate(from) || !validDate(to) || from > to) throw new ActivityReportContractError('Rentang Laporan Pelaksanaan tidak valid.');
   const [fy, fm, fd] = from.split('-').map(Number);
@@ -329,7 +380,33 @@ export function createActivityReportGateway(client: ApiClient): ActivityReportGa
     async backfill(input) {
       return parseEnvelope(await client.post<unknown>('/activity-reports/backfill', input));
     },
+    async attachments(reportId) {
+      const value = await client.get<unknown>(`/activity-reports/${pathId(reportId)}/attachments`);
+      if (!record(value) || !Array.isArray(value.data)) throw new ActivityReportContractError();
+      return value.data.map(parseAttachment);
+    },
+    async uploadAttachment(reportId, version, file) {
+      if (!client.postForm) throw new ActivityReportContractError('API client tidak mendukung upload attachment.');
+      const form = new FormData();
+      form.append('file', file);
+      const value = await client.postForm<unknown>(
+        `/activity-reports/${pathId(reportId)}/attachments`,
+        form,
+        { ifMatch: `"${version}"` },
+      );
+      if (!record(value) || !('data' in value) || !positive(value.reportVersion)) {
+        throw new ActivityReportContractError();
+      }
+      return { attachment: parseAttachment(value.data), reportVersion: value.reportVersion };
+    },
   };
+}
+
+export function activityReportAttachmentDownloadUrl(reportId: string, attachmentId: string): string {
+  return buildApiUrl(
+    import.meta.env.VITE_API_ORIGIN,
+    `/activity-reports/${pathId(reportId)}/attachments/${pathId(attachmentId)}/download`,
+  );
 }
 
 export const activityReportGateway = createActivityReportGateway(apiClient);
