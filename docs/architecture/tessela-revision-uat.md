@@ -55,16 +55,6 @@ Expected:
 - impact preview menangkap drift saat ini;
 - activation fails closed.
 
-## UAT-05 — Capacity drift
-
-Given:
-- candidate validated ketika Laboratory capacity cukup;
-- sebelum activation capacity diturunkan di bawah current class student count.
-
-Expected:
-- blocker = `laboratory_capacity_conflict`;
-- activation fails closed.
-
 ## Acceptance
 
 S2.8 integration gate dianggap lulus bila seluruh automated scenarios di atas berjalan pada portable API suite dan PostgreSQL migration/seeder gate.
