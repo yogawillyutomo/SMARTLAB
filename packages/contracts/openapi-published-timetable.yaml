@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab Published Timetable API module
-  version: 0.14.0
-  description: S2.2 published timetable ingestion/activation plus the S2.3 current-plan Schedule Occurrence read model.
+  version: 0.18.0
+  description: Published timetable ingestion/activation plus current-plan Schedule Occurrences with the S2.7 dated operational overlay.
 paths:
   /timetable-publications:
     get:
@@ -120,8 +120,10 @@ paths:
         Requires schedules.view. Returns only occurrences belonging to timetable
         publications that are currently active for the authenticated School.
         This is a current-plan projection, not a historical reconstruction of which
-        publication was active on a past date. Date ranges are inclusive and limited
-        to 14 calendar days.
+        publication was active on a past date. The immutable planned fields remain
+        TESSELA source evidence; operationalStatus, operationalLaboratory, and exception
+        overlay an active SmartLab Schedule Exception without rewriting that source.
+        Date ranges are inclusive and limited to 14 calendar days.
       security: *auth
       parameters:
         - name: from
@@ -177,6 +179,22 @@ components:
         code: { type: string, minLength: 1 }
         name: { type: string, minLength: 1 }
 
+    ScheduleOccurrenceException:
+      type: object
+      additionalProperties: false
+      required: [id, resolution, reason, approvedByName, version, createdAt, replacementLaboratory]
+      properties:
+        id: { type: string, format: ulid }
+        resolution: { type: string, enum: [cancel, relocate] }
+        reason: { type: string, minLength: 1 }
+        approvedByName: { type: string, minLength: 1 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        replacementLaboratory:
+          oneOf:
+            - { $ref: '#/components/schemas/ScheduleReference' }
+            - { type: 'null' }
+
     ScheduleOccurrence:
       type: object
       additionalProperties: false
@@ -193,6 +211,9 @@ components:
         - academicClass
         - subject
         - plannedLaboratory
+        - operationalStatus
+        - operationalLaboratory
+        - exception
         - lessonPeriodSetId
         - startLessonPeriodId
         - endLessonPeriodId
@@ -212,8 +233,21 @@ components:
         academicClass: { $ref: '#/components/schemas/ScheduleReference' }
         subject: { $ref: '#/components/schemas/ScheduleReference' }
         plannedLaboratory:
+          description: Immutable Laboratory assignment from the active TESSELA source publication.
           oneOf:
             - { $ref: '#/components/schemas/ScheduleReference' }
+            - { type: 'null' }
+        operationalStatus:
+          type: string
+          enum: [scheduled, cancelled, relocated]
+        operationalLaboratory:
+          description: Effective dated Laboratory after the active SmartLab exception overlay; null when cancelled or unplanned.
+          oneOf:
+            - { $ref: '#/components/schemas/ScheduleReference' }
+            - { type: 'null' }
+        exception:
+          oneOf:
+            - { $ref: '#/components/schemas/ScheduleOccurrenceException' }
             - { type: 'null' }
         lessonPeriodSetId: { type: string, format: ulid }
         startLessonPeriodId: { type: string, format: ulid }
