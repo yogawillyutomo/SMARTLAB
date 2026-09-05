@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Laboratory Reservation API module
-  version: 0.17.0
+  version: 0.20.0
 paths:
   /laboratory-reservations:
     get:
@@ -90,6 +90,9 @@ paths:
                 reason: { type: string, minLength: 1, maxLength: 2000 }
       responses:
         '200': { description: Cancelled reservation; slot no longer blocks availability }
+        '409': { description: Reservation cannot be cancelled while it owns a prepared or in-progress Laboratory Session. }
+        '412': { description: Reservation version conflict }
+        '428': { description: Missing/invalid If-Match }
 components:
   schemas:
     ReservationStatus:
