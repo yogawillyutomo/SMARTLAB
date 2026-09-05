@@ -167,6 +167,29 @@ describe('API transport contracts', () => {
     });
   });
 
+  it('sends multipart mutations through the shared CSRF and If-Match boundary without forcing Content-Type', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return jsonResponse({ data: { id: '01ATTACHMENT' }, reportVersion: 2 }, 201);
+    });
+    const client = createApiClient({
+      fetchImpl: fetchMock as typeof fetch,
+      readCookie: () => 'XSRF-TOKEN=upload%3Dtoken',
+    });
+    const form = new FormData();
+    form.append('file', new File(['evidence'], 'bukti.txt', { type: 'text/plain' }));
+
+    await expect(client.postForm?.('/activity-reports/01REPORT/attachments', form, { ifMatch: '"1"' }))
+      .resolves.toEqual({ data: { id: '01ATTACHMENT' }, reportVersion: 2 });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = new Headers(init?.headers);
+    expect(init).toMatchObject({ method: 'POST', credentials: 'include', body: form });
+    expect(headers.get('Accept')).toBe('application/json');
+    expect(headers.get('Content-Type')).toBeNull();
+    expect(headers.get('X-XSRF-TOKEN')).toBe('upload=token');
+    expect(headers.get('If-Match')).toBe('"1"');
+  });
+
   it('parses stable API errors and Retry-After metadata', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       message: 'Too many login attempts. Please try again later.',
