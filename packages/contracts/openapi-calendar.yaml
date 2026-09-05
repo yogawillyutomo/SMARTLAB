@@ -1,0 +1,84 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Operational Calendar API module
+  version: 0.15.0
+paths:
+  /calendar-events:
+    get:
+      operationId: listCalendarEvents
+      summary: List tenant-scoped operational calendar events overlapping a date range
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: scope, in: query, schema: { type: string, enum: [school, laboratory] } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/CalendarCategory' } }
+        - { name: availabilityEffect, in: query, schema: { type: string, enum: [informational, blocked] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, cancelled], default: active } }
+      responses:
+        '200': { description: Calendar event collection }
+    post:
+      operationId: createCalendarEvent
+      summary: Create an operational calendar event
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarEventInput' }
+      responses:
+        '201': { description: Created }
+  /calendar-events/{calendarEventId}:
+    parameters:
+      - { name: calendarEventId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getCalendarEvent
+      security: *auth
+      responses:
+        '200': { description: Calendar event }
+    patch:
+      operationId: updateCalendarEvent
+      security: *auth
+      parameters:
+        - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarEventInput' }
+      responses:
+        '200': { description: Updated }
+        '412': { description: Version conflict }
+        '428': { description: Missing/invalid precondition }
+  /calendar-events/{calendarEventId}/cancel:
+    parameters:
+      - { name: calendarEventId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: cancelCalendarEvent
+      summary: Cancel without destructive deletion
+      security: *auth
+      responses:
+        '200': { description: Cancelled event }
+components:
+  schemas:
+    CalendarCategory:
+      type: string
+      enum: [effective_day, holiday, exam, school_event, maintenance, laboratory_closure, school_closure, workshop, competition, meeting, other]
+    CalendarEventInput:
+      type: object
+      additionalProperties: false
+      required: [scope, category, availabilityEffect, title, startsOn, endsOn, allDay]
+      properties:
+        scope: { type: string, enum: [school, laboratory] }
+        laboratoryId: { type: [string, 'null'], format: ulid }
+        category: { $ref: '#/components/schemas/CalendarCategory' }
+        availabilityEffect: { type: string, enum: [informational, blocked] }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        allDay: { type: boolean }
+        startsAt: { type: [string, 'null'], pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
+        endsAt: { type: [string, 'null'], pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }
