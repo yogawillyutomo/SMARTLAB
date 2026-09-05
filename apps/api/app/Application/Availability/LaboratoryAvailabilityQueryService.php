@@ -5,6 +5,7 @@ namespace App\Application\Availability;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Availability\LaboratoryAvailabilityException;
 use App\Models\Laboratory;
+use App\Models\LaboratoryReservation;
 use App\Models\OperationalCalendarEvent;
 use App\Models\ScheduleOccurrence;
 use App\Models\TimetablePublication;
@@ -13,12 +14,12 @@ use Illuminate\Database\Eloquent\Builder;
 class LaboratoryAvailabilityQueryService
 {
     /**
-     * Evaluate one School-local Laboratory window against the canonical sources available in S2.5.
+     * Evaluate one School-local Laboratory window against canonical scheduling and operational sources.
      *
      * @param array{laboratoryId:string,date:string,startsAt:string,endsAt:string} $filters
      * @return array<string,mixed>
      */
-    public function check(CurrentMembershipContext $context, array $filters): array
+    public function check(CurrentMembershipContext $context, array $filters, ?string $excludeReservationId = null): array
     {
         $schoolId = (string) $context->membership->school_id;
         $laboratory = Laboratory::query()
@@ -71,6 +72,21 @@ class LaboratoryAvailabilityQueryService
             ->orderBy('id')
             ->get();
 
+        $reservations = LaboratoryReservation::query()
+            ->where('school_id', $schoolId)
+            ->where('laboratory_id', $laboratory->id)
+            ->whereDate('reservation_date', $date)
+            ->whereIn('status', ['submitted', 'approved'])
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->when(
+                $excludeReservationId !== null,
+                fn (Builder $query) => $query->whereKeyNot($excludeReservationId),
+            )
+            ->orderBy('starts_at')
+            ->orderBy('id')
+            ->get();
+
         $calendarEvents = OperationalCalendarEvent::query()
             ->where('school_id', $schoolId)
             ->where('status', 'active')
@@ -118,6 +134,10 @@ class LaboratoryAvailabilityQueryService
 
         foreach ($occurrences as $occurrence) {
             $blockers[] = $this->scheduleBlocker($occurrence);
+        }
+
+        foreach ($reservations as $reservation) {
+            $blockers[] = $this->reservationBlocker($reservation);
         }
 
         $notices = [];
@@ -174,6 +194,9 @@ class LaboratoryAvailabilityQueryService
                 'operationalCalendar' => [
                     'status' => 'covered',
                 ],
+                'reservations' => [
+                    'status' => 'covered',
+                ],
                 'laboratoryStatus' => [
                     'status' => 'covered',
                 ],
@@ -209,6 +232,26 @@ class LaboratoryAvailabilityQueryService
                 'teacher' => $teacher,
                 'academicClass' => $academicClass,
                 'subject' => $subject,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function reservationBlocker(LaboratoryReservation $reservation): array
+    {
+        return [
+            'type' => 'reservation',
+            'sourceId' => (string) $reservation->id,
+            'title' => (string) $reservation->activity,
+            'allDay' => false,
+            'startsAt' => substr((string) $reservation->starts_at, 0, 8),
+            'endsAt' => substr((string) $reservation->ends_at, 0, 8),
+            'details' => [
+                'reservationNumber' => (string) $reservation->reservation_number,
+                'status' => (string) $reservation->status,
+                'requesterName' => (string) $reservation->requester_name_snapshot,
+                'participants' => (int) $reservation->participants,
+                'picName' => (string) $reservation->pic_name,
             ],
         ];
     }
