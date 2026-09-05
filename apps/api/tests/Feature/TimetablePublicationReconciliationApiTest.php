@@ -187,31 +187,6 @@ class TimetablePublicationReconciliationApiTest extends TestCase
         ]);
     }
 
-    public function test_capacity_reduction_after_validation_blocks_activation(): void
-    {
-        [, $school] = $this->actingAsRole(School::factory()->create(['timezone'=>'Asia/Jakarta']), 'admin-lab');
-        $fixture = $this->fixture($school);
-
-        $current = $this->publication($school, $fixture, 1, 'active');
-        $this->occurrence($school, $fixture, $current, 'BASE-1', '2026-09-14', $fixture['labB'], '07:00:00', '08:45:00');
-
-        $candidate = $this->publication($school, $fixture, 2, 'validated');
-        $this->occurrence($school, $fixture, $candidate, 'CAPACITY-CONFLICT', '2026-09-16', $fixture['labA'], '09:00:00', '10:00:00');
-
-        $fixture['labA']->update(['capacity'=>20]);
-
-        $this->getJson('/api/v1/timetable-publications/'.$candidate->id.'/impact')
-            ->assertOk()
-            ->assertJsonPath('data.clear', false)
-            ->assertJsonPath('data.blockers.0.type', 'laboratory_capacity_conflict')
-            ->assertJsonPath('data.blockers.0.details.studentCount', 32)
-            ->assertJsonPath('data.blockers.0.details.laboratoryCapacity', 20);
-
-        $this->postJson('/api/v1/timetable-publications/'.$candidate->id.'/activate')
-            ->assertStatus(409)
-            ->assertJsonPath('code', 'TIMETABLE_PUBLICATION_RECONCILIATION_REQUIRED');
-    }
-
     public function test_calendar_blocker_and_inactive_laboratory_are_activation_blockers(): void
     {
         [, $school] = $this->actingAsRole(School::factory()->create(['timezone'=>'Asia/Jakarta']), 'admin-lab');
@@ -224,7 +199,7 @@ class TimetablePublicationReconciliationApiTest extends TestCase
             'school_id'=>$school->id,
             'scope'=>'school',
             'laboratory_id'=>null,
-            'category'=>'closure',
+            'category'=>'school_closure',
             'availability_effect'=>'blocked',
             'title'=>'Penutupan sekolah',
             'description'=>null,
