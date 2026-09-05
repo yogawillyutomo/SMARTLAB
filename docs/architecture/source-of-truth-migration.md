@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.3 Schedule Read Model Cutover
+**Baseline:** repository state including S2.4 Operational Calendar & Closure
 
 ## Goal
 
@@ -26,6 +26,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Published timetable ingestion/activation | PostgreSQL / Timetable Publication API | source publication administration remains API-first | canonical backend |
 | Materialized schedule occurrences | PostgreSQL / `schedule_occurrences` generated from validated publications | `scheduleOccurrenceGateway`, `/schedules` | canonical |
 | Schedule current-plan read model | active TimetablePublication + bounded ScheduleOccurrence query | canonical `/schedules` week/day/list UI | canonical |
+| Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -152,9 +153,21 @@ Delivered in S2.3:
 - week/day/list views cover Monday through Sunday without hiding weekend occurrences;
 - OpenAPI 0.14 and regression tests locking the source-of-truth boundary.
 
+Delivered in S2.4:
+
+- tenant-scoped Operational Calendar persistence and API;
+- school-wide and Laboratory-specific scope;
+- explicit informational vs blocked availability effect;
+- all-day multi-date events and single-date partial-day closures;
+- active/cancelled lifecycle with no destructive delete;
+- ETag/If-Match optimistic concurrency;
+- append-oriented calendar audit events;
+- canonical `/calendar` cutover with role-safe Laboratory lookup;
+- OpenAPI 0.15 and source-of-truth regression coverage.
+
 Next implementation slices:
 
-- S2.4 academic calendar / closures;
+- S2.5 unified Laboratory availability;
 - S2.5 unified Laboratory availability;
 - S2.6 reservations and approval;
 - S2.7 dated schedule exceptions;
