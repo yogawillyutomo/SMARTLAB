@@ -4,6 +4,7 @@ namespace App\Application\PriorityEvent;
 
 use App\Application\Availability\LaboratoryAvailabilityQueryService;
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Session\LaboratorySessionSourceGuard;
 use App\Domain\PriorityEvent\PriorityEventDomainException;
 use App\Models\Laboratory;
 use App\Models\PriorityEvent;
@@ -18,6 +19,7 @@ class PriorityEventMutationService
     public function __construct(
         private readonly LaboratoryAvailabilityQueryService $availability,
         private readonly PriorityEventEventRecorder $recorder,
+        private readonly LaboratorySessionSourceGuard $sessionGuard,
     ) {
     }
 
@@ -210,6 +212,13 @@ class PriorityEventMutationService
             if (! in_array($event->status, ['submitted', 'approved'], true)) {
                 throw PriorityEventDomainException::stateConflict('Only submitted or approved Priority Events may be cancelled.');
             }
+
+            $this->sessionGuard->assertMutable(
+                (string) $context->membership->school_id,
+                'priority_event',
+                (string) $event->id,
+                'cancel_priority_event',
+            );
 
             $beforeStatus = $event->status;
             $before = $event->version;

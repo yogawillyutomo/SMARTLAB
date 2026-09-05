@@ -185,7 +185,11 @@ paths:
         '404':
           $ref: '#/components/responses/LaboratoryNotFound'
         '409':
-          $ref: '#/components/responses/MembershipContextConflict'
+          description: School context conflict, or the Laboratory cannot become inactive while a prepared/in-progress Laboratory Session uses it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '422':
           $ref: '#/components/responses/ValidationFailed'
   /devices:

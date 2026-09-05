@@ -5,6 +5,9 @@ namespace App\Application\Availability;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Availability\LaboratoryAvailabilityException;
 use App\Models\Laboratory;
+use App\Models\LaboratorySession;
+use App\Models\School;
+use Carbon\CarbonImmutable;
 use App\Models\LaboratoryReservation;
 use App\Models\OperationalCalendarEvent;
 use App\Models\PriorityEvent;
@@ -29,6 +32,7 @@ class LaboratoryAvailabilityQueryService
         ?string $excludeReservationId = null,
         ?string $excludeScheduleExceptionId = null,
         ?string $excludeScheduleOccurrenceId = null,
+        ?string $excludePriorityEventId = null,
     ): array {
         $schoolId = (string) $context->membership->school_id;
         $laboratory = Laboratory::query()
@@ -43,6 +47,12 @@ class LaboratoryAvailabilityQueryService
         $date = $filters['date'];
         $startsAt = $this->seconds($filters['startsAt']);
         $endsAt = $this->seconds($filters['endsAt']);
+        $timezone = School::query()->whereKey($schoolId)->value('timezone') ?: config('app.timezone', 'UTC');
+        $windowEndUtc = CarbonImmutable::createFromFormat(
+            'Y-m-d H:i:s',
+            $date.' '.$endsAt,
+            $timezone,
+        )->utc();
 
         $activePublicationCount = TimetablePublication::query()
             ->where('school_id', $schoolId)
@@ -130,6 +140,10 @@ class LaboratoryAvailabilityQueryService
             ->where('status', 'approved')
             ->where('starts_at', '<', $endsAt)
             ->where('ends_at', '>', $startsAt)
+            ->when(
+                $excludePriorityEventId !== null,
+                fn (Builder $query) => $query->where('id', '<>', $excludePriorityEventId),
+            )
             ->orderBy('starts_at')
             ->orderBy('id')
             ->get();
@@ -146,6 +160,16 @@ class LaboratoryAvailabilityQueryService
                 fn (Builder $query) => $query->where('id', '<>', $excludeReservationId),
             )
             ->orderBy('starts_at')
+            ->orderBy('id')
+            ->get();
+
+        $sessions = LaboratorySession::query()
+            ->where('school_id', $schoolId)
+            ->where('laboratory_id', $laboratory->id)
+            ->where('status', 'in_progress')
+            ->whereNotNull('actual_started_at')
+            ->where('actual_started_at', '<', $windowEndUtc)
+            ->orderBy('actual_started_at')
             ->orderBy('id')
             ->get();
 
@@ -215,6 +239,10 @@ class LaboratoryAvailabilityQueryService
             $blockers[] = $this->reservationBlocker($reservation);
         }
 
+        foreach ($sessions as $session) {
+            $blockers[] = $this->sessionBlocker($session, $date, $timezone);
+        }
+
         $notices = [];
         foreach ($calendarEvents as $event) {
             $evidence = $this->calendarEvidence($event);
@@ -276,6 +304,9 @@ class LaboratoryAvailabilityQueryService
                     'status' => 'covered',
                 ],
                 'priorityEvents' => [
+                    'status' => 'covered',
+                ],
+                'laboratorySessions' => [
                     'status' => 'covered',
                 ],
                 'laboratoryStatus' => [
@@ -398,6 +429,34 @@ class LaboratoryAvailabilityQueryService
                 'requesterName' => (string) $reservation->requester_name_snapshot,
                 'participants' => (int) $reservation->participants,
                 'picName' => (string) $reservation->pic_name,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function sessionBlocker(LaboratorySession $session, string $date, string $timezone): array
+    {
+        $started = $session->actual_started_at?->setTimezone($timezone);
+        $startsAt = $started?->format('Y-m-d') === $date
+            ? $started?->format('H:i:s')
+            : null;
+
+        return [
+            'type' => 'laboratory_session',
+            'sourceId' => (string) $session->id,
+            'title' => 'Pelaksanaan Lab sedang berlangsung · '.$session->responsible_name_snapshot,
+            'allDay' => false,
+            'startsAt' => $startsAt,
+            'endsAt' => null,
+            'details' => [
+                'sessionNumber' => (string) $session->session_number,
+                'sessionStatus' => (string) $session->status,
+                'sourceType' => (string) $session->source_type,
+                'sourceId' => $session->sourceId(),
+                'sourceDate' => $session->source_date?->format('Y-m-d'),
+                'sourceStartsAt' => substr((string) $session->source_starts_at, 0, 8),
+                'sourceEndsAt' => substr((string) $session->source_ends_at, 0, 8),
+                'actualStartedAt' => $session->actual_started_at?->toISOString(),
             ],
         ];
     }

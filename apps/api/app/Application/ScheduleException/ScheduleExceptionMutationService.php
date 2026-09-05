@@ -4,6 +4,7 @@ namespace App\Application\ScheduleException;
 
 use App\Application\Availability\LaboratoryAvailabilityQueryService;
 use App\Application\Identity\CurrentMembershipContext;
+use App\Application\Session\LaboratorySessionSourceGuard;
 use App\Domain\ScheduleException\ScheduleExceptionDomainException;
 use App\Models\Laboratory;
 use App\Models\ScheduleException;
@@ -19,6 +20,7 @@ class ScheduleExceptionMutationService
     public function __construct(
         private readonly LaboratoryAvailabilityQueryService $availability,
         private readonly ScheduleExceptionEventRecorder $recorder,
+        private readonly LaboratorySessionSourceGuard $sessionGuard,
     ) {
     }
 
@@ -44,6 +46,13 @@ class ScheduleExceptionMutationService
             if ($occurrence === null) {
                 throw ScheduleExceptionDomainException::occurrenceNotFound();
             }
+
+            $this->sessionGuard->assertMutable(
+                $schoolId,
+                'schedule_occurrence',
+                (string) $occurrence->id,
+                'apply_schedule_exception',
+            );
 
             if (ScheduleException::query()
                 ->where('school_id', $schoolId)
@@ -190,6 +199,13 @@ class ScheduleExceptionMutationService
             if ($occurrence === null) {
                 throw ScheduleExceptionDomainException::stateConflict('The source Schedule Occurrence is no longer resolvable.');
             }
+
+            $this->sessionGuard->assertMutable(
+                $schoolId,
+                'schedule_occurrence',
+                (string) $occurrence->id,
+                'cancel_schedule_exception',
+            );
 
             $this->lockLaboratories($schoolId, array_values(array_filter([
                 $exception->original_laboratory_id,

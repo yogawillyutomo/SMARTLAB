@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab Published Timetable API module
-  version: 0.19.0
-  description: Published timetable ingestion/activation, current-plan Schedule Occurrences, and the S2.8 fail-closed publication impact/reconciliation gate.
+  version: 0.20.0
+  description: Published timetable ingestion/activation, current-plan Schedule Occurrences, and fail-closed operational reconciliation including S3.2 active Laboratory Sessions.
 paths:
   /timetable-publications:
     get:
@@ -99,7 +99,7 @@ paths:
         Requires schedules.activate. The preview compares future occurrences against
         the current active publication and evaluates operational commitments that would
         become unsafe: active Schedule Exceptions, submitted/approved Reservations,
-        approved Priority Events, active Calendar blockers, inactive Laboratories. It never changes state and never proposes solver output.
+        approved Priority Events, prepared/in-progress Laboratory Sessions sourced from the current publication, active Calendar blockers, and inactive Laboratories. It never changes state and never proposes solver output.
       security: *auth
       responses:
         '200':
@@ -200,6 +200,7 @@ components:
       type: string
       enum:
         - active_schedule_exception
+        - active_session_conflict
         - reservation_conflict
         - priority_event_conflict
         - calendar_blocker_conflict

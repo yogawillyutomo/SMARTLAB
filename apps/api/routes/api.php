@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\ScheduleExceptionController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
 use App\Http\Controllers\Api\V1\LaboratoryReservationController;
+use App\Http\Controllers\Api\V1\LaboratorySessionController;
 use App\Http\Controllers\Api\V1\PriorityEventController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
@@ -26,6 +27,7 @@ use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
 use App\Http\Middleware\RequirePriorityEventVersionPrecondition;
+use App\Http\Middleware\RequireLaboratorySessionVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -94,6 +96,16 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:priority-events.approve', RequirePriorityEventVersionPrecondition::class]);
         Route::post('priority-events/{priorityEventId}/cancel', [PriorityEventController::class, 'cancel'])
             ->middleware(['permission:priority-events.cancel', RequirePriorityEventVersionPrecondition::class]);
+
+        Route::get('laboratory-sessions', [LaboratorySessionController::class, 'index'])->middleware('permission:sessions.view');
+        Route::post('laboratory-sessions', [LaboratorySessionController::class, 'store'])->middleware('permission:sessions.prepare');
+        Route::get('laboratory-sessions/{sessionId}', [LaboratorySessionController::class, 'show'])->middleware('permission:sessions.view');
+        Route::post('laboratory-sessions/{sessionId}/start', [LaboratorySessionController::class, 'start'])
+            ->middleware(['permission:sessions.start', RequireLaboratorySessionVersionPrecondition::class]);
+        Route::post('laboratory-sessions/{sessionId}/end', [LaboratorySessionController::class, 'end'])
+            ->middleware(['permission:sessions.end', RequireLaboratorySessionVersionPrecondition::class]);
+        Route::post('laboratory-sessions/{sessionId}/cancel', [LaboratorySessionController::class, 'cancel'])
+            ->middleware(['permission:sessions.cancel', RequireLaboratorySessionVersionPrecondition::class]);
 
         Route::get('laboratory-availability', LaboratoryAvailabilityController::class)->middleware('permission:availability.view');
 

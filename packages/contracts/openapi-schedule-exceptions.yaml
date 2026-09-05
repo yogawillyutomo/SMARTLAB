@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Schedule Exception API module
-  version: 0.18.0
+  version: 0.20.0
   description: S2.7 non-destructive dated Schedule Exceptions over immutable TESSELA Schedule Occurrences.
 paths:
   /schedule-exceptions:
@@ -39,7 +39,7 @@ paths:
         '404':
           description: Source occurrence does not belong to the active School/current active publication.
         '409':
-          description: Active exception already exists or relocation target is unavailable.
+          description: Active exception already exists, relocation target is unavailable, or the occurrence owns a prepared/in-progress Laboratory Session.
         '422':
           description: Invalid resolution shape, Laboratory reference, or relocation capacity.
   /schedule-exceptions/{scheduleExceptionId}:
@@ -76,7 +76,7 @@ paths:
                 reason: { type: string, minLength: 1, maxLength: 2000 }
       responses:
         '200': { description: Cancelled exception. The response ETag carries the new entity version. }
-        '409': { description: State conflict or unsafe source-occurrence restoration. }
+        '409': { description: State conflict, active Laboratory Session source commitment, or unsafe source-occurrence restoration. }
         '412': { description: Schedule Exception version conflict. }
         '428': { description: Missing or malformed If-Match version. }
 components:

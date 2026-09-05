@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.8 canonical scheduling plus locked S3.1 execution/report semantics
+**Baseline:** repository state including S3.2 canonical LaboratorySession backend
 
 ## Goal
 
@@ -32,6 +32,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Dated Schedule Exceptions | PostgreSQL exception + append-oriented events over immutable active ScheduleOccurrence | operational overlay in canonical `/schedules` UI | canonical |
 | Priority Events | PostgreSQL request/approval lifecycle + append-oriented events | canonical `/priority-events` UI | canonical |
 | Timetable publication impact/reconciliation | future occurrence diff + cross-domain operational impact gate | API-first administration + automated TESSELA revision UAT | canonical backend |
+| LaboratorySession execution backend | PostgreSQL source-bound prepare/start/end/cancel + event history; actual in-progress occupancy and source mutation guards | API-first; `/sessions` frontend remains local until S3.4 | canonical backend |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -42,7 +43,7 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/sessions` | laboratory execution | occurrence/session domain |
+| `/sessions` | laboratory execution UI | canonical LaboratorySession backend exists; ActivityReport + execution read-model/frontend cutover still required |
 | `/journals` | execution report/journal | session/report domain |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
 | `/assets` | fixed assets | asset domain |
@@ -258,9 +259,25 @@ Locked semantics:
 - offline report drafts retain canonical server ID/version authority and fail on conflicts rather than last-write-wins;
 - `/sessions` becomes the unified canonical experience; `/journals` remains a compatibility/deep-link path during migration.
 
+Delivered in S3.2:
+
+- PostgreSQL `laboratory_sessions` and append-oriented `laboratory_session_events`;
+- prepare/start/end/cancel lifecycle with integer version and ETag/If-Match preconditions;
+- exactly one non-cancelled execution per ScheduleOccurrence/Reservation/Priority Event source;
+- source resolver that preserves canonical IDs and deterministic source fingerprints;
+- Guru schedule execution ownership uses explicit `Teacher.membership_id`, never display-name/email inference;
+- start requires School-local source date and revalidates source fingerprint/current operational Laboratory;
+- only the source itself can be internally excluded from availability during start; clients cannot exclude arbitrary blockers;
+- in-progress Session contributes open-ended actual occupancy to Unified Laboratory Availability;
+- Reservation/Priority Event/ScheduleException mutation and Laboratory deactivation fail closed while a prepared/in-progress Session would be invalidated;
+- timetable publication impact includes `active_session_conflict` for schedule-sourced prepared/in-progress Sessions;
+- canonical Session permission catalog, tenant scoping, audit timeline, OpenAPI 0.20, and integration tests;
+- existing availability web gateway accepts `laboratory_session` evidence so S2 frontend flows remain compatible.
+
+S3.2 intentionally does **not** cut over `/sessions` and does not implement ActivityReport. The end endpoint records report-pending evidence; S3.3 must make normal end + ActivityReport draft atomic before the frontend becomes canonical.
+
 Next slices:
 
-- S3.2 LaboratorySession backend + source guards + availability/publication-reconciliation integration;
 - S3.3 ActivityReport backend;
 - S3.4 unified Pelaksanaan Lab frontend cutover;
 - S3.5 explicit observation/Incident linkage + attachments;
