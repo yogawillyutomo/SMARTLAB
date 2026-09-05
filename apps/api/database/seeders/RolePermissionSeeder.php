@@ -22,6 +22,7 @@ class RolePermissionSeeder extends Seeder
             'master-data.view', 'master-data.create', 'master-data.update',
             'schedules.view', 'schedules.ingest', 'schedules.activate',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.cancel', 'calendar.export',
+            'availability.view',
             'audit-logs.view', 'audit-logs.export',
         ],
         'kepala-lab' => [
@@ -48,13 +49,13 @@ class RolePermissionSeeder extends Seeder
             'incidents.view', 'incidents.update', 'incidents.view-all', 'incidents.view-history', 'incidents.comment',
             'work-orders.view', 'work-orders.update',
             'schedules.view',
-            'calendar.view',
+            'calendar.view', 'availability.view',
         ],
         'guru' => [
             'laboratories.view', 'assets.view', 'devices.view',
             'incidents.view', 'incidents.create', 'incidents.comment',
             'schedules.view',
-            'calendar.view',
+            'calendar.view', 'availability.view',
         ],
         'ketua-kelas' => [
             'incidents.view', 'incidents.create', 'incidents.comment',
@@ -75,6 +76,7 @@ class RolePermissionSeeder extends Seeder
             'users.view', 'roles.view',
             'schedules.view',
             'calendar.view', 'calendar.export',
+            'availability.view',
             'audit-logs.view', 'audit-logs.export',
         ],
     ];
