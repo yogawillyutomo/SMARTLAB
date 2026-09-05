@@ -192,9 +192,9 @@ Laporan manual hanya untuk backfill, migrasi, darurat, atau data legacy yang dii
 
 | Status | Keterangan |
 | --- | --- |
-| Implementasi saat ini | Sesi Praktikum dan Jurnal Praktikum adalah menu/route terpisah; menyelesaikan sesi dapat membuat jurnal draft. |
+| Implementasi saat ini | S3.2 LaboratorySession backend sudah canonical dan source-bound, tetapi `/sessions` dan `/journals` frontend masih memakai prototype browser-local. ActivityReport belum canonical; karena itu end→draft atomik target belum dianggap delivered. |
 | Perilaku target yang disetujui | Pengguna mengalami satu workflow Pelaksanaan Lab dengan laporan wajib dan verifikasi. |
-| Implementasi masa depan | S3.1 sudah mengunci Session/ActivityReport contract; berikutnya S3.2–S3.6 membangun backend Session, ActivityReport, antarmuka terpadu, explicit Incident/attachment linkage, offline draft sync, dan UAT. |
+| Implementasi masa depan | Lanjut S3.3 ActivityReport backend, S3.4 antarmuka Pelaksanaan Lab terpadu, S3.5 explicit Incident/attachment linkage, lalu S3.6 offline draft sync dan UAT. |
 | Di luar scope PR dokumentasi | Menghapus jurnal/sesi lama atau menetapkan SLA pengingat yang belum disetujui. |
 
 ## 6. Denah laboratorium
