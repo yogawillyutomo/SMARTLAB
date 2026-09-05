@@ -232,6 +232,7 @@ export function SessionsPage() {
 
   const requestedTab = searchParams.get('tab');
   const activeTab: TabKey = ['today', 'in-progress', 'awaiting-report', 'history'].includes(requestedTab ?? '')
+    && (requestedTab !== 'awaiting-report' || canViewReports)
     ? requestedTab as TabKey
     : 'today';
 
@@ -289,7 +290,7 @@ export function SessionsPage() {
         canViewReports
           ? activityReportGateway.listAll({ from: historyFrom, to: historyTo, scope: scopeReports })
           : Promise.resolve([]),
-        canBackfill || canExportReports ? laboratoryGateway.list() : Promise.resolve([]),
+        canBackfill ? laboratoryGateway.list() : Promise.resolve([]),
       ]);
       setSources(sourceRows);
       setSessions(sessionRows);
@@ -496,6 +497,48 @@ export function SessionsPage() {
       setEditingReport(null);
       setReportEditForm(null);
     }, 'Laporan diajukan untuk verifikasi.');
+  }
+
+  async function saveAndSubmitReport() {
+    if (!editingReport || !reportEditForm || !canEditReport || !canSubmitReport) return;
+    const form = reportEditForm;
+    const payload: UpdateActivityReportInput = {
+      reportType: form.reportType,
+      presentCount: nullableCount(form.presentCount),
+      absentCount: nullableCount(form.absentCount),
+      attendanceNotes: form.attendanceNotes.trim() || null,
+      externalAttendanceSystem: form.externalAttendanceSystem.trim() || null,
+      externalAttendanceReferenceId: form.externalAttendanceReferenceId.trim() || null,
+      commonContent: compactContent(form.commonContent),
+      typeSpecificContent: compactContent(form.typeSpecificContent),
+    };
+
+    setBusy(true);
+    try {
+      const saved = await activityReportGateway.update(editingReport.id, editingReport.version, payload);
+      const submitted = await activityReportGateway.submit(saved.id, saved.version);
+      setEditingReport(null);
+      setReportEditForm(null);
+      setReportDetail(submitted);
+      toast('Draft disimpan dan laporan diajukan untuk verifikasi.', 'success');
+      await load();
+    } catch (cause) {
+      toast(issueMessage(cause), 'error');
+      const fresh = await activityReportGateway.show(editingReport.id).catch(() => null);
+      if (fresh) {
+        if (fresh.status === 'draft') {
+          setEditingReport(fresh);
+          setReportEditForm(reportForm(fresh));
+        } else {
+          setEditingReport(null);
+          setReportEditForm(null);
+          setReportDetail(fresh);
+        }
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function verifyReport(report: ActivityReportDto) {
@@ -890,7 +933,7 @@ export function SessionsPage() {
               <Input label="Sistem Presensi Eksternal" value={reportEditForm.externalAttendanceSystem} onChange={(event) => setReportEditForm({ ...reportEditForm, externalAttendanceSystem: event.target.value })} placeholder="Contoh: HADIRA" />
               <Input label="Referensi Presensi Eksternal" value={reportEditForm.externalAttendanceReferenceId} onChange={(event) => setReportEditForm({ ...reportEditForm, externalAttendanceReferenceId: event.target.value })} />
             </div>
-            {editingReport && canSubmitReport && <div className="flex justify-end"><Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void submitReport(editingReport)} disabled={busy}>Simpan lalu Ajukan</Button></div>}
+            {editingReport && canSubmitReport && <div className="flex justify-end"><Button variant="success" icon={<Send className="h-4 w-4" />} onClick={() => void saveAndSubmitReport()} disabled={busy}>Simpan lalu Ajukan</Button></div>}
           </div>
         )}
       </FormDialog>
