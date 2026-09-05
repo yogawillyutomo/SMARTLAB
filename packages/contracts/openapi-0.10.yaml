@@ -715,7 +715,17 @@ paths:
     post:
       operationId: transitionIncident
       summary: Transition an Incident through the canonical lifecycle graph
-      description: Requires `incidents.view` plus a current strong Incident If-Match. The server locks the visible Incident, rejects stale versions before edge or eligibility oracles, resolves the exact lifecycle edge, and then requires that edge's permission (`incidents.approve` or `incidents.update`). Progress edges requiring `incidents.update` additionally require the actor to be the current live assignee or to hold `incidents.assign` as an administrative override. Every transition into `in_progress` requires the canonical current-assignee snapshots plus a live same-School active membership/User that still has effective `incidents.update`. Resolved reopen is snapshot-path-aware: snapshot-present Incidents reopen only to `in_progress`; snapshot-absent Incidents reopen only to `triaged`. Broken snapshot-backed assignments return `INCIDENT_ASSIGNEE_INELIGIBLE` and must be recovered through the assignment endpoint before retrying with a fresh version.
+      description: >-
+        Requires `incidents.view` plus a current strong Incident If-Match. The server locks the visible Incident,
+        rejects stale versions before edge or eligibility oracles, resolves the exact lifecycle edge, and then
+        requires that edge's permission (`incidents.approve` or `incidents.update`). Progress edges requiring
+        `incidents.update` additionally require the actor to be the current live assignee or to hold
+        `incidents.assign` as an administrative override. Every transition into `in_progress` requires the
+        canonical current-assignee snapshots plus a live same-School active membership/User that still has
+        effective `incidents.update`. Resolved reopen is snapshot-path-aware: snapshot-present Incidents reopen
+        only to `in_progress`; snapshot-absent Incidents reopen only to `triaged`. Broken snapshot-backed
+        assignments return `INCIDENT_ASSIGNEE_INELIGIBLE` and must be recovered through the assignment endpoint
+        before retrying with a fresh version.
       security:
         - sanctumSession: []
         - sanctumBearer: []
