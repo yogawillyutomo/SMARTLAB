@@ -1,6 +1,6 @@
 # Laboratory Session and Activity Report Contract
 
-**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented  
+**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented; S3.4 unified frontend implemented  
 **Date:** 2026-09-05  
 **Depends on:** ADR-001, S2 Published Timetable/Schedule Occurrence, Unified Laboratory Availability, Reservation, Schedule Exception, Priority Event, Incident
 
@@ -1060,18 +1060,20 @@ Delivered:
 - versioning/audit;
 - API contract and tests.
 
-### S3.4 — Unified Pelaksanaan Lab frontend
+### S3.4 — Unified Pelaksanaan Lab frontend — implemented
 
-Cut `/sessions` to canonical server authority:
+Delivered:
 
-- Today;
-- In Progress;
-- Awaiting Report;
-- History & Reports;
-- mobile-first execution actions;
-- report editing/submission/verification.
-
-Keep `/journals` as a safe compatibility/deep-link path.
+- server-scoped eligible execution-source discovery without browser ownership inference;
+- canonical `/sessions` Today, In Progress, Awaiting Report, and History & Reports views;
+- prepare/start/end/cancel Session actions over the canonical API;
+- atomic end→ActivityReport draft handoff in the UI;
+- report edit/save/submit/revision/reopen/verify flows with optimistic versions;
+- aggregate attendance editing with optional external attendance references and no individual-student ledger;
+- elevated manual backfill from the unified workflow;
+- server permission guards for route visibility and actions;
+- `/journals` retained only as a compatibility/deep-link redirect into canonical report history;
+- no Session/Journal browser-local dataset is mixed into the migrated routes.
 
 ### S3.5 — Observation, Incident linkage, attachments
 

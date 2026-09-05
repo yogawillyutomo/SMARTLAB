@@ -1,9 +1,49 @@
 openapi: 3.1.0
 info:
   title: SmartLab Laboratory Session API module
-  version: 0.21.0
-  description: S3 canonical Laboratory execution lifecycle with S3.3 atomic ActivityReport draft creation on Session end.
+  version: 0.22.0
+  description: S3 canonical Laboratory execution lifecycle with S3.3 atomic ActivityReport draft creation and the S3.4 ownership-safe execution-source read model.
 paths:
+  /laboratory-session-sources:
+    get:
+      operationId: listLaboratorySessionSources
+      summary: List eligible canonical execution sources for the Pelaksanaan Lab workspace
+      description: |
+        Requires sessions.view. Returns current operational ScheduleOccurrences, approved
+        Laboratory Reservations, and approved Priority Events that are eligible for
+        execution in the requested window. The server applies current-membership ownership
+        for scope=mine and never asks the browser to infer ownership from teacher/PIC names.
+        Existing LaboratorySession and ActivityReport summaries are attached when present.
+        The date window is bounded to 14 calendar days.
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+      responses:
+        '200':
+          description: Eligible source rows with any existing canonical Session/report summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LaboratorySessionSourceRow' }
+                  meta:
+                    type: object
+                    required: [from, to, scope, count]
+                    properties:
+                      from: { type: string, format: date }
+                      to: { type: string, format: date }
+                      scope: { type: string, enum: [mine, all] }
+                      count: { type: integer, minimum: 0 }
+        '403': { description: all scope requested without sessions.view-all }
+        '422': { description: Query validation failed }
+
   /laboratory-sessions:
     get:
       operationId: listLaboratorySessions
@@ -122,6 +162,135 @@ components:
     LaboratorySessionStatus:
       type: string
       enum: [prepared, in_progress, ended, cancelled]
+    LaboratorySessionActivityKind:
+      type: string
+      enum: [practical, theory, exam, other]
+    LaboratoryReference:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: ulid }
+        code: { type: string }
+        name: { type: string }
+    LaboratorySessionReportSummary:
+      type: object
+      required: [id, reportNumber, reportType, status, version]
+      properties:
+        id: { type: string, format: ulid }
+        reportNumber: { type: string }
+        reportType: { type: string, enum: [practicum, exam, workshop, general] }
+        status: { type: string, enum: [draft, submitted, revision_required, verified] }
+        version: { type: integer, minimum: 1 }
+    LaboratorySessionSourceRow:
+      type: object
+      required:
+        - sourceType
+        - sourceId
+        - sourceNumber
+        - date
+        - startsAt
+        - endsAt
+        - activityKind
+        - title
+        - subtitle
+        - laboratory
+        - responsibility
+        - session
+      properties:
+        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
+        sourceId: { type: string, format: ulid }
+        sourceNumber: { type: string }
+        date: { type: string, format: date }
+        startsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]    PrepareLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [sourceType, sourceId]
+      properties:
+        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
+        sourceId: { type: string, format: ulid }
+        openingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    EndLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [endOutcome]
+      properties:
+        endOutcome: { type: string, enum: [completed, interrupted] }
+        closingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+ }
+        endsAt: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]    PrepareLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [sourceType, sourceId]
+      properties:
+        sourceType: { $ref: '#/components/schemas/LaboratorySessionSourceType' }
+        sourceId: { type: string, format: ulid }
+        openingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    EndLaboratorySessionInput:
+      type: object
+      additionalProperties: false
+      required: [endOutcome]
+      properties:
+        endOutcome: { type: string, enum: [completed, interrupted] }
+        closingCondition: { type: [string, 'null'], maxLength: 4000 }
+        operationalNotes: { type: [string, 'null'], maxLength: 4000 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+ }
+        activityKind: { $ref: '#/components/schemas/LaboratorySessionActivityKind' }
+        title: { type: string }
+        subtitle: { type: string }
+        laboratory:
+          allOf:
+            - $ref: '#/components/schemas/LaboratoryReference'
+            - type: object
+              required: [capacity, status]
+              properties:
+                capacity: { type: integer, minimum: 1 }
+                status: { type: string, enum: [active, inactive] }
+        responsibility:
+          type: object
+          required: [name, teacherId, academicClass, subject, plannedParticipantCount]
+          properties:
+            name: { type: string }
+            teacherId: { type: [string, 'null'], format: ulid }
+            academicClass:
+              oneOf:
+                - $ref: '#/components/schemas/LaboratoryReference'
+                - type: 'null'
+            subject:
+              oneOf:
+                - $ref: '#/components/schemas/LaboratoryReference'
+                - type: 'null'
+            plannedParticipantCount: { type: integer, minimum: 0, maximum: 32767 }
+        session:
+          oneOf:
+            - type: object
+              required: [id, sessionNumber, status, version, actualStartedAt, actualEndedAt, activityReport]
+              properties:
+                id: { type: string, format: ulid }
+                sessionNumber: { type: string }
+                status: { $ref: '#/components/schemas/LaboratorySessionStatus' }
+                version: { type: integer, minimum: 1 }
+                actualStartedAt: { type: [string, 'null'], format: date-time }
+                actualEndedAt: { type: [string, 'null'], format: date-time }
+                activityReport:
+                  oneOf:
+                    - $ref: '#/components/schemas/LaboratorySessionReportSummary'
+                    - type: 'null'
+            - type: 'null'
     PrepareLaboratorySessionInput:
       type: object
       additionalProperties: false

@@ -56,10 +56,10 @@ function AppRoutes() {
         <Route path="/schedules" element={<RequireServerPermission permission="schedules.view"><SchedulesPage /></RequireServerPermission>} />
         <Route path="/bookings" element={<RequireServerPermission permission="bookings.view"><BookingsPage /></RequireServerPermission>} />
         <Route path="/priority-events" element={<RequireServerPermission permission="priority-events.view"><PriorityEventsPage /></RequireServerPermission>} />
-        <Route path="/sessions" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />
-        <Route path="/sessions/:id" element={<RequirePermission module="sessions"><SessionsPage /></RequirePermission>} />
-        <Route path="/journals" element={<RequirePermission module="journals"><JournalsPage /></RequirePermission>} />
-        <Route path="/journals/:id" element={<RequirePermission module="journals"><JournalsPage /></RequirePermission>} />
+        <Route path="/sessions" element={<RequireServerPermission permission="sessions.view"><SessionsPage /></RequireServerPermission>} />
+        <Route path="/sessions/:id" element={<RequireServerPermission permission="sessions.view"><SessionsPage /></RequireServerPermission>} />
+        <Route path="/journals" element={<RequireServerPermission permission="activity-reports.view"><JournalsPage /></RequireServerPermission>} />
+        <Route path="/journals/:id" element={<RequireServerPermission permission="activity-reports.view"><JournalsPage /></RequireServerPermission>} />
         <Route path="/monitoring" element={<RequirePermission module="monitoring"><MonitoringPage /></RequirePermission>} />
         <Route path="/monitoring/:deviceId" element={<RequirePermission module="monitoring"><MonitoringPage /></RequirePermission>} />
         <Route path="/assets" element={<RequirePermission module="assets"><AssetsPage /></RequirePermission>} />

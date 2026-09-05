@@ -32,8 +32,8 @@ This roadmap follows the approved operational workflow specification and the rep
 | Dated Schedule Exceptions | PostgreSQL exception + append-oriented events over immutable active ScheduleOccurrence | operational overlay in canonical `/schedules` UI | canonical |
 | Priority Events | PostgreSQL request/approval lifecycle + append-oriented events | canonical `/priority-events` UI | canonical |
 | Timetable publication impact/reconciliation | future occurrence diff + cross-domain operational impact gate | API-first administration + automated TESSELA revision UAT | canonical backend |
-| LaboratorySession execution backend | PostgreSQL source-bound prepare/start/end/cancel + event history; actual in-progress occupancy and source mutation guards | API-first; `/sessions` frontend remains local until S3.4 | canonical backend |
-| ActivityReport backend | PostgreSQL 1:1 normal Session reports + controlled manual backfill; report lifecycle, aggregate attendance, optimistic versioning, audit | API-first; `/journals` frontend remains local until S3.4 | canonical backend |
+| LaboratorySession execution | PostgreSQL source-bound prepare/start/end/cancel + event history; actual in-progress occupancy and source mutation guards | canonical `/sessions` Pelaksanaan Lab workspace | canonical |
+| ActivityReport | PostgreSQL 1:1 normal Session reports + controlled manual backfill; report lifecycle, aggregate attendance, optimistic versioning, audit | canonical `/sessions` report/history workflow; `/journals` compatibility redirect | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -44,8 +44,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
-| `/sessions` | laboratory execution UI | canonical LaboratorySession + ActivityReport backends exist; unified execution read-model/frontend cutover still required |
-| `/journals` | execution report/journal | canonical ActivityReport backend exists; compatibility/deep-link frontend cutover still required |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
 | `/assets` | fixed assets | asset domain |
 | `/stock` | stock/spare parts | inventory + immutable transaction domain |
@@ -287,9 +285,22 @@ Delivered in S3.3:
 - elevated manual backfill path that preserves historical evidence without inventing a fake Session;
 - own/all authorization scope, report permission catalog, append-oriented audit timeline, OpenAPI 0.21, and integration coverage.
 
+Delivered in S3.4:
+
+- ownership-safe `GET /laboratory-session-sources` read model over active ScheduleOccurrences, approved Reservations, and approved Priority Events;
+- source discovery applies canonical current-membership scope on the server, including explicit `Teacher.membership_id` ownership for schedule execution;
+- existing Session/report summaries are attached to eligible sources so the browser never reconstructs canonical ownership from display names;
+- `/sessions` is cut over from `useAppData` to typed canonical Session/ActivityReport gateways;
+- unified Today, In Progress, Awaiting Report, and History & Reports views;
+- prepare/start/end/cancel Session actions and report edit/submit/revision/verify flows use server permissions plus ETag/If-Match versions;
+- Session end continues to create the normal ActivityReport draft atomically before the UI opens report completion;
+- manual backfill remains elevated and creates no fake Session;
+- `/journals` is retained only as a compatibility/deep-link redirect into canonical report history;
+- source-of-truth regression tests prevent Session/Journal browser-local persistence from returning to production routes;
+- OpenAPI 0.22.
+
 Next slices:
 
-- S3.4 unified Pelaksanaan Lab frontend cutover;
 - S3.5 explicit observation/Incident linkage + attachments;
 - S3.6 offline draft sync + operational UAT.
 

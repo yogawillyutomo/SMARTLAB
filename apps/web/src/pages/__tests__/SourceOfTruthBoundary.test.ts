@@ -6,6 +6,8 @@ import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import calendarSource from '@/pages/CalendarPage.tsx?raw';
 import bookingsSource from '@/pages/BookingsPage.tsx?raw';
 import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
+import sessionsSource from '@/pages/SessionsPage.tsx?raw';
+import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -113,6 +115,23 @@ describe('source-of-truth migration foundation', () => {
     expect(priorityEventsSource).toContain('Priority tidak berarti force override');
     expect(appSource).toContain('RequireServerPermission permission="priority-events.view"');
     expect(navSource).toContain("serverPermission: 'priority-events.view'");
+  });
+
+  it('cuts Pelaksanaan Lab and Journals over to canonical Session/ActivityReport APIs', () => {
+    expect(sessionsSource).not.toContain('useAppData');
+    expect(sessionsSource).not.toContain('db.sessions');
+    expect(sessionsSource).not.toContain('db.journals');
+    expect(sessionsSource).not.toContain('mutate((d)');
+    expect(sessionsSource).toContain("from '@/services/laboratorySessionApi'");
+    expect(sessionsSource).toContain("from '@/services/activityReportApi'");
+    expect(sessionsSource).toContain('laboratorySessionGateway.sources');
+    expect(sessionsSource).toContain('activityReportGateway');
+    expect(sessionsSource).toContain('Tidak ada lagi Session/Journal browser-local');
+    expect(journalsSource).toContain("'/sessions?tab=history'");
+    expect(journalsSource).not.toContain('useAppData');
+    expect(appSource).toContain('RequireServerPermission permission="sessions.view"');
+    expect(appSource).toContain('RequireServerPermission permission="activity-reports.view"');
+    expect(navSource).toContain("serverPermission: 'sessions.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
