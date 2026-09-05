@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** repository state including S2.4 Operational Calendar & Closure
+**Baseline:** repository state including S2.5 Unified Laboratory Availability
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -23,6 +23,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Published timetable backend | TimetablePublication/TimetableEntry/ScheduleOccurrence persistence, validation, hash replay protection, audit, activation/supersession API |
 | Schedule current-plan read model | `GET /schedule-occurrences` + canonical `/schedules` frontend using active publications only |
 | Operational Calendar / Closure | server-authoritative school/laboratory calendar events with explicit availability effect, versioning, audit, and cancellation |
+| Unified Laboratory Availability | explainable read model combining Laboratory status, active TESSELA ScheduleOccurrences, schedule coverage, and Operational Calendar blockers |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -38,7 +39,6 @@ These routes/domains still rely wholly or materially on browser-local repositori
 - work orders;
 - preventive maintenance;
 - loans/custody;
-- academic calendar/closures;
 - notifications;
 - reports/analytics;
 - audit-log query UI;
@@ -51,8 +51,8 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. S2.5: unified Laboratory availability.
-2. S2.6–S2.8: reservations, dated exceptions, priority events, and integration UAT.
+1. S2.6: reservations and approval.
+2. S2.7–S2.8: reservations, dated exceptions, priority events, and integration UAT.
 3. Phase S3: Laboratory Session + Journal.
 4. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
 5. Phase S5: Corrective Work Orders.
@@ -89,6 +89,7 @@ The locked target boundary is:
 - S2.2 implements that contract in Laravel/PostgreSQL with server permissions, tenant isolation, append-oriented audit, validation/rejection, occurrence materialization, replay protection, and atomic activation/supersession.
 - S2.3 exposes bounded current-plan occurrence queries and cuts `/schedules` over to server authority; structural CRUD actions are removed from the SmartLab schedule UI.
 - S2.4 makes Operational Calendar/Closure canonical: school/laboratory scope, informational/blocked effect, all-day or single-day partial closures, ETag updates, append-oriented audit, and cancel-without-delete semantics.
+- S2.5 adds fail-closed Unified Laboratory Availability: exact-window half-open overlap, explainable blockers/notices, and schedule coverage that never treats missing TESSELA data as free capacity.
 
 ## Validation contract
 
