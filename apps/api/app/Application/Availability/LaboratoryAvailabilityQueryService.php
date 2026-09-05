@@ -81,7 +81,7 @@ class LaboratoryAvailabilityQueryService
             ->where('ends_at', '>', $startsAt)
             ->when(
                 $excludeReservationId !== null,
-                fn (Builder $query) => $query->whereKeyNot($excludeReservationId),
+                fn (Builder $query) => $query->where('id', '<>', $excludeReservationId),
             )
             ->orderBy('starts_at')
             ->orderBy('id')
