@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Schedule\PublishedTimetableMutationService;
 use App\Application\Schedule\PublishedTimetableQueryService;
+use App\Application\Schedule\TimetablePublicationImpactService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateTimetablePublicationRequest;
 use App\Http\Requests\ListTimetablePublicationsRequest;
@@ -60,6 +61,16 @@ class TimetablePublicationController extends Controller
         return (new TimetablePublicationResource(
             $service->publication($this->context($request), $publicationId),
         ))->response($request);
+    }
+
+    public function impact(
+        Request $request,
+        string $publicationId,
+        TimetablePublicationImpactService $service,
+    ): JsonResponse {
+        return response()->json([
+            'data' => $service->preview($this->context($request), $publicationId),
+        ]);
     }
 
     public function activate(
