@@ -8,6 +8,7 @@ use App\Domain\ScheduleException\ScheduleExceptionDomainException;
 use App\Models\Laboratory;
 use App\Models\ScheduleException;
 use App\Models\ScheduleOccurrence;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +27,7 @@ class ScheduleExceptionMutationService
     {
         return DB::transaction(function () use ($context, $actor, $data): ScheduleException {
             $schoolId = (string) $context->membership->school_id;
+            School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
             $occurrence = ScheduleOccurrence::query()
                 ->where('school_id', $schoolId)
@@ -161,6 +163,7 @@ class ScheduleExceptionMutationService
     ): ScheduleException {
         return DB::transaction(function () use ($context, $actor, $id, $expectedVersion, $reason): ScheduleException {
             $schoolId = (string) $context->membership->school_id;
+            School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
             $exception = ScheduleException::query()
                 ->where('school_id', $schoolId)
