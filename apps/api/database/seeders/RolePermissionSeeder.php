@@ -27,6 +27,7 @@ class RolePermissionSeeder extends Seeder
             'priority-events.view', 'priority-events.view-all', 'priority-events.create', 'priority-events.approve', 'priority-events.cancel', 'priority-events.export',
             'bookings.view', 'bookings.view-all', 'bookings.create', 'bookings.approve', 'bookings.cancel', 'bookings.export',
             'sessions.view', 'sessions.view-all', 'sessions.prepare', 'sessions.start', 'sessions.end', 'sessions.cancel', 'sessions.export',
+            'activity-reports.view', 'activity-reports.view-all', 'activity-reports.edit', 'activity-reports.submit', 'activity-reports.verify', 'activity-reports.request-revision', 'activity-reports.create-backfill', 'activity-reports.export',
             'audit-logs.view', 'audit-logs.export',
         ],
         'kepala-lab' => [
@@ -47,6 +48,7 @@ class RolePermissionSeeder extends Seeder
             'priority-events.view', 'priority-events.view-all', 'priority-events.create', 'priority-events.approve', 'priority-events.cancel', 'priority-events.export',
             'bookings.view', 'bookings.view-all', 'bookings.approve', 'bookings.cancel', 'bookings.export',
             'sessions.view', 'sessions.view-all', 'sessions.prepare', 'sessions.start', 'sessions.end', 'sessions.cancel', 'sessions.export',
+            'activity-reports.view', 'activity-reports.view-all', 'activity-reports.edit', 'activity-reports.submit', 'activity-reports.verify', 'activity-reports.request-revision', 'activity-reports.export',
             'audit-logs.view', 'audit-logs.export',
         ],
         'teknisi' => [
@@ -62,6 +64,7 @@ class RolePermissionSeeder extends Seeder
             'calendar.view', 'availability.view',
             'priority-events.view', 'priority-events.view-all',
             'sessions.view', 'sessions.view-all',
+            'activity-reports.view', 'activity-reports.view-all',
         ],
         'guru' => [
             'laboratories.view', 'assets.view', 'devices.view',
@@ -71,6 +74,7 @@ class RolePermissionSeeder extends Seeder
             'priority-events.view', 'priority-events.create', 'priority-events.cancel',
             'bookings.view', 'bookings.create', 'bookings.cancel',
             'sessions.view', 'sessions.prepare', 'sessions.start', 'sessions.end', 'sessions.cancel',
+            'activity-reports.view', 'activity-reports.edit', 'activity-reports.submit',
         ],
         'ketua-kelas' => [
             'incidents.view', 'incidents.create', 'incidents.comment',
@@ -96,6 +100,7 @@ class RolePermissionSeeder extends Seeder
             'priority-events.view', 'priority-events.view-all', 'priority-events.export',
             'bookings.view', 'bookings.view-all', 'bookings.export',
             'sessions.view', 'sessions.view-all', 'sessions.export',
+            'activity-reports.view', 'activity-reports.view-all', 'activity-reports.export',
             'audit-logs.view', 'audit-logs.export',
         ],
     ];

@@ -59,6 +59,13 @@ class LaboratorySessionResource extends JsonResource
             'actualEndedAt' => $this->actual_ended_at?->toISOString(),
             'cancelledAt' => $this->cancelled_at?->toISOString(),
             'cancellationReason' => $this->cancellation_reason,
+            'activityReport' => $this->whenLoaded('activityReport', fn () => $this->activityReport === null ? null : [
+                'id' => $this->activityReport->id,
+                'reportNumber' => $this->activityReport->report_number,
+                'reportType' => $this->activityReport->report_type,
+                'status' => $this->activityReport->status,
+                'version' => $this->activityReport->version,
+            ]),
             'version' => $this->version,
             'createdAt' => $this->created_at?->toISOString(),
             'updatedAt' => $this->updated_at?->toISOString(),

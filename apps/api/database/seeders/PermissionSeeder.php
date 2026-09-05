@@ -117,6 +117,16 @@ class PermissionSeeder extends Seeder
             'cancel' => 'Batalkan Pelaksanaan Laboratorium',
             'export' => 'Ekspor Pelaksanaan Laboratorium',
         ],
+        'activity-reports' => [
+            'view' => 'Lihat Laporan Pelaksanaan',
+            'view-all' => 'Lihat Semua Laporan Pelaksanaan',
+            'edit' => 'Ubah Draft Laporan Pelaksanaan',
+            'submit' => 'Ajukan Laporan Pelaksanaan',
+            'verify' => 'Verifikasi Laporan Pelaksanaan',
+            'request-revision' => 'Minta Perbaikan Laporan Pelaksanaan',
+            'create-backfill' => 'Buat Backfill Laporan Pelaksanaan',
+            'export' => 'Ekspor Laporan Pelaksanaan',
+        ],
         'audit-logs' => [
             'view' => 'Lihat Log Audit',
             'export' => 'Ekspor Log Audit',

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab Laboratory Session API module
-  version: 0.20.0
-  description: S3.2 canonical Laboratory execution lifecycle bound to an approved operational source.
+  version: 0.21.0
+  description: S3 canonical Laboratory execution lifecycle with S3.3 atomic ActivityReport draft creation on Session end.
 paths:
   /laboratory-sessions:
     get:
@@ -76,8 +76,8 @@ paths:
       operationId: endLaboratorySession
       summary: End an in-progress Session
       description: |
-        Requires sessions.end. S3.2 records actual completion/interruption evidence.
-        ActivityReport atomic creation is added by S3.3 before frontend cutover.
+        Requires sessions.end. The mutation records actual completion/interruption evidence
+        and atomically creates or confirms exactly one ActivityReport draft for the ended Session.
       security: *auth
       requestBody:
         required: true
@@ -85,7 +85,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EndLaboratorySessionInput' }
       responses:
-        '200': { description: Session ended }
+        '200': { description: Session ended with associated ActivityReport draft summary }
         '409': { description: Invalid lifecycle state }
         '412': { description: Session version conflict }
         '428': { description: Missing or malformed If-Match }

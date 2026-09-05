@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AcademicDirectoryMasterController;
+use App\Http\Controllers\Api\V1\ActivityReportController;
 use App\Http\Controllers\Api\V1\AcademicPeriodMasterController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Api\V1\PriorityEventController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
+use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
@@ -106,6 +108,15 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:sessions.end', RequireLaboratorySessionVersionPrecondition::class]);
         Route::post('laboratory-sessions/{sessionId}/cancel', [LaboratorySessionController::class, 'cancel'])
             ->middleware(['permission:sessions.cancel', RequireLaboratorySessionVersionPrecondition::class]);
+
+        Route::get('activity-reports', [ActivityReportController::class, 'index'])->middleware('permission:activity-reports.view');
+        Route::post('activity-reports/backfill', [ActivityReportController::class, 'backfill'])->middleware('permission:activity-reports.create-backfill');
+        Route::get('activity-reports/{reportId}', [ActivityReportController::class, 'show'])->middleware('permission:activity-reports.view');
+        Route::patch('activity-reports/{reportId}', [ActivityReportController::class, 'update'])->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);
+        Route::post('activity-reports/{reportId}/submit', [ActivityReportController::class, 'submit'])->middleware(['permission:activity-reports.submit', RequireActivityReportVersionPrecondition::class]);
+        Route::post('activity-reports/{reportId}/request-revision', [ActivityReportController::class, 'requestRevision'])->middleware(['permission:activity-reports.request-revision', RequireActivityReportVersionPrecondition::class]);
+        Route::post('activity-reports/{reportId}/reopen', [ActivityReportController::class, 'reopen'])->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);
+        Route::post('activity-reports/{reportId}/verify', [ActivityReportController::class, 'verify'])->middleware(['permission:activity-reports.verify', RequireActivityReportVersionPrecondition::class]);
 
         Route::get('laboratory-availability', LaboratoryAvailabilityController::class)->middleware('permission:availability.view');
 

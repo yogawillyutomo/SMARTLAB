@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.20.0
-  description: Canonical SmartLab API v1 contract. Version 0.20 preserves the complete 0.19 surface and adds S3.2 canonical Laboratory Session execution, actual occupancy, and source-reconciliation guards.
+  version: 0.21.0
+  description: Canonical SmartLab API v1 contract. Version 0.21 preserves the complete 0.20 surface and adds S3.3 canonical ActivityReport lifecycle plus atomic Session-end draft creation.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -44,6 +44,13 @@ paths:
   /laboratory-sessions/{sessionId}/start: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1start' }
   /laboratory-sessions/{sessionId}/end: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1end' }
   /laboratory-sessions/{sessionId}/cancel: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1cancel' }
+  /activity-reports: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports' }
+  /activity-reports/backfill: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1backfill' }
+  /activity-reports/{reportId}: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}' }
+  /activity-reports/{reportId}/submit: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1submit' }
+  /activity-reports/{reportId}/request-revision: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1request-revision' }
+  /activity-reports/{reportId}/reopen: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1reopen' }
+  /activity-reports/{reportId}/verify: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1verify' }
   /priority-events: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events' }
   /priority-events/{priorityEventId}: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events~1{priorityEventId}' }
   /priority-events/{priorityEventId}/approve: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events~1{priorityEventId}~1approve' }

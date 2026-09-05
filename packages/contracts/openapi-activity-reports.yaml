@@ -1,0 +1,106 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Activity Report API module
+  version: 0.21.0
+  description: S3.3 canonical ActivityReport lifecycle. Normal reports are created atomically by LaboratorySession end; manual backfill is elevated and never invents a Session.
+paths:
+  /activity-reports:
+    get:
+      operationId: listActivityReports
+      summary: List Activity Reports in the active School
+      description: Requires activity-reports.view. Users without activity-reports.view-all are limited to own report scope.
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: reportType, in: query, schema: { type: string, enum: [practicum, exam, workshop, general] } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, submitted, revision_required, verified] } }
+        - { name: origin, in: query, schema: { type: string, enum: [session, manual_backfill] } }
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+      responses:
+        '200': { description: Paginated Activity Report collection }
+        '403': { description: all scope requested without activity-reports.view-all }
+  /activity-reports/backfill:
+    post:
+      operationId: createActivityReportBackfill
+      summary: Create exceptional historical evidence without a fake Session
+      security: *auth
+      responses:
+        '201': { description: Manual backfill draft created with ETag version }
+        '422': { description: Backfill evidence is invalid }
+  /activity-reports/{reportId}:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getActivityReport
+      security: *auth
+      responses:
+        '200': { description: Report detail and audit timeline }
+        '404': { description: Missing, cross-School, or out of scope }
+    patch:
+      operationId: updateActivityReport
+      security: *auth
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      responses:
+        '200': { description: Draft updated }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Version conflict }
+        '422': { description: Type-specific content or aggregate attendance invalid }
+        '428': { description: Missing/malformed If-Match }
+  /activity-reports/{reportId}/submit:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: submitActivityReport
+      security: *auth
+      responses:
+        '200': { description: Report submitted }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Version conflict }
+        '422': { description: Required content incomplete }
+        '428': { description: Missing/malformed If-Match }
+  /activity-reports/{reportId}/request-revision:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: requestActivityReportRevision
+      security: *auth
+      responses:
+        '200': { description: Report requires revision }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Version conflict }
+        '428': { description: Missing/malformed If-Match }
+  /activity-reports/{reportId}/reopen:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: reopenActivityReport
+      security: *auth
+      responses:
+        '200': { description: Report reopened as draft }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Version conflict }
+        '428': { description: Missing/malformed If-Match }
+  /activity-reports/{reportId}/verify:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      operationId: verifyActivityReport
+      security: *auth
+      responses:
+        '200': { description: Report verified }
+        '409': { description: Invalid lifecycle state }
+        '412': { description: Version conflict }
+        '428': { description: Missing/malformed If-Match }
+components:
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
