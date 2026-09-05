@@ -2,7 +2,7 @@
 
 **Status:** active staged migration
 
-**Baseline:** repository state including S2.6 Canonical Laboratory Reservations
+**Baseline:** repository state including S2.7 Dated Schedule Exceptions
 
 ## Goal
 
@@ -29,6 +29,7 @@ This roadmap follows the approved operational workflow specification and the rep
 | Operational calendar / closures | PostgreSQL Operational Calendar API | canonical `/calendar` month/week/agenda UI | canonical |
 | Unified Laboratory availability | Laravel derived read model over Laboratory + active ScheduleOccurrence + Operational Calendar + submitted/approved reservations | typed web gateway + reservation integration | canonical |
 | Laboratory reservations | PostgreSQL reservation + append-oriented events | canonical `/bookings` UI | canonical |
+| Dated Schedule Exceptions | PostgreSQL exception + append-oriented events over immutable active ScheduleOccurrence | operational overlay in canonical `/schedules` UI | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -192,10 +193,25 @@ Delivered in S2.6:
 - canonical `/bookings` cutover and typed frontend gateway;
 - OpenAPI 0.17 and source-of-truth regression coverage.
 
-Next implementation slices:
+Delivered in S2.7:
 
-- S2.7 dated schedule exceptions;
-- S2.8 priority event override/integration UAT.
+- one active dated Schedule Exception per current active ScheduleOccurrence;
+- direct-authorized `cancel` and `relocate` resolutions only;
+- immutable TESSELA occurrence/source fields preserved;
+- stable publication/version/source-schedule snapshots retained on exception audit records;
+- replacement Laboratory same-School/status/capacity validation;
+- serialized occurrence/Laboratory mutation locks;
+- Unified Availability suppression of original occupancy for active cancel/relocate;
+- relocation occupancy projected as schedule evidence on the replacement Laboratory;
+- safe fail-closed restoration when cancelling an exception;
+- ETag/If-Match versioning and append-oriented exception audit events;
+- current-plan response exposes planned versus operational Laboratory explicitly;
+- canonical `/schedules` UI applies and restores dated operational overlays without browser-local schedule mutation;
+- OpenAPI 0.18 and integration/regression coverage.
+
+Next implementation slice:
+
+- S2.8 priority-event override, timetable-publication impact/reconciliation, and integration UAT.
 
 No recurring schedule is destructively rewritten for a one-date exception.
 
