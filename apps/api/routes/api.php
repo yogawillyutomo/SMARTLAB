@@ -99,6 +99,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('priority-events/{priorityEventId}/cancel', [PriorityEventController::class, 'cancel'])
             ->middleware(['permission:priority-events.cancel', RequirePriorityEventVersionPrecondition::class]);
 
+        Route::get('laboratory-session-sources', [LaboratorySessionController::class, 'sources'])->middleware('permission:sessions.view');
         Route::get('laboratory-sessions', [LaboratorySessionController::class, 'index'])->middleware('permission:sessions.view');
         Route::post('laboratory-sessions', [LaboratorySessionController::class, 'store'])->middleware('permission:sessions.prepare');
         Route::get('laboratory-sessions/{sessionId}', [LaboratorySessionController::class, 'show'])->middleware('permission:sessions.view');

@@ -106,6 +106,130 @@ class LaboratorySessionApiTest extends TestCase
         );
     }
 
+    public function test_session_source_read_model_is_ownership_safe_and_exposes_existing_execution(): void
+    {
+        [$guru, $school, $membership] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'guru',
+        );
+        $fixture = $this->fixture($school);
+        $fixture['teacher']->update(['membership_id' => $membership->id]);
+        $occurrence = $this->publicationOccurrence($school, $fixture, 1, 'active', '2026-09-14');
+
+        $reservation = LaboratoryReservation::query()->create([
+            'school_id' => $school->id,
+            'reservation_number' => 'RSV-20260914-SOURCE',
+            'laboratory_id' => $fixture['labA']->id,
+            'requester_user_id' => $guru->id,
+            'requester_membership_id' => $membership->id,
+            'requester_name_snapshot' => $guru->name,
+            'requester_email_snapshot' => $guru->email,
+            'reservation_date' => '2026-09-14',
+            'starts_at' => '10:00:00',
+            'ends_at' => '11:00:00',
+            'activity' => 'Praktikum tambahan',
+            'participants' => 20,
+            'pic_name' => $guru->name,
+            'status' => 'approved',
+            'decided_at' => now(),
+            'version' => 2,
+        ]);
+
+        $event = PriorityEvent::query()->create([
+            'school_id' => $school->id,
+            'event_number' => 'PEV-20260914-SOURCE',
+            'laboratory_id' => $fixture['labB']->id,
+            'requester_user_id' => $guru->id,
+            'requester_membership_id' => $membership->id,
+            'requester_name_snapshot' => $guru->name,
+            'requester_email_snapshot' => $guru->email,
+            'event_date' => '2026-09-14',
+            'starts_at' => '12:00:00',
+            'ends_at' => '13:00:00',
+            'category' => 'exam',
+            'title' => 'Ujian praktik',
+            'participants' => 18,
+            'pic_name' => $guru->name,
+            'status' => 'approved',
+            'decided_at' => now(),
+            'version' => 2,
+        ]);
+
+        $otherUser = User::factory()->create();
+        $otherMembership = SchoolMembership::factory()->create([
+            'school_id' => $school->id,
+            'user_id' => $otherUser->id,
+            'status' => 'active',
+        ]);
+        LaboratoryReservation::query()->create([
+            'school_id' => $school->id,
+            'reservation_number' => 'RSV-20260914-OTHER',
+            'laboratory_id' => $fixture['labB']->id,
+            'requester_user_id' => $otherUser->id,
+            'requester_membership_id' => $otherMembership->id,
+            'requester_name_snapshot' => $otherUser->name,
+            'requester_email_snapshot' => $otherUser->email,
+            'reservation_date' => '2026-09-14',
+            'starts_at' => '14:00:00',
+            'ends_at' => '15:00:00',
+            'activity' => 'Milik orang lain',
+            'participants' => 10,
+            'pic_name' => $otherUser->name,
+            'status' => 'approved',
+            'decided_at' => now(),
+            'version' => 2,
+        ]);
+
+        $this->getJson('/api/v1/laboratory-session-sources?'.http_build_query([
+            'from' => '2026-09-14',
+            'to' => '2026-09-14',
+            'scope' => 'mine',
+        ]))
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('meta.scope', 'mine')
+            ->assertJsonPath('data.0.sourceType', 'schedule_occurrence')
+            ->assertJsonPath('data.0.sourceId', $occurrence->id)
+            ->assertJsonPath('data.0.responsibility.name', $fixture['teacher']->name)
+            ->assertJsonPath('data.1.sourceType', 'laboratory_reservation')
+            ->assertJsonPath('data.1.sourceId', $reservation->id)
+            ->assertJsonPath('data.2.sourceType', 'priority_event')
+            ->assertJsonPath('data.2.sourceId', $event->id);
+
+        $prepared = $this->postJson('/api/v1/laboratory-sessions', [
+            'sourceType' => 'schedule_occurrence',
+            'sourceId' => $occurrence->id,
+        ])->assertCreated()->json('data');
+
+        $this->getJson('/api/v1/laboratory-session-sources?'.http_build_query([
+            'from' => '2026-09-14',
+            'to' => '2026-09-14',
+            'scope' => 'mine',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('data.0.session.id', $prepared['id'])
+            ->assertJsonPath('data.0.session.status', 'prepared')
+            ->assertJsonPath('data.0.session.version', 1);
+
+        $this->getJson('/api/v1/laboratory-session-sources?'.http_build_query([
+            'from' => '2026-09-14',
+            'to' => '2026-09-14',
+            'scope' => 'all',
+        ]))
+            ->assertForbidden()
+            ->assertJsonPath('code', 'LABORATORY_SESSION_SCOPE_FORBIDDEN');
+
+        $this->actingAsRole($school, 'admin-lab');
+
+        $this->getJson('/api/v1/laboratory-session-sources?'.http_build_query([
+            'from' => '2026-09-14',
+            'to' => '2026-09-14',
+            'scope' => 'all',
+        ]))
+            ->assertOk()
+            ->assertJsonCount(4, 'data');
+    }
+
     public function test_schedule_session_lifecycle_and_actual_occupancy_extend_beyond_planned_window(): void
     {
         [, $school] = $this->actingAsRole(School::factory()->create(['timezone' => 'Asia/Jakarta']), 'admin-lab');

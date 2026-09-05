@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Session\LaboratorySessionMutationService;
 use App\Application\Session\LaboratorySessionQueryService;
+use App\Application\Session\LaboratorySessionSourceQueryService;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireLaboratorySessionVersionPrecondition;
 use App\Http\Requests\CancelLaboratorySessionRequest;
 use App\Http\Requests\EndLaboratorySessionRequest;
 use App\Http\Requests\ListLaboratorySessionsRequest;
+use App\Http\Requests\ListLaboratorySessionSourcesRequest;
 use App\Http\Requests\PrepareLaboratorySessionRequest;
 use App\Http\Requests\StartLaboratorySessionRequest;
 use App\Http\Resources\LaboratorySessionResource;
@@ -33,6 +35,22 @@ class LaboratorySessionController extends Controller
                 'lastPage' => $paginator->lastPage(),
                 'from' => $request->validated('from'),
                 'to' => $request->validated('to'),
+            ],
+        ]);
+    }
+
+    public function sources(ListLaboratorySessionSourcesRequest $request, LaboratorySessionSourceQueryService $service): JsonResponse
+    {
+        $filters = $request->validated();
+        $data = $service->sources($this->context($request), $filters);
+
+        return response()->json([
+            'data' => $data,
+            'meta' => [
+                'from' => $filters['from'],
+                'to' => $filters['to'],
+                'scope' => $filters['scope'] ?? ($this->context($request)->permissions->contains('sessions.view-all') ? 'all' : 'mine'),
+                'count' => count($data),
             ],
         ]);
     }
