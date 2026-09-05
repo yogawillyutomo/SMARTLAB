@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\ScheduleExceptionController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
 use App\Http\Controllers\Api\V1\LaboratoryReservationController;
+use App\Http\Controllers\Api\V1\PriorityEventController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
@@ -24,6 +25,7 @@ use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
+use App\Http\Middleware\RequirePriorityEventVersionPrecondition;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -82,6 +84,16 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:bookings.approve', RequireReservationVersionPrecondition::class]);
         Route::post('laboratory-reservations/{reservationId}/cancel', [LaboratoryReservationController::class, 'cancel'])
             ->middleware(['permission:bookings.cancel', RequireReservationVersionPrecondition::class]);
+
+        Route::get('priority-events', [PriorityEventController::class, 'index'])->middleware('permission:priority-events.view');
+        Route::post('priority-events', [PriorityEventController::class, 'store'])->middleware('permission:priority-events.create');
+        Route::get('priority-events/{priorityEventId}', [PriorityEventController::class, 'show'])->middleware('permission:priority-events.view');
+        Route::post('priority-events/{priorityEventId}/approve', [PriorityEventController::class, 'approve'])
+            ->middleware(['permission:priority-events.approve', RequirePriorityEventVersionPrecondition::class]);
+        Route::post('priority-events/{priorityEventId}/reject', [PriorityEventController::class, 'reject'])
+            ->middleware(['permission:priority-events.approve', RequirePriorityEventVersionPrecondition::class]);
+        Route::post('priority-events/{priorityEventId}/cancel', [PriorityEventController::class, 'cancel'])
+            ->middleware(['permission:priority-events.cancel', RequirePriorityEventVersionPrecondition::class]);
 
         Route::get('laboratory-availability', LaboratoryAvailabilityController::class)->middleware('permission:availability.view');
 
