@@ -7,6 +7,7 @@ use App\Domain\Availability\LaboratoryAvailabilityException;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
 use App\Models\OperationalCalendarEvent;
+use App\Models\ScheduleException;
 use App\Models\ScheduleOccurrence;
 use App\Models\TimetablePublication;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,11 +17,18 @@ class LaboratoryAvailabilityQueryService
     /**
      * Evaluate one School-local Laboratory window against canonical scheduling and operational sources.
      *
+     * Exclusion parameters exist only for transactional self-rechecks performed by canonical mutation services.
+     *
      * @param array{laboratoryId:string,date:string,startsAt:string,endsAt:string} $filters
      * @return array<string,mixed>
      */
-    public function check(CurrentMembershipContext $context, array $filters, ?string $excludeReservationId = null): array
-    {
+    public function check(
+        CurrentMembershipContext $context,
+        array $filters,
+        ?string $excludeReservationId = null,
+        ?string $excludeScheduleExceptionId = null,
+        ?string $excludeScheduleOccurrenceId = null,
+    ): array {
         $schoolId = (string) $context->membership->school_id;
         $laboratory = Laboratory::query()
             ->where('school_id', $schoolId)
@@ -54,6 +62,10 @@ class LaboratoryAvailabilityQueryService
             ->whereDate('occurs_on', $date)
             ->where('start_time_snapshot', '<', $endsAt)
             ->where('end_time_snapshot', '>', $startsAt)
+            ->when(
+                $excludeScheduleOccurrenceId !== null,
+                fn (Builder $query) => $query->where('id', '<>', $excludeScheduleOccurrenceId),
+            )
             ->whereHas('publication', function (Builder $query) use ($schoolId, $date): void {
                 $query
                     ->where('school_id', $schoolId)
@@ -67,8 +79,46 @@ class LaboratoryAvailabilityQueryService
                 'teacher:id,school_id,code,name',
                 'academicClass:id,school_id,code,name',
                 'subject:id,school_id,code,name',
+                'activeException:id,school_id,occurrence_id,resolution,replacement_laboratory_id,status',
             ])
             ->orderBy('start_time_snapshot')
+            ->orderBy('id')
+            ->get();
+
+        $relocations = ScheduleException::query()
+            ->where('school_id', $schoolId)
+            ->where('status', 'active')
+            ->where('resolution', 'relocate')
+            ->where('replacement_laboratory_id', $laboratory->id)
+            ->whereDate('occurs_on', $date)
+            ->when(
+                $excludeScheduleExceptionId !== null,
+                fn (Builder $query) => $query->where('id', '<>', $excludeScheduleExceptionId),
+            )
+            ->whereHas('occurrence', function (Builder $query) use ($schoolId, $date, $startsAt, $endsAt): void {
+                $query
+                    ->where('school_id', $schoolId)
+                    ->whereDate('occurs_on', $date)
+                    ->where('start_time_snapshot', '<', $endsAt)
+                    ->where('end_time_snapshot', '>', $startsAt)
+                    ->whereHas('publication', function (Builder $publication) use ($schoolId, $date): void {
+                        $publication
+                            ->where('school_id', $schoolId)
+                            ->where('status', 'active')
+                            ->whereDate('effective_from', '<=', $date)
+                            ->whereDate('effective_to', '>=', $date);
+                    });
+            })
+            ->with([
+                'occurrence:id,school_id,publication_id,entry_id,occurs_on,teacher_id,academic_class_id,subject_id,planned_laboratory_id,start_time_snapshot,end_time_snapshot,activity_type',
+                'occurrence.publication:id,school_id,source_publication_id,source_version,status',
+                'occurrence.entry:id,school_id,publication_id,source_schedule_id,source_snapshots',
+                'occurrence.teacher:id,school_id,code,name',
+                'occurrence.academicClass:id,school_id,code,name',
+                'occurrence.subject:id,school_id,code,name',
+                'originalLaboratory:id,school_id,code,name',
+                'replacementLaboratory:id,school_id,code,name',
+            ])
             ->orderBy('id')
             ->get();
 
@@ -133,7 +183,16 @@ class LaboratoryAvailabilityQueryService
         }
 
         foreach ($occurrences as $occurrence) {
+            $exception = $occurrence->activeException;
+            if ($exception !== null && $exception->id !== $excludeScheduleExceptionId) {
+                continue;
+            }
+
             $blockers[] = $this->scheduleBlocker($occurrence);
+        }
+
+        foreach ($relocations as $exception) {
+            $blockers[] = $this->relocationBlocker($exception);
         }
 
         foreach ($reservations as $reservation) {
@@ -191,6 +250,9 @@ class LaboratoryAvailabilityQueryService
                     'status' => $scheduleCoverage,
                     'activePublicationCount' => $activePublicationCount,
                 ],
+                'scheduleExceptions' => [
+                    'status' => 'covered',
+                ],
                 'operationalCalendar' => [
                     'status' => 'covered',
                 ],
@@ -229,6 +291,50 @@ class LaboratoryAvailabilityQueryService
                 'sourceVersion' => (int) $occurrence->publication?->source_version,
                 'sourceScheduleId' => (string) $occurrence->entry?->source_schedule_id,
                 'activityType' => (string) $occurrence->activity_type,
+                'teacher' => $teacher,
+                'academicClass' => $academicClass,
+                'subject' => $subject,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function relocationBlocker(ScheduleException $exception): array
+    {
+        $occurrence = $exception->occurrence;
+        $snapshots = is_array($occurrence?->entry?->source_snapshots)
+            ? $occurrence->entry->source_snapshots
+            : [];
+
+        $teacher = $this->reference((string) $occurrence?->teacher_id, $snapshots, 'teacherCode', 'teacherName', $occurrence?->teacher?->code, $occurrence?->teacher?->name);
+        $academicClass = $this->reference((string) $occurrence?->academic_class_id, $snapshots, 'classCode', 'className', $occurrence?->academicClass?->code, $occurrence?->academicClass?->name);
+        $subject = $this->reference((string) $occurrence?->subject_id, $snapshots, 'subjectCode', 'subjectName', $occurrence?->subject?->code, $occurrence?->subject?->name);
+
+        return [
+            'type' => 'schedule_exception',
+            'sourceId' => (string) $exception->id,
+            'title' => 'Relokasi · '.$subject['name'].' · '.$academicClass['name'],
+            'allDay' => false,
+            'startsAt' => substr((string) $occurrence?->start_time_snapshot, 0, 8),
+            'endsAt' => substr((string) $occurrence?->end_time_snapshot, 0, 8),
+            'details' => [
+                'resolution' => 'relocate',
+                'occurrenceId' => (string) $exception->occurrence_id,
+                'publicationId' => (string) $exception->publication_id,
+                'sourcePublicationId' => (string) $exception->source_publication_id_snapshot,
+                'sourceVersion' => (int) $exception->source_version_snapshot,
+                'sourceScheduleId' => (string) $exception->source_schedule_id_snapshot,
+                'activityType' => (string) $occurrence?->activity_type,
+                'originalLaboratory' => $exception->originalLaboratory === null ? null : [
+                    'id' => (string) $exception->originalLaboratory->id,
+                    'code' => (string) $exception->originalLaboratory->code,
+                    'name' => (string) $exception->originalLaboratory->name,
+                ],
+                'replacementLaboratory' => [
+                    'id' => (string) $exception->replacementLaboratory?->id,
+                    'code' => (string) $exception->replacementLaboratory?->code,
+                    'name' => (string) $exception->replacementLaboratory?->name,
+                ],
                 'teacher' => $teacher,
                 'academicClass' => $academicClass,
                 'subject' => $subject,
@@ -284,7 +390,7 @@ class LaboratoryAvailabilityQueryService
         $hasSchedule = false;
         $hasOperational = false;
         foreach ($blockers as $blocker) {
-            if (($blocker['type'] ?? null) === 'schedule_occurrence') {
+            if (in_array(($blocker['type'] ?? null), ['schedule_occurrence', 'schedule_exception'], true)) {
                 $hasSchedule = true;
             } else {
                 $hasOperational = true;
@@ -322,6 +428,6 @@ class LaboratoryAvailabilityQueryService
 
     private function seconds(string $time): string
     {
-        return $time.':00';
+        return strlen($time) === 5 ? $time.':00' : $time;
     }
 }
