@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.21.0
-  description: Canonical SmartLab API v1 contract. Version 0.21 preserves the complete 0.20 surface and adds S3.3 canonical ActivityReport lifecycle plus atomic Session-end draft creation.
+  version: 0.22.0
+  description: Canonical SmartLab API v1 contract. Version 0.22 preserves the complete 0.21 surface and adds the ownership-safe S3.4 execution-source read model used by the canonical Pelaksanaan Lab frontend.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -39,6 +39,7 @@ paths:
   /laboratory-reservations/{reservationId}/reject: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}~1reject' }
   /laboratory-reservations/{reservationId}/cancel: { $ref: './openapi-reservations.yaml#/paths/~1laboratory-reservations~1{reservationId}~1cancel' }
   /laboratory-availability: { $ref: './openapi-availability.yaml#/paths/~1laboratory-availability' }
+  /laboratory-session-sources: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-session-sources' }
   /laboratory-sessions: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions' }
   /laboratory-sessions/{sessionId}: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}' }
   /laboratory-sessions/{sessionId}/start: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1start' }
