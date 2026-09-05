@@ -150,13 +150,13 @@ Layanan ketersediaan terpadu mengevaluasi jadwal berulang, reservasi, kegiatan p
 
 Override prioritas selalu bertanggal; jadwal berulang tidak pernah dihapus. Setiap occurrence terdampak dipratinjau, disetujui pihak berwenang, memiliki resolusi eksplisit, mengirim notifikasi, dan tercatat di audit. Pembatalan mengembalikan perilaku occurrence normal bila memungkinkan. Pilihan resolusi: membatalkan tanggal terdampak saja, memindahkan laboratorium, menjadwalkan ulang tanggal/waktu, mengganti dengan kegiatan prioritas, atau mempertahankan bila tidak ada konflik sumber daya nyata. Pemohon tidak dapat meng-override alokasi.
 
-`SpecialEvent` secara konseptual memiliki ID stabil, jenis, judul, waktu, lab, pemohon, status persetujuan, alasan, dan referensi audit. `ScheduleException` memiliki ID stabil, ID jadwal, tanggal occurrence, resolusi, pengganti bila ada, penyetuju, alasan, dan referensi audit.
+`SpecialEvent` secara konseptual memiliki ID stabil, jenis, judul, waktu, lab, pemohon, status persetujuan, alasan, dan referensi audit. `ScheduleException` memiliki ID stabil, ID occurrence/source publication, tanggal occurrence, resolusi, pengganti bila ada, penyetuju, alasan, version, dan referensi audit. S2.7 sudah mengimplementasikan `cancel` dan `relocate` sebagai direct-authorized dated overlay; reschedule waktu/tanggal dan Priority Event tetap ditunda agar SmartLab tidak mengambil alih fungsi solver TESSELA.
 
 | Status | Keterangan |
 | --- | --- |
-| Implementasi saat ini | Jadwal dan booking tersimpan sebagai koleksi frontend terpisah; pemeriksaan booking hanya membandingkan booking lain pada layar tersebut. |
+| Implementasi saat ini | Jadwal, Unified Availability, Reservasi, dan Schedule Exception cancel/relocate sudah canonical di Laravel/PostgreSQL; `/schedules` menampilkan planned TESSELA + operational overlay, dan `/bookings` memakai availability server. |
 | Perilaku target yang disetujui | Satu layanan ketersediaan memutuskan semua konflik tanpa mengaburkan domain Jadwal Reguler dan Reservasi Lab. |
-| Implementasi masa depan | Domain availability di API dengan validasi transaksi, `SpecialEvent`, dan `ScheduleException`. |
+| Implementasi masa depan | S2.8 menambahkan `SpecialEvent`/Priority Event, approval policy, serta publication impact/reconciliation di atas availability dan Schedule Exception yang sudah canonical. |
 | Di luar scope PR dokumentasi | Menganggap validasi browser sebagai jaminan konkurensi atau otorisasi. |
 
 ## 5. Pelaksanaan Lab dan laporan
