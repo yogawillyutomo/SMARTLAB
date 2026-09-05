@@ -92,6 +92,14 @@ class PermissionSeeder extends Seeder
         'availability' => [
             'view' => 'Lihat Ketersediaan Laboratorium',
         ],
+        'priority-events' => [
+            'view' => 'Lihat Kegiatan Prioritas',
+            'view-all' => 'Lihat Semua Kegiatan Prioritas',
+            'create' => 'Ajukan Kegiatan Prioritas',
+            'approve' => 'Putuskan Kegiatan Prioritas',
+            'cancel' => 'Batalkan Kegiatan Prioritas',
+            'export' => 'Ekspor Kegiatan Prioritas',
+        ],
         'bookings' => [
             'view' => 'Lihat Reservasi Laboratorium',
             'view-all' => 'Lihat Semua Reservasi Laboratorium',
