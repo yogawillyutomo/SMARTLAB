@@ -99,8 +99,7 @@ paths:
         Requires schedules.activate. The preview compares future occurrences against
         the current active publication and evaluates operational commitments that would
         become unsafe: active Schedule Exceptions, submitted/approved Reservations,
-        approved Priority Events, active Calendar blockers, inactive Laboratories, and
-        Laboratory capacity drift. It never changes state and never proposes solver output.
+        approved Priority Events, active Calendar blockers, inactive Laboratories. It never changes state and never proposes solver output.
       security: *auth
       responses:
         '200':
@@ -205,7 +204,6 @@ components:
         - priority_event_conflict
         - calendar_blocker_conflict
         - laboratory_status_conflict
-        - laboratory_capacity_conflict
 
     PublicationScheduleDiff:
       type: object
