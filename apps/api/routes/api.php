@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ScheduleOccurrenceController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
+use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
@@ -67,6 +68,8 @@ Route::prefix('v1')->group(function (): void {
         Route::post('master-data/lesson-periods', [AcademicPeriodMasterController::class, 'storeLessonPeriod'])->middleware('permission:master-data.create');
         Route::get('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'showLessonPeriod'])->middleware('permission:master-data.view');
         Route::patch('master-data/lesson-periods/{lessonPeriodId}', [AcademicPeriodMasterController::class, 'updateLessonPeriod'])->middleware(['permission:master-data.update', RequireAcademicMasterVersionPrecondition::class]);
+
+        Route::get('laboratory-availability', LaboratoryAvailabilityController::class)->middleware('permission:availability.view');
 
         Route::get('calendar-events', [OperationalCalendarEventController::class, 'index'])->middleware('permission:calendar.view');
         Route::post('calendar-events', [OperationalCalendarEventController::class, 'store'])->middleware('permission:calendar.create');
