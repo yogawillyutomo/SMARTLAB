@@ -23,6 +23,7 @@ class RolePermissionSeeder extends Seeder
             'schedules.view', 'schedules.ingest', 'schedules.activate',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.cancel', 'calendar.export',
             'availability.view',
+            'bookings.view', 'bookings.view-all', 'bookings.create', 'bookings.approve', 'bookings.cancel', 'bookings.export',
             'audit-logs.view', 'audit-logs.export',
         ],
         'kepala-lab' => [
@@ -39,6 +40,7 @@ class RolePermissionSeeder extends Seeder
             'schedules.view',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.cancel', 'calendar.export',
             'availability.view',
+            'bookings.view', 'bookings.view-all', 'bookings.approve', 'bookings.cancel', 'bookings.export',
             'audit-logs.view', 'audit-logs.export',
         ],
         'teknisi' => [
@@ -57,6 +59,7 @@ class RolePermissionSeeder extends Seeder
             'incidents.view', 'incidents.create', 'incidents.comment',
             'schedules.view',
             'calendar.view', 'availability.view',
+            'bookings.view', 'bookings.create', 'bookings.cancel',
         ],
         'ketua-kelas' => [
             'incidents.view', 'incidents.create', 'incidents.comment',
@@ -78,6 +81,7 @@ class RolePermissionSeeder extends Seeder
             'schedules.view',
             'calendar.view', 'calendar.export',
             'availability.view',
+            'bookings.view', 'bookings.view-all', 'bookings.export',
             'audit-logs.view', 'audit-logs.export',
         ],
     ];
