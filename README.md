@@ -49,11 +49,12 @@ The application is in a staged source-of-truth migration.
 - published timetable ingestion/validation/activation and materialized schedule occurrences;
 - canonical `/schedules` current-plan read model backed by active Schedule Occurrences;
 - canonical Operational Calendar with school/laboratory blockers and non-destructive cancellation;
+- canonical Unified Laboratory Availability read model combining schedule coverage, ScheduleOccurrence occupancy, Laboratory status, and Calendar blockers;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Reservations, laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, unified availability, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered.
+Reservations, laboratory sessions/journals, telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries remain transitional until their Laravel API slices are delivered.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
