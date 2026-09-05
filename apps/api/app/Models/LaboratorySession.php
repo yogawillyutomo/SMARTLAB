@@ -63,6 +63,7 @@ class LaboratorySession extends Model
     public function subject(): BelongsTo { return $this->belongsTo(Subject::class); }
     public function events(): HasMany { return $this->hasMany(LaboratorySessionEvent::class, 'session_id'); }
     public function activityReport(): HasOne { return $this->hasOne(ActivityReport::class, 'session_id'); }
+    public function issueObservations(): HasMany { return $this->hasMany(SessionIssueObservation::class, 'session_id'); }
 
     public function sourceId(): string
     {

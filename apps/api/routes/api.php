@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ScheduleOccurrenceController;
+use App\Http\Controllers\Api\V1\SessionIssueObservationController;
 use App\Http\Controllers\Api\V1\ScheduleExceptionController;
 use App\Http\Controllers\Api\V1\OperationalCalendarEventController;
 use App\Http\Controllers\Api\V1\LaboratoryAvailabilityController;
@@ -100,6 +101,10 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:priority-events.cancel', RequirePriorityEventVersionPrecondition::class]);
 
         Route::get('laboratory-session-sources', [LaboratorySessionController::class, 'sources'])->middleware('permission:sessions.view');
+        Route::get('laboratory-sessions/{sessionId}/observations', [SessionIssueObservationController::class, 'index'])->middleware('permission:session-observations.view');
+        Route::post('laboratory-sessions/{sessionId}/observations', [SessionIssueObservationController::class, 'store'])->middleware('permission:session-observations.create');
+        Route::post('session-observations/{observationId}/promote-incident', [SessionIssueObservationController::class, 'promote'])
+            ->middleware(['permission:session-observations.promote', 'permission:incidents.create']);
         Route::get('laboratory-sessions', [LaboratorySessionController::class, 'index'])->middleware('permission:sessions.view');
         Route::post('laboratory-sessions', [LaboratorySessionController::class, 'store'])->middleware('permission:sessions.prepare');
         Route::get('laboratory-sessions/{sessionId}', [LaboratorySessionController::class, 'show'])->middleware('permission:sessions.view');

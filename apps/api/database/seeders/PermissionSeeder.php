@@ -117,6 +117,12 @@ class PermissionSeeder extends Seeder
             'cancel' => 'Batalkan Pelaksanaan Laboratorium',
             'export' => 'Ekspor Pelaksanaan Laboratorium',
         ],
+        'session-observations' => [
+            'view' => 'Lihat Temuan Pelaksanaan',
+            'view-all' => 'Lihat Semua Temuan Pelaksanaan',
+            'create' => 'Catat Temuan Pelaksanaan',
+            'promote' => 'Promosikan Temuan menjadi Insiden',
+        ],
         'activity-reports' => [
             'view' => 'Lihat Laporan Pelaksanaan',
             'view-all' => 'Lihat Semua Laporan Pelaksanaan',
