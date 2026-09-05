@@ -55,6 +55,7 @@ class ActivityReport extends Model
     public function academicClass(): BelongsTo { return $this->belongsTo(AcademicClass::class); }
     public function subject(): BelongsTo { return $this->belongsTo(Subject::class); }
     public function events(): HasMany { return $this->hasMany(ActivityReportEvent::class, 'report_id'); }
+    public function attachments(): HasMany { return $this->hasMany(ActivityReportAttachment::class, 'report_id'); }
 
     protected function casts(): array
     {

@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-05  
-**Baseline:** repository state including canonical S2 scheduling and S3.2–S3.4 Pelaksanaan Lab execution/report workflow
+**Baseline:** repository state including canonical S2 scheduling and S3.2–S3.5 Pelaksanaan Lab execution/report/evidence workflow
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -31,6 +31,8 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | LaboratorySession backend | PostgreSQL source-bound Session lifecycle over current ScheduleOccurrence / approved Reservation / approved Priority Event; source fingerprint revalidation, duplicate protection, actual occupancy, source-mutation guards, ETag versioning, and audit |
 | ActivityReport backend | PostgreSQL 1:1 normal Session report with atomic end→draft creation, report-type content validation, aggregate attendance evidence, draft/submitted/revision_required/verified lifecycle, controlled manual backfill, ETag versioning, and audit |
 | Pelaksanaan Lab frontend | canonical `/sessions` workspace over server-scoped execution-source discovery, LaboratorySession, and ActivityReport APIs; `/journals` is compatibility/deep-link only |
+| Session issue observations | immutable execution evidence scoped to canonical Sessions; Device references are same-Laboratory canonical IDs; Incident creation is an explicit idempotent promotion, never an automatic side effect |
+| ActivityReport attachments | immutable private-file metadata with SHA-256, draft-only upload, ActivityReport version/audit integration, authorized download, and no exposed storage key |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -55,13 +57,12 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S3.5: explicit execution observation → Incident linkage plus attachment metadata/storage policy.
-2. Phase S3.6: offline report-draft sync and operational UAT.
-3. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-4. Phase S5: Corrective Work Orders.
-5. Phase S6: PC monitoring telemetry.
-6. Phase S7: Notifications, Reporting, final Dashboard/global search.
-7. Phase S8: remove browser-local business persistence and compatibility layers.
+1. Phase S3.6: offline report-draft sync, conflict UX, and operational UAT.
+2. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+3. Phase S5: Corrective Work Orders.
+4. Phase S6: PC monitoring telemetry.
+5. Phase S7: Notifications, Reporting, final Dashboard/global search.
+6. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -100,6 +101,7 @@ The locked target boundary is:
 - S3.2 implements the LaboratorySession backend: PostgreSQL persistence/events, exact source provenance, Teacher.membership_id ownership for Guru schedule execution, School-local start gate, source fingerprint revalidation, actual in-progress availability blockers, source mutation/deactivation guards, timetable `active_session_conflict`, permissions, OpenAPI 0.20, and integration coverage.
 - S3.3 implements the ActivityReport backend: normal Session end atomically creates exactly one draft; report variants are server-validated; aggregate attendance remains non-authoritative for individual students; manual backfill is elevated and never creates a fake Session; report lifecycle/version/audit are canonical under OpenAPI 0.21.
 - S3.4 cuts Pelaksanaan Lab to server authority: ownership-safe `GET /laboratory-session-sources` supplies eligible current sources without display-name inference; `/sessions` provides Today/In Progress/Awaiting Report/History views and canonical Session/report mutations; `/journals` only redirects/deep-links into canonical report history; route/action guards use server permissions; OpenAPI advances to 0.22.
+- S3.5 makes execution evidence explicit: immutable SessionIssueObservation rows may be recorded only during actual execution or while the ended Session report remains draft; Device observations require an eligible same-Laboratory canonical Device; Asset reference IDs are intentionally refused until S4; Incident promotion requires explicit permissions and uses a server-stored idempotency correlation so one observation cannot create duplicate tickets. ActivityReport attachments use configurable private Laravel storage, server MIME/size policy, SHA-256 metadata, draft-only versioned upload, audit events, authorized no-store/nosniff download, and no deletion path in S3.5. OpenAPI advances to 0.23.
 
 ## Validation contract
 

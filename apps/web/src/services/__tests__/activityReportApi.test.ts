@@ -15,6 +15,7 @@ const ids = {
   teacher: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
   class: '01ARZ3NDEKTSV4RRFFQ69G5FB1',
   subject: '01ARZ3NDEKTSV4RRFFQ69G5FB2',
+  attachment: '01ARZ3NDEKTSV4RRFFQ69G5FB3',
 };
 const report = {
   id: ids.report,
@@ -71,7 +72,22 @@ describe('activity report API contract', () => {
     const get = vi.fn(async () => ({ data: [report], meta: { page: 1, perPage: 500, total: 1, lastPage: 1, from: '2026-09-01', to: '2026-09-30' } })) as ApiClient['get'];
     const post = vi.fn(async () => ({ data: report })) as ApiClient['post'];
     const patch = vi.fn(async () => ({ data: report })) as ApiClient['patch'];
-    const gateway = createActivityReportGateway(client({ get, post, patch }));
+    const postForm = vi.fn(async () => ({
+      data: {
+        id: ids.attachment,
+        reportId: ids.report,
+        storageProvider: 'local',
+        fileName: 'bukti.png',
+        mediaType: 'image/png',
+        sizeBytes: 1234,
+        sha256: 'a'.repeat(64),
+        available: true,
+        uploadedBy: { userId: ids.teacher, membershipId: ids.owner, name: 'Guru A' },
+        createdAt: '2026-09-14T01:46:00.000Z',
+      },
+      reportVersion: 2,
+    })) as NonNullable<ApiClient['postForm']>;
+    const gateway = createActivityReportGateway(client({ get, post, patch, postForm }));
 
     await gateway.listAll({ from: '2026-09-01', to: '2026-09-30', scope: 'mine' });
     await gateway.update(ids.report, 1, { presentCount: 31, absentCount: 1 });
@@ -87,11 +103,19 @@ describe('activity report API contract', () => {
       responsibleName: 'Guru Arsip',
       activityDescription: 'Kegiatan historis',
     });
+    const uploadFile = new File(['evidence'], 'bukti.png', { type: 'image/png' });
+    const upload = await gateway.uploadAttachment(ids.report, 1, uploadFile);
+    expect(upload.reportVersion).toBe(2);
 
     expect(patch).toHaveBeenCalledWith(`/activity-reports/${ids.report}`, { presentCount: 31, absentCount: 1 }, { ifMatch: '"1"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/submit`, undefined, { ifMatch: '"2"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/request-revision`, { reason: 'Lengkapi refleksi' }, { ifMatch: '"3"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/reopen`, undefined, { ifMatch: '"4"' });
     expect(post).toHaveBeenCalledWith(`/activity-reports/${ids.report}/verify`, undefined, { ifMatch: '"5"' });
+    expect(postForm).toHaveBeenCalledWith(
+      `/activity-reports/${ids.report}/attachments`,
+      expect.any(FormData),
+      { ifMatch: '"1"' },
+    );
   });
 });

@@ -34,6 +34,8 @@ This roadmap follows the approved operational workflow specification and the rep
 | Timetable publication impact/reconciliation | future occurrence diff + cross-domain operational impact gate | API-first administration + automated TESSELA revision UAT | canonical backend |
 | LaboratorySession execution | PostgreSQL source-bound prepare/start/end/cancel + event history; actual in-progress occupancy and source mutation guards | canonical `/sessions` Pelaksanaan Lab workspace | canonical |
 | ActivityReport | PostgreSQL 1:1 normal Session reports + controlled manual backfill; report lifecycle, aggregate attendance, optimistic versioning, audit | canonical `/sessions` report/history workflow; `/journals` compatibility redirect | canonical |
+| Session execution observations | immutable Session-scoped issue evidence with explicit canonical Device references and one-way Incident linkage | Pelaksanaan Lab Session detail | canonical |
+| ActivityReport attachments | private filesystem objects plus immutable metadata/SHA-256; draft-only upload increments report version | Pelaksanaan Lab report detail/editor | canonical |
 | Dashboard lab/device/incident metrics | canonical domain APIs | `DashboardPage.tsx` | canonical for supported metrics |
 
 The role catalog is server-authoritative but tenant-specific permission overrides remain deferred until their contract is locked.
@@ -299,9 +301,27 @@ Delivered in S3.4:
 - source-of-truth regression tests prevent Session/Journal browser-local persistence from returning to production routes;
 - OpenAPI 0.22.
 
-Next slices:
+Delivered in S3.5:
 
-- S3.5 explicit observation/Incident linkage + attachments;
+- immutable `SessionIssueObservation` evidence is separated from Incident lifecycle;
+- observations are accepted only during `in_progress` execution or after end while the linked ActivityReport remains an editable draft;
+- observation timestamps are constrained to the actual Session execution window;
+- Device observations require a canonical Device in the same Laboratory and a reporting-eligible lifecycle state;
+- Asset observations remain text evidence without a fabricated canonical reference until S4 makes Asset authoritative;
+- Observation creation never creates an Incident;
+- explicit promotion requires both observation-promotion and Incident-create permissions;
+- promotion derives Laboratory, optional Device, occurred-at time, reporter identity, and stable submission correlation from server evidence;
+- one Observation links to at most one Incident, and promotion retries are idempotent;
+- ActivityReport attachments are stored on a configurable private Laravel filesystem disk;
+- default evidence policy accepts JPEG/PNG/WebP/PDF up to 10 MiB, records server-derived MIME/size/SHA-256, and never exposes storage keys;
+- attachment upload is draft-only, protected by ActivityReport If-Match, bumps the report version, and emits an audit event;
+- attachment download is report-authorized with private/no-store and nosniff controls; missing objects preserve metadata and return unavailable/410 rather than erasing evidence;
+- S3.5 intentionally has no attachment delete path;
+- `/sessions` exposes explicit Temuan→Incident promotion and report evidence upload without restoring browser-local Session/Journal behavior;
+- OpenAPI 0.23.
+
+Next slice:
+
 - S3.6 offline draft sync + operational UAT.
 
 ### Phase S4 - Asset and inventory operations

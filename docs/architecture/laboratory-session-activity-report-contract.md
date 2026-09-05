@@ -1,6 +1,6 @@
 # Laboratory Session and Activity Report Contract
 
-**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented; S3.4 unified frontend implemented  
+**Status:** S3.1 contract locked; S3.2 LaboratorySession backend implemented; S3.3 ActivityReport backend implemented; S3.4 unified frontend implemented; S3.5 observations/Incident linkage/attachments implemented  
 **Date:** 2026-09-05  
 **Depends on:** ADR-001, S2 Published Timetable/Schedule Occurrence, Unified Laboratory Availability, Reservation, Schedule Exception, Priority Event, Incident
 
@@ -850,6 +850,7 @@ activity_report.revision_requested
 activity_report.reopened
 activity_report.verified
 activity_report.manual_backfill_created
+activity_report.attachment_added
 ```
 
 Audit payloads store meaningful transition evidence and versions, not full uncontrolled copies of sensitive report content.
@@ -866,6 +867,11 @@ sessions.start
 sessions.end
 sessions.cancel
 sessions.export
+
+session-observations.view
+session-observations.view-all
+session-observations.create
+session-observations.promote
 
 activity-reports.view
 activity-reports.view-all
@@ -885,19 +891,19 @@ All Session and ActivityReport permissions.
 
 ### Admin Lab
 
-All normal Session/Report operations, including verification and controlled backfill.
+All normal Session/Report operations, including verification and controlled backfill. May record observations and explicitly promote eligible observations to Incidents.
 
 ### Kepala Lab
 
-View all, normal execution operations where appropriate, verification/revision, export.
+View all, normal execution operations where appropriate, verification/revision, export, and record observations. No Incident promotion baseline unless Incident-create authority is explicitly granted.
 
 ### Guru
 
-View own eligible executions, prepare/start/end own permitted source, edit/submit own report. No verification and no manual backfill.
+View own eligible executions, prepare/start/end own permitted source, edit/submit own report, record own execution observations, and explicitly promote them when the Guru also has Incident-create authority. No verification and no manual backfill.
 
 ### Teknisi
 
-Read baseline. Starting/ending on behalf of a Priority Event or technical activity requires a future explicit executor/delegation assignment rather than blanket mutation permission.
+Read-all baseline for execution observations and reports. Starting/ending or recording observations on behalf of another execution requires a future explicit executor/delegation assignment rather than blanket mutation permission.
 
 ### Ketua Kelas
 
@@ -909,7 +915,7 @@ No Session/Report mutation.
 
 ### Pimpinan
 
-Read all/export; no operational mutation.
+Read all/export, including linked observation evidence; no operational mutation.
 
 This intentionally defaults ambiguous delegated execution to deny rather than broad role access.
 
@@ -1075,9 +1081,41 @@ Delivered:
 - `/journals` retained only as a compatibility/deep-link redirect into canonical report history;
 - no Session/Journal browser-local dataset is mixed into the migrated routes.
 
-### S3.5 — Observation, Incident linkage, attachments
+### S3.5 — Observation, Incident linkage, attachments — implemented
 
-Implement explicit issue observations, Incident promotion/linkage, and attachment metadata/storage policy.
+Delivered observation semantics:
+
+- `SessionIssueObservation` is immutable execution evidence, not a second Incident domain;
+- evidence can be added while the Session is `in_progress`, or after end only while its ActivityReport remains `draft`;
+- `observedAt` must fall inside the Session's actual execution interval;
+- Device observations require a canonical Device in the same Laboratory and an Incident-reporting-eligible lifecycle state;
+- S3.5 does not invent canonical Asset identity: Asset/facility/other observations carry narrative evidence only until their authoritative domains exist;
+- saving an observation never auto-creates an Incident;
+- Incident promotion is a separate explicit action requiring `session-observations.promote` plus `incidents.create`;
+- promotion derives Laboratory, Device when applicable, occurrence time, reporter identity, and correlation/submission identity server-side;
+- each observation can link to at most one Incident; retries return the same link instead of creating duplicate tickets;
+- the Incident keeps its own canonical lifecycle after promotion.
+
+Delivered attachment semantics:
+
+- attachment bytes are stored outside ActivityReport rows on a configurable private Laravel filesystem disk;
+- metadata stores provider, opaque internal storage key, original safe filename, server-derived media type/size, SHA-256, uploader, and creation time;
+- storage keys are never exposed to the web client;
+- default accepted media types are JPEG, PNG, WebP, and PDF with a configurable default limit of 10 MiB;
+- upload is allowed only while ActivityReport is `draft`;
+- upload requires ActivityReport `If-Match`, increments report version, and appends an audit event;
+- attachments are immutable in S3.5; there is no ordinary delete/replace endpoint;
+- download always rechecks report authorization and returns private/no-store, `nosniff`, sandbox-oriented headers;
+- if metadata remains but the object is missing, list responses expose `available=false` and download returns 410 rather than deleting historical metadata;
+- production malware scanning is not represented as already implemented; expanding allowed file types should wait for a dedicated scanning/quarantine contract.
+
+Delivered frontend semantics:
+
+- Session detail lists execution observations and clearly states that evidence is not automatically an Incident;
+- Incident creation is exposed only through the explicit promotion dialog;
+- report detail/editor lists attachment evidence, checksum prefix, and availability;
+- draft editors can upload evidence through the canonical multipart API;
+- browser-local Session/Journal/Incident side effects are not reintroduced.
 
 ### S3.6 — Offline draft sync and UAT
 

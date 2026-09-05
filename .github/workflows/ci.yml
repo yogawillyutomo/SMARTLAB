@@ -41,6 +41,9 @@ jobs:
       - name: Lint web application
         run: npm run lint
 
+      - name: Validate OpenAPI YAML syntax
+        run: ruby ../../scripts/check-openapi-syntax.rb
+
       - name: Type-check web application
         run: npm run typecheck
 

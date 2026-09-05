@@ -33,6 +33,7 @@ export interface ApiClient {
   ensureCsrfCookie: () => Promise<void>;
   get: <T>(path: string) => Promise<T>;
   post: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => Promise<T>;
+  postForm?: <T = void>(path: string, body: FormData, options?: ApiMutationOptions) => Promise<T>;
   put: <T = void>(path: string, body: unknown, options?: ApiMutationOptions) => Promise<T>;
   patch: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => Promise<T>;
   delete: <T = void>(path: string, options?: ApiMutationOptions) => Promise<T>;
@@ -211,10 +212,37 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     return parseResponse<T>(response);
   }
 
+  async function postForm<T>(
+    path: string,
+    body: FormData,
+    options?: ApiMutationOptions,
+    csrfRetry = true,
+  ): Promise<T> {
+    const headers = new Headers({ Accept: 'application/json' });
+    const token = readXsrfToken(readCookie());
+    if (token) headers.set('X-XSRF-TOKEN', token);
+    if (options?.ifMatch !== undefined) headers.set('If-Match', options.ifMatch);
+
+    const response = await fetchResponse(buildApiUrl(apiOrigin, path), {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body,
+    });
+
+    if (response.status === 419 && csrfRetry) {
+      await ensureCsrfCookie();
+      return postForm<T>(path, body, options, false);
+    }
+
+    return parseResponse<T>(response);
+  }
+
   return {
     ensureCsrfCookie,
     get: <T>(path: string) => request<T>(path, 'GET'),
     post: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => request<T>(path, 'POST', body, true, options),
+    postForm: <T = void>(path: string, body: FormData, options?: ApiMutationOptions) => postForm<T>(path, body, options),
     put: <T = void>(path: string, body: unknown, options?: ApiMutationOptions) => request<T>(path, 'PUT', body, true, options),
     patch: <T = void>(path: string, body?: unknown, options?: ApiMutationOptions) => request<T>(path, 'PATCH', body, true, options),
     delete: <T = void>(path: string, options?: ApiMutationOptions) => request<T>(path, 'DELETE', undefined, true, options),

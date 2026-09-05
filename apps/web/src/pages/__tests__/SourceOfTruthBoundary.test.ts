@@ -134,6 +134,19 @@ describe('source-of-truth migration foundation', () => {
     expect(navSource).toContain("serverPermission: 'sessions.view'");
   });
 
+  it('keeps S3.5 observations explicit and report attachments server-backed', () => {
+    expect(sessionsSource).toContain("from '@/services/sessionObservationApi'");
+    expect(sessionsSource).toContain('sessionObservationGateway.create');
+    expect(sessionsSource).toContain('sessionObservationGateway.promote');
+    expect(sessionsSource).toContain('Temuan adalah evidence pelaksanaan. Menyimpan form ini tidak membuat Incident.');
+    expect(sessionsSource).toContain('Promosikan Temuan menjadi Incident');
+    expect(sessionsSource).toContain('activityReportGateway.uploadAttachment');
+    expect(sessionsSource).toContain('activityReportAttachmentDownloadUrl');
+    expect(sessionsSource).toContain('Private storage');
+    expect(sessionsSource).not.toContain('db.incidents.push');
+    expect(sessionsSource).not.toContain('createIncidentFromBrokenPc');
+  });
+
   it('does not seed an active Laboratory identifier into UI state', () => {
     expect(uiStoreSource).toContain("activeLabId: ''");
     expect(uiStoreSource).not.toContain("activeLabId: 'lab-rpl-1'");

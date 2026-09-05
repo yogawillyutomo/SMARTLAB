@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.22.0
-  description: Canonical SmartLab API v1 contract. Version 0.22 preserves the complete 0.21 surface and adds the ownership-safe S3.4 execution-source read model used by the canonical Pelaksanaan Lab frontend.
+  version: 0.23.0
+  description: Canonical SmartLab API v1 contract. Version 0.23 adds S3.5 immutable execution observations, explicit Observation-to-Incident promotion, and private ActivityReport evidence attachments while preserving all S3.4 surfaces.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -45,6 +45,8 @@ paths:
   /laboratory-sessions/{sessionId}/start: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1start' }
   /laboratory-sessions/{sessionId}/end: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1end' }
   /laboratory-sessions/{sessionId}/cancel: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1cancel' }
+  /laboratory-sessions/{sessionId}/observations: { $ref: './openapi-sessions.yaml#/paths/~1laboratory-sessions~1{sessionId}~1observations' }
+  /session-observations/{observationId}/promote-incident: { $ref: './openapi-sessions.yaml#/paths/~1session-observations~1{observationId}~1promote-incident' }
   /activity-reports: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports' }
   /activity-reports/backfill: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1backfill' }
   /activity-reports/{reportId}: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}' }
@@ -52,6 +54,8 @@ paths:
   /activity-reports/{reportId}/request-revision: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1request-revision' }
   /activity-reports/{reportId}/reopen: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1reopen' }
   /activity-reports/{reportId}/verify: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1verify' }
+  /activity-reports/{reportId}/attachments: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1attachments' }
+  /activity-reports/{reportId}/attachments/{attachmentId}/download: { $ref: './openapi-activity-reports.yaml#/paths/~1activity-reports~1{reportId}~1attachments~1{attachmentId}~1download' }
   /priority-events: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events' }
   /priority-events/{priorityEventId}: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events~1{priorityEventId}' }
   /priority-events/{priorityEventId}/approve: { $ref: './openapi-priority-events.yaml#/paths/~1priority-events~1{priorityEventId}~1approve' }

@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: SmartLab Activity Report API module
-  version: 0.21.0
+  version: 0.23.0
   description: |
-    S3.3 canonical ActivityReport lifecycle. Normal reports are created atomically
-    by LaboratorySession end; manual backfill is elevated and never invents a Session.
-    SmartLab stores participant aggregates only. Individual attendance remains outside
-    SmartLab authority.
+    Canonical ActivityReport lifecycle through S3.5. Normal reports are created atomically
+    by LaboratorySession end; manual backfill never invents a Session. SmartLab stores
+    participant aggregates only. S3.5 adds immutable private evidence attachments whose
+    storage keys are never exposed by the API.
 paths:
   /activity-reports:
     get:
@@ -33,10 +33,7 @@ paths:
     post:
       operationId: createActivityReportBackfill
       summary: Create exceptional historical evidence without a fake Session
-      description: |
-        Requires activity-reports.create-backfill. This path is limited to legacy migration,
-        historical backfill, or an approved recovery procedure. It creates origin=manual_backfill,
-        never creates a LaboratorySession, and always starts as draft.
+      description: Requires activity-reports.create-backfill. Always starts as draft.
       security: *auth
       requestBody:
         required: true
@@ -45,29 +42,21 @@ paths:
             schema: { $ref: '#/components/schemas/CreateBackfillInput' }
       responses:
         '201': { description: Manual backfill draft created with ETag version }
-        '403': { description: Caller lacks activity-reports.create-backfill }
-        '422': { description: Backfill evidence or report content is invalid }
+        '403': { description: Permission missing }
+        '422': { description: Backfill evidence or content invalid }
 
   /activity-reports/{reportId}:
     parameters:
       - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
     get:
       operationId: getActivityReport
-      summary: Read one Activity Report and append-oriented timeline
       security: *auth
       responses:
-        '200': { description: Activity Report detail and audit timeline }
-        '404': { description: Report is missing, cross-School, or outside caller scope }
+        '200': { description: Activity Report detail and append-oriented timeline }
+        '404': { description: Missing, cross-School, or outside caller scope }
     patch:
       operationId: updateActivityReport
       summary: Edit report content while status=draft
-      description: |
-        Requires activity-reports.edit. Only draft content is editable.
-        reportType controls the accepted keys in typeSpecificContent:
-        practicum = topic, steps, softwareTools, learningOutcome;
-        exam = classification, proctor, readiness, continuityNotes, accommodationEvidence;
-        workshop = organizer, facilitator, agenda, resources, output;
-        general = activityOwner, classification, resourceUse, result.
       security: *auth
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -77,11 +66,10 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/UpdateActivityReportInput' }
       responses:
-        '200': { description: Draft updated with new ETag version }
-        '404': { description: Missing, cross-School, or outside caller scope }
-        '409': { description: Report is not editable in its current lifecycle state }
-        '412': { description: Activity Report version conflict }
-        '422': { description: Report-type content or aggregate attendance is invalid }
+        '200': { description: Draft updated with a new ETag version }
+        '409': { description: Report not editable }
+        '412': { description: Version conflict }
+        '422': { description: Content invalid }
         '428': { description: Missing or malformed If-Match }
 
   /activity-reports/{reportId}/submit:
@@ -91,18 +79,12 @@ paths:
     post:
       operationId: submitActivityReport
       summary: Submit a complete draft for verification
-      description: |
-        Requires activity-reports.submit. Submission requires commonContent.objective and
-        commonContent.outcomeReflection plus report-type minimum evidence:
-        practicum topic+learningOutcome; exam classification+readiness;
-        workshop agenda+output; general activityOwner+result.
       security: *auth
       responses:
-        '200': { description: Report submitted with new ETag version }
-        '404': { description: Missing, cross-School, or outside caller scope }
+        '200': { description: Submitted report with new ETag version }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Activity Report version conflict }
-        '422': { description: Required report-type content is incomplete }
+        '412': { description: Version conflict }
+        '422': { description: Required content incomplete }
         '428': { description: Missing or malformed If-Match }
 
   /activity-reports/{reportId}/request-revision:
@@ -112,7 +94,6 @@ paths:
     post:
       operationId: requestActivityReportRevision
       summary: Return a submitted report for revision
-      description: Requires activity-reports.request-revision. A non-empty reason is mandatory.
       security: *auth
       requestBody:
         required: true
@@ -120,11 +101,9 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ReasonInput' }
       responses:
-        '200': { description: Report status becomes revision_required }
-        '404': { description: Missing, cross-School, or outside caller scope }
+        '200': { description: Report becomes revision_required }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Activity Report version conflict }
-        '422': { description: Revision reason is invalid }
+        '412': { description: Version conflict }
         '428': { description: Missing or malformed If-Match }
 
   /activity-reports/{reportId}/reopen:
@@ -133,14 +112,12 @@ paths:
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: reopenActivityReport
-      summary: Reopen a revision-required report as an editable draft
-      description: Requires activity-reports.edit.
+      summary: Reopen a revision-required report as draft
       security: *auth
       responses:
-        '200': { description: Report reopened as draft with new ETag version }
-        '404': { description: Missing, cross-School, or outside caller scope }
+        '200': { description: Draft reopened with new ETag version }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Activity Report version conflict }
+        '412': { description: Version conflict }
         '428': { description: Missing or malformed If-Match }
 
   /activity-reports/{reportId}/verify:
@@ -149,15 +126,73 @@ paths:
       - $ref: '#/components/parameters/IfMatch'
     post:
       operationId: verifyActivityReport
-      summary: Verify a submitted Activity Report
-      description: Requires activity-reports.verify. verified is terminal for ordinary S3.3 workflow.
+      summary: Verify a submitted report
       security: *auth
       responses:
-        '200': { description: Report verified with new ETag version }
-        '404': { description: Missing, cross-School, or outside caller scope }
+        '200': { description: Verified report with new ETag version }
         '409': { description: Invalid lifecycle state }
-        '412': { description: Activity Report version conflict }
+        '412': { description: Version conflict }
         '428': { description: Missing or malformed If-Match }
+
+  /activity-reports/{reportId}/attachments:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: listActivityReportAttachments
+      summary: List immutable private attachment metadata
+      description: Requires activity-reports.view. storage_key is never returned.
+      security: *auth
+      responses:
+        '200': { description: Attachment metadata collection including current availability flag }
+        '404': { description: Report missing, cross-School, or outside caller scope }
+    post:
+      operationId: uploadActivityReportAttachment
+      summary: Add private evidence to an editable draft
+      description: |
+        Requires activity-reports.edit and If-Match. Upload is draft-only, increments the
+        ActivityReport version, records an audit event, computes SHA-256 server-side, and
+        stores the file on the configured private Laravel filesystem disk. Default policy:
+        JPEG, PNG, WebP, or PDF; maximum 10 MiB. No delete endpoint exists in S3.5.
+      security: *auth
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Attachment stored; response includes metadata and new reportVersion/ETag
+        '409': { description: Report is not an editable draft }
+        '412': { description: Activity Report version conflict }
+        '422': { description: File type/size invalid }
+        '428': { description: Missing or malformed If-Match }
+        '503': { description: Private storage unavailable }
+
+  /activity-reports/{reportId}/attachments/{attachmentId}/download:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: ulid } }
+      - { name: attachmentId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: downloadActivityReportAttachment
+      summary: Download one attachment through report authorization
+      description: |
+        Requires activity-reports.view. Response is private/no-store, nosniff, sandboxed,
+        and never exposes the backend storage key. If metadata exists but the file is
+        unavailable, the API returns 410 while preserving the evidence metadata.
+      security: *auth
+      responses:
+        '200': { description: Authorized attachment stream }
+        '404': { description: Report/attachment missing or outside caller scope }
+        '410': { description: Attachment metadata exists but stored file is unavailable }
 
 components:
   parameters:
@@ -165,7 +200,6 @@ components:
       name: If-Match
       in: header
       required: true
-      description: Current ActivityReport integer entity version as a quoted ETag.
       schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
 
   schemas:
@@ -199,7 +233,6 @@ components:
 
     TypeSpecificContent:
       type: object
-      description: Keys are restricted server-side according to reportType as documented on PATCH /activity-reports/{reportId}.
       additionalProperties:
         type: [string, 'null']
         maxLength: 8000
@@ -221,13 +254,7 @@ components:
     CreateBackfillInput:
       type: object
       additionalProperties: false
-      required:
-        - reportType
-        - laboratoryId
-        - occurredOn
-        - manualBackfillReason
-        - responsibleName
-        - activityDescription
+      required: [reportType, laboratoryId, occurredOn, manualBackfillReason, responsibleName, activityDescription]
       properties:
         reportType: { $ref: '#/components/schemas/ActivityReportType' }
         laboratoryId: { type: string, format: ulid }
@@ -250,3 +277,36 @@ components:
       required: [reason]
       properties:
         reason: { type: string, minLength: 1, maxLength: 2000 }
+
+    ActivityReportAttachment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - reportId
+        - storageProvider
+        - fileName
+        - mediaType
+        - sizeBytes
+        - sha256
+        - available
+        - uploadedBy
+        - createdAt
+      properties:
+        id: { type: string, format: ulid }
+        reportId: { type: string, format: ulid }
+        storageProvider: { type: string }
+        fileName: { type: string }
+        mediaType: { type: string, enum: [image/jpeg, image/png, image/webp, application/pdf] }
+        sizeBytes: { type: integer, minimum: 1 }
+        sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        available: { type: boolean }
+        uploadedBy:
+          type: object
+          additionalProperties: false
+          required: [userId, membershipId, name]
+          properties:
+            userId: { type: string }
+            membershipId: { type: string }
+            name: { type: string }
+        createdAt: { type: string, format: date-time }
