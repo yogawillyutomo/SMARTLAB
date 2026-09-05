@@ -1140,6 +1140,30 @@ class LaboratorySessionApiTest extends TestCase
             'version' => 2,
             'attendance_notes' => 'Draft disimpan ketika koneksi tidak stabil.',
         ]);
+
+        $this->withHeader('If-Match', '"2"')
+            ->patchJson('/api/v1/activity-reports/'.$reportId, [
+                'attendanceNotes' => 'Perubahan server sesudah mutation offline sudah applied.',
+            ])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"');
+
+        $this->postJson('/api/v1/activity-reports/'.$reportId.'/sync-draft', $payload)
+            ->assertOk()
+            ->assertHeader('ETag', '"3"')
+            ->assertJsonPath('sync.replayed', true)
+            ->assertJsonPath('sync.appliedVersion', 2)
+            ->assertJsonPath('data.version', 3)
+            ->assertJsonPath('data.attendance.notes', 'Perubahan server sesudah mutation offline sudah applied.');
+
+        $this->assertDatabaseCount('activity_report_draft_sync_mutations', 1);
+        $this->assertSame(
+            1,
+            ActivityReportEvent::query()
+                ->where('report_id', $reportId)
+                ->where('event_type', 'activity_report.offline_sync_applied')
+                ->count(),
+        );
     }
 
     public function test_offline_activity_report_sync_conflict_never_overwrites_newer_server_state(): void
