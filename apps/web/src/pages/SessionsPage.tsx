@@ -1045,7 +1045,7 @@ export function SessionsPage() {
             ),
           });
           setDraftSyncStatus('conflict');
-          toast('Versi server lebih baru. Draft lokal dipertahankan sampai konflik diselesaikan.', 'warning');
+          toast('Versi server lebih baru. Draft lokal dipertahankan sampai konflik diselesaikan.', 'info');
           return;
         }
       }
