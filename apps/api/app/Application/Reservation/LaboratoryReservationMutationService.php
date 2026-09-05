@@ -7,6 +7,7 @@ use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Reservation\LaboratoryReservationException;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReservation;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -25,6 +26,7 @@ class LaboratoryReservationMutationService
     {
         return DB::transaction(function () use ($context, $actor, $data): LaboratoryReservation {
             $schoolId = (string) $context->membership->school_id;
+            School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
             $laboratory = Laboratory::query()
                 ->where('school_id', $schoolId)
@@ -240,6 +242,7 @@ class LaboratoryReservationMutationService
     private function lockForMutation(CurrentMembershipContext $context, string $id): array
     {
         $schoolId = (string) $context->membership->school_id;
+        School::query()->whereKey($schoolId)->lockForUpdate()->firstOrFail();
 
         $candidate = LaboratoryReservation::query()
             ->where('school_id', $schoolId)
