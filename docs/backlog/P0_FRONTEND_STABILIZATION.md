@@ -34,14 +34,24 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 - Fixed Asset sudah menjadi canonical melalui S4.2 dengan exact optional 1:1 Asset↔Device linkage, ETag concurrency, lifecycle terpisah, audit history, dan `/assets` server-authoritative.
 - Pelaksanaan Lab tetap merekam observasi Device canonical dan explicit Observation→Incident linkage. Evidence Asset dari S3.5 tidak diretrofit otomatis; historical free-text evidence tidak difabrikasi menjadi canonical Asset reference.
 
-## P0-05 Integritas inventaris — S4.3 implementation tranche
+## P0-05 Integritas inventaris — S4.3 selesai / merged
 
 - S4.3 menyediakan `InventoryItem` canonical dan immutable `InventoryTransaction` dengan quantity precision tiga digit desimal.
 - Movement mengunci row item, menghitung saldo di dalam transaksi, dan menolak hasil negatif di application layer serta PostgreSQL.
 - Stable School-scoped `clientMutationId` mereplay retry identik dan menolak ID yang dipakai kembali untuk payload berbeda.
 - Opening balance harus berupa transaksi `opening`; metadata create/PATCH tidak dapat menulis balance.
-- `/stock` pada PR #80 sudah server-authoritative dan tidak menggunakan `db.stock` / browser mutation / hard delete.
+- `/stock` sudah server-authoritative pada merged PR #80 / `1a34dc23` dan tidak menggunakan `db.stock` / browser mutation / hard delete.
 - Cross-domain consumption oleh Preventive Maintenance dan Work Order belum menjadi authority S4.3; masing-masing tetap menunggu S4.5 dan S5.
+
+## P0-05B Integritas Loan custody — S4.4 implementation tranche
+
+- Loan hanya meminjam Asset durable canonical; satu LoanItem selalu mengikat satu Asset ULID exact, bukan free-text item + quantity ambigu.
+- Approval/checkout memakai ETag dan deterministic Asset row locks; active custody dilindungi application revalidation serta partial unique database guard per Asset.
+- `overdue` adalah derived state dari `checked_out + requestedReturnAt`, bukan status yang dapat ditulis manual.
+- Checkout menyimpan condition-out evidence tanpa mengubah home Laboratory/lifecycle Asset atau Device.
+- Return harus mencatat condition-return evidence untuk seluruh LoanItem; kerusakan tidak otomatis mengubah Asset condition atau membuat Incident.
+- `/loans` pada PR #81 sudah server-authoritative dan tidak lagi memakai `db.loans` / browser mutation. Authority ini baru menjadi merged truth sesudah explicit merge + exact merged-head verification.
+- Symmetric Loan↔Maintenance custody exclusion menunggu S4.5 karena MaintenanceExecution canonical belum boleh difabrikasi di S4.4.
 
 ## P0-06 Penomoran dokumen — Sebagian selesai
 
@@ -88,4 +98,4 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | OV-01 Override kegiatan prioritas | canonical baseline | Schedule Exception cancel/relocate + Priority Event request/approval sudah canonical; tidak ada force override. | S2.7 + S2.8 delivered. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | implementation-complete melalui S3.6 | LaboratorySession + ActivityReport + `/sessions` server-authoritative; `/journals` compatibility redirect; S3.5 execution evidence; S3.6 controlled offline draft sync dengan account-scoped cache, idempotent receipts, dan fail-closed conflict/rebase. | Operator/browser offline UX matrix tetap menjadi production-rollout UAT; tidak menghalangi perencanaan S4. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, dan S4.1 contract lock sudah accepted. S4.2 fixed Assets sudah merged sebagai PR #79 dan exact merged-head CI hijau. S4.3 Inventory adalah implementation tranche PR #80; setelah explicit merge + exact merged-head verification, fase berikutnya S4.4 Loan custody. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, dan S4.1 contract lock sudah accepted. S4.2 fixed Assets sudah merged sebagai PR #79 dan exact merged-head CI hijau. S4.3 Inventory sudah merged sebagai PR #80 / `1a34dc23` dan exact merged-head CI hijau. S4.4 Loan custody adalah implementation tranche PR #81; setelah explicit merge + exact merged-head verification, fase berikutnya S4.5 Preventive Maintenance. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
