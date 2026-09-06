@@ -232,8 +232,8 @@ class LoanApiTest extends TestCase
         [, $school] = $this->authenticateWithPermissions(['loans.create', 'loans.approve', 'loans.checkout']);
         $asset = $this->loanableAsset($school);
 
-        $first = $this->postJson('/api/v1/loans', $this->validPayload([$asset->id], ['borrowerName' => 'A']))->assertCreated();
-        $second = $this->postJson('/api/v1/loans', $this->validPayload([$asset->id], ['borrowerName' => 'B']))->assertCreated();
+        $first = $this->postJson('/api/v1/loans', $this->validPayload([$asset->id], ['borrowerName' => 'AA']))->assertCreated();
+        $second = $this->postJson('/api/v1/loans', $this->validPayload([$asset->id], ['borrowerName' => 'BB']))->assertCreated();
 
         foreach ([$first, $second] as $response) {
             $this->postJson('/api/v1/loans/'.$response->json('data.id').'/approve', [], ['If-Match' => '"1"'])->assertOk();
