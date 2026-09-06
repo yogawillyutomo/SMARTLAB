@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Loan API module
+  version: 0.27.0
+paths:
+  /loans:
+    get:
+      operationId: listLoans
+      summary: List tenant-scoped Loans visible to the current SMARTLAB membership
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/LoanStatus' } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { name: search, in: query, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: assetId, in: query, schema: { type: string, format: ulid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 25 } }
+      responses:
+        '200': { description: Paginated Loan collection }
+    post:
+      operationId: createLoan
+      summary: Submit one Loan referencing one or more exact canonical Assets
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLoanInput' }
+      responses:
+        '201': { description: Submitted Loan }
+        '422': { description: Invalid Asset identity or payload }
+  /loans/{loanId}:
+    parameters:
+      - &loanId { name: loanId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getLoan
+      security: *auth
+      responses:
+        '200': { description: Loan detail with exact LoanItems }
+        '404': { description: Unknown, cross-tenant, or inaccessible Loan }
+  /loans/{loanId}/approve:
+    parameters: [*loanId, &ifMatch { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }]
+    post:
+      operationId: approveLoan
+      security: *auth
+      responses:
+        '200': { description: Approved Loan after Asset revalidation }
+        '409': { description: Invalid lifecycle or unavailable Asset }
+        '412': { description: Version conflict }
+        '428': { description: Missing/invalid If-Match }
+  /loans/{loanId}/reject:
+    parameters: [*loanId, *ifMatch]
+    post:
+      operationId: rejectLoan
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Rejected terminal Loan }
+  /loans/{loanId}/cancel:
+    parameters: [*loanId, *ifMatch]
+    post:
+      operationId: cancelLoan
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Cancelled terminal Loan }
+  /loans/{loanId}/checkout:
+    parameters: [*loanId, *ifMatch]
+    post:
+      operationId: checkoutLoan
+      summary: Acquire temporary custody for every exact LoanItem Asset
+      security: *auth
+      responses:
+        '200': { description: Checked-out Loan with conditionOut evidence }
+        '409': { description: Asset unavailable or ineligible }
+  /loans/{loanId}/return:
+    parameters: [*loanId, *ifMatch]
+    post:
+      operationId: returnLoan
+      summary: Release custody and record return condition evidence for every LoanItem
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnLoanInput' }
+      responses:
+        '200': { description: Returned Loan; no Incident or Asset condition is auto-mutated }
+        '422': { description: Return evidence does not cover every LoanItem exactly once }
+  /loans/{loanId}/close:
+    parameters: [*loanId, *ifMatch]
+    post:
+      operationId: closeLoan
+      security: *auth
+      responses:
+        '200': { description: Closed Loan after return inspection }
+components:
+  schemas:
+    LoanStatus:
+      type: string
+      enum: [submitted, approved, rejected, cancelled, checked_out, returned, closed]
+    AssetCondition:
+      type: string
+      enum: [good, minor_damage, moderate_damage, major_damage, unknown]
+    CreateLoanInput:
+      type: object
+      additionalProperties: false
+      required: [borrowerName, purpose, requestedReturnAt, assetIds]
+      properties:
+        borrowerReference: { type: [string, 'null'], maxLength: 255 }
+        borrowerName: { type: string, minLength: 2, maxLength: 255 }
+        borrowerUnit: { type: [string, 'null'], maxLength: 255 }
+        purpose: { type: string, minLength: 3, maxLength: 2000 }
+        requestedReturnAt: { type: string, format: date-time }
+        assetIds:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: ulid }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+    ReturnLoanInput:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [loanItemId, conditionReturn]
+            properties:
+              loanItemId: { type: string, format: ulid }
+              conditionReturn: { $ref: '#/components/schemas/AssetCondition' }
+              returnNotes: { type: [string, 'null'], maxLength: 2000 }
+  securitySchemes:
+    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
+    sanctumBearer: { type: http, scheme: bearer }
