@@ -11,6 +11,7 @@ import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import assetsSource from '@/pages/AssetsPage.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
 import loansSource from '@/pages/LoansPage.tsx?raw';
+import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -218,6 +219,26 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="loans.view"');
     expect(navSource).toContain("loans: 'loans.view'");
     expect(navSource).toContain("serverPermission: 'loans.view'");
+  });
+
+  it('cuts Preventive Maintenance over to canonical S4.5 exact-Asset server authority', () => {
+    expect(maintenanceSource).not.toContain('useAppData');
+    expect(maintenanceSource).not.toContain('db.maintenance');
+    expect(maintenanceSource).not.toContain('mutate((d)');
+    expect(maintenanceSource).not.toContain('usePermission');
+    expect(maintenanceSource).not.toContain('ConfirmDialog');
+    expect(maintenanceSource).not.toContain('assetCode: execForm');
+    expect(maintenanceSource).toContain("from '@/services/maintenanceApi'");
+    expect(maintenanceSource).toContain("from '@/services/assetApi'");
+    expect(maintenanceSource).toContain("from '@/services/inventoryApi'");
+    expect(maintenanceSource).toContain('maintenanceGateway.listAllPlans()');
+    expect(maintenanceSource).toContain('maintenanceGateway.startExecution');
+    expect(maintenanceSource).toContain('maintenanceGateway.completeExecution');
+    expect(maintenanceSource).toContain('satu Asset canonical');
+    expect(maintenanceSource).toContain('Corrective repair tetap S5 Work Order');
+    expect(appSource).toContain('RequireServerPermission permission="maintenance.view"');
+    expect(navSource).toContain("maintenance: 'maintenance.view'");
+    expect(navSource).toContain("serverPermission: 'maintenance.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {

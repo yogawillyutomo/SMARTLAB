@@ -217,7 +217,7 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:loans.close', RequireLoanVersionPrecondition::class]);
 
         Route::get('maintenance-plans', [MaintenanceController::class, 'plans'])->middleware('permission:maintenance.view');
-        Route::post('maintenance-plans', [MaintenanceController::class, 'storePlan'])->middleware('permission:maintenance.create-plan');
+        Route::post('maintenance-plans', [MaintenanceController::class, 'storePlan'])->middleware(['permission:maintenance.create-plan', 'permission:assets.view']);
         Route::get('maintenance-plans/{planId}', [MaintenanceController::class, 'showPlan'])->middleware('permission:maintenance.view');
         Route::patch('maintenance-plans/{planId}', [MaintenanceController::class, 'updatePlan'])
             ->middleware(['permission:maintenance.update-plan', RequireMaintenancePlanVersionPrecondition::class]);
