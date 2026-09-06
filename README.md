@@ -63,11 +63,12 @@ The application is in a staged source-of-truth migration.
 - canonical S3.5 execution evidence: immutable Session issue observations, explicit idempotent Observation→Incident promotion, and draft-only private ActivityReport attachments with SHA-256 metadata and authorized download;
 - canonical S3.6 controlled offline ActivityReport draft working copies with account-scoped seven-day cache, stable client mutation IDs, idempotent server receipts, fail-closed stale-version conflicts, and explicit three-way rebase UX;
 - canonical S4.2 fixed Assets with School-scoped identity, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, append-oriented change events, and server-authoritative `/assets` UI;
+- S4.3 implementation candidate in PR #80: quantity-tracked InventoryItems plus immutable idempotent InventoryTransactions, serialized non-negative balance enforcement, and server-authoritative `/stock`; it becomes merged authority only after explicit merge and merged-head verification;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Pelaksanaan Lab is now server-authoritative through S3.6, including explicit issue evidence, Incident linkage, private report attachments, and controlled offline ActivityReport draft working copies that preserve server/version authority. Remaining transitional work includes telemetry monitoring, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next functional slice after S4.2 is S4.3 Inventory and its immutable stock ledger. Operator/browser offline UX scenarios remain a production-rollout UAT requirement rather than a reason to weaken server authority.
+Pelaksanaan Lab is now server-authoritative through S3.6, including explicit issue evidence, Incident linkage, private report attachments, and controlled offline ActivityReport draft working copies that preserve server/version authority. Remaining transitional work includes telemetry monitoring, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. Inventory/stock is implemented as the S4.3 PR #80 candidate and is no longer allowed to fall back to browser-local authority on that branch. After S4.3 merge verification, the next functional slice is S4.4 Loan custody. Operator/browser offline UX scenarios remain a production-rollout UAT requirement rather than a reason to weaken server authority.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
