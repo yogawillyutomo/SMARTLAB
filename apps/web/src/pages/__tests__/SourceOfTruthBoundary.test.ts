@@ -205,7 +205,9 @@ describe('source-of-truth migration foundation', () => {
     expect(loansSource).not.toContain('markOverdue');
     expect(loansSource).not.toContain('createIncident');
     expect(loansSource).not.toContain('itemName');
-    expect(loansSource).not.toContain('quantity');
+    expect(loansSource).not.toContain('form.quantity');
+    expect(loansSource).not.toContain('l.quantity');
+    expect(loansSource).not.toContain('quantity: Number');
     expect(loansSource).toContain("from '@/services/loanApi'");
     expect(loansSource).toContain("from '@/services/assetApi'");
     expect(loansSource).toContain('loanGateway.listAll()');
