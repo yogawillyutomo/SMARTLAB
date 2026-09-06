@@ -345,8 +345,8 @@ Planned slices:
 - **S4.1 — complete/locked:** authority + semantic contract, prototype reconciliation;
 - **S4.2 — complete on merged main:** fixed Asset backend, exact Asset↔Device link, ETag/audit lifecycle actions, OpenAPI 0.25, and `/assets` server-authoritative cutover; merged as PR #79 / `69cf3305`;
 - **S4.3 — complete on merged main:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and `/stock` cutover; merged as PR #80 / `1a34dc23` with exact merged-head API/web CI green;
-- **S4.4 — implementation tranche in PR #81:** exact-Asset Loan/LoanItem custody, action-specific versioned lifecycle, double-checkout exclusion, condition snapshots, append-oriented evidence, OpenAPI 0.27, and `/loans` cutover; becomes merged authority only after explicit merge and exact merged-head verification;
-- **S4.5:** Preventive Maintenance plan/execution, Inventory consumption, and /maintenance cutover;
+- **S4.4 — complete on merged main:** exact-Asset Loan/LoanItem custody, action-specific versioned lifecycle, double-checkout exclusion, condition snapshots, append-oriented evidence, OpenAPI 0.27, and `/loans` cutover; merged as PR #81 / `f85f2edf` with exact merged-head API/web CI green;
+- **S4.5 — implementation tranche in PR #82:** exact-Asset Preventive Maintenance plans/executions, active custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and `/maintenance` cutover; becomes merged authority only after explicit merge and exact merged-head verification;
 - **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
 
 Delivered by S4.2 when this tranche is present on merged `main`:
@@ -371,7 +371,7 @@ Delivered by S4.3 on merged `main`:
 - `/stock` reads Inventory APIs only; direct browser quantity mutation and item hard-delete controls are removed;
 - Work Order stock consumption is **not** implemented in S4.3 and remains S5; Maintenance inventory consumption waits for S4.5.
 
-Delivered by the S4.4 implementation tranche:
+Delivered by S4.4 on merged `main`:
 
 - `Loan` represents temporary custody of durable canonical Assets only; Inventory consumables remain InventoryTransaction authority;
 - one `LoanItem` references exactly one School-scoped Asset ULID and snapshots Asset code/name; free-text item identity and ambiguous quantity are not canonical Loan inputs;
@@ -382,8 +382,22 @@ Delivered by the S4.4 implementation tranche:
 - checkout captures `conditionOut` and activates Loan custody without changing Asset/Device home Laboratory, Layout, Asset lifecycle, Device lifecycle, or Asset version;
 - return requires evidence for every LoanItem exactly once, captures `conditionReturn`/notes, releases custody, and does **not** auto-update Asset condition or create Incident;
 - Loan events are append-only with actor snapshots, while LoanItem exact identity and already-captured condition evidence are protected from later rewrite/delete at the database layer;
-- `/loans` reads/writes only canonical Loan and Asset APIs on PR #81; browser-local `db.loans`, free-text item/quantity mutations, manual overdue mutation, and local return→Incident creation are removed;
-- Maintenance custody is not fabricated before S4.5. When S4.5 introduces canonical MaintenanceExecution custody, it must add the symmetric Loan↔Maintenance exclusion under the same Asset lock ordering.
+- `/loans` reads/writes only canonical Loan and Asset APIs on merged PR #81; browser-local `db.loans`, free-text item/quantity mutations, manual overdue mutation, and local return→Incident creation are removed.
+
+Delivered by the S4.5 implementation tranche:
+
+- one MaintenancePlan targets one exact School-scoped Asset and retains immutable Asset code/name identity snapshots; Asset target changes require a new plan rather than historical rewrite;
+- scheduling snapshots the plan code, exact Asset, checklist, technician context, and date into a MaintenanceExecution so later plan edits do not rewrite execution evidence;
+- execution lifecycle is versioned and action-specific: `scheduled -> in_progress -> completed` or `scheduled/in_progress -> cancelled`; only `in_progress` owns active Maintenance custody;
+- start locks the exact Asset, revalidates active Asset + linked Device eligibility, snapshots Asset condition/version, rejects active Loan custody, and relies on a DB partial-unique guard to reject two active Maintenance custodies for one Asset;
+- Loan checkout symmetrically queries active Maintenance custody under the existing deterministic Asset lock order and fails with `LOAN_ASSET_UNAVAILABLE` rather than double-allocating the Asset;
+- completion fails closed if the Asset version drifted after Maintenance start, requires results for the frozen checklist, and records condition/findings/action evidence without rewriting Device lifecycle/home Laboratory/Layout authority;
+- Asset condition change is performed through the Asset authority and emits `asset.maintenance_condition_updated`; it is not a direct un-audited Maintenance table side effect;
+- spare-part consumption uses canonical immutable InventoryTransaction `issue` movements with `sourceType=maintenance_execution` and `sourceId=executionId`; deterministic InventoryItem locking and the existing non-negative balance rules remain authoritative;
+- execution completion, Inventory issues, Asset condition audit/update, custody release, Maintenance event, and plan next-due advance share one outer database transaction, so insufficient stock or Asset drift rolls the coupled action back;
+- plan/execution identities and captured evidence are protected from hard delete/rewrite at the database layer; Maintenance events remain append-only;
+- `/maintenance` on PR #82 uses canonical Maintenance/Asset/Inventory APIs only; browser-local `db.maintenance`, local mutation, free-text Asset code execution, and hard-delete controls are removed;
+- Corrective repair remains S5 Work Order authority and is not fabricated by S4.5.
 
 Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 

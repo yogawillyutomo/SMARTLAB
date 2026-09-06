@@ -1,7 +1,7 @@
 # S4 Asset, Inventory, Loan, and Preventive Maintenance Contract
 
 **Status:** Accepted — S4.1 semantic contract  
-**Scope:** semantic contract and implementation sequencing; no S4 runtime API/database cutover in this tranche  
+**Scope:** semantic contract and implementation sequencing; S4.2–S4.4 are merged implementations and S4.5 is the PR #82 implementation candidate  
 **Authority:** governed by [ADR-002](ADR-002-asset-inventory-loan-maintenance-boundary.md)
 
 ## 1. Contract goals
@@ -491,13 +491,19 @@ New action-specific Asset permissions:
 
 ### 9.4 Preventive Maintenance
 
+S4.5 refines the accepted capability groups into action-specific server permissions:
+
 - `maintenance.view`
-- `maintenance.view-all`
-- `maintenance.create`
-- `maintenance.update`
-- `maintenance.execute`
+- `maintenance.create-plan`
+- `maintenance.update-plan`
+- `maintenance.schedule`
+- `maintenance.start`
+- `maintenance.complete`
 - `maintenance.cancel`
+- `maintenance.consume-stock`
 - `maintenance.export`
+
+Creating a plan also requires `assets.view` because exact Asset selection must not bypass Asset read authority.
 
 No S4 permission grants S5 Work Order authority.
 
@@ -552,12 +558,17 @@ GET   /api/v1/maintenance-plans
 POST  /api/v1/maintenance-plans
 GET   /api/v1/maintenance-plans/{plan}
 PATCH /api/v1/maintenance-plans/{plan}
-POST  /api/v1/maintenance-executions
+POST  /api/v1/maintenance-plans/{plan}/activate
+POST  /api/v1/maintenance-plans/{plan}/deactivate
+POST  /api/v1/maintenance-plans/{plan}/executions
+GET   /api/v1/maintenance-executions
 GET   /api/v1/maintenance-executions/{execution}
 POST  /api/v1/maintenance-executions/{execution}/start
 POST  /api/v1/maintenance-executions/{execution}/complete
 POST  /api/v1/maintenance-executions/{execution}/cancel
 ```
+
+S4.5 schedules an execution through its exact plan route so the server can snapshot plan/Asset/checklist identity under the current plan version.
 
 The implementation PR may refine transport details without violating semantic invariants. Breaking changes to identity, lifecycle, custody, stock ledger, or authority require explicit contract revision.
 
