@@ -103,7 +103,11 @@ describe('Preventive Maintenance API contract', () => {
     const get = vi.fn(async (path: string) => path.startsWith('/maintenance-plans')
       ? { data: [plan()], meta: { page: 1, perPage: 200, total: 1, lastPage: 1 } }
       : { data: [execution()], meta: { page: 1, perPage: 200, total: 1, lastPage: 1 } });
-    const post = vi.fn(async (path: string) => ({ data: path.includes('maintenance-plans') ? plan() : execution() }));
+    const post = vi.fn(async (path: string) => ({
+      data: path.includes('/executions') || path.includes('maintenance-executions')
+        ? execution()
+        : plan(),
+    }));
     const patch = vi.fn(async () => ({ data: plan() }));
     const gateway = createMaintenanceGateway(clientWith({
       get: get as ApiClient['get'],
