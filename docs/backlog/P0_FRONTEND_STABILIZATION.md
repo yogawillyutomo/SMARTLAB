@@ -31,8 +31,8 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 
 - Device dan Incident sudah memiliki stable server identity dan canonical API.
 - Device transfer dan Incident workflow sudah server-backed.
-- Fixed Asset masih transitional; penyatuan identity Device ↔ Asset pada workflow aset belum selesai.
-- Pelaksanaan Lab sudah dapat merekam observasi Device canonical dan explicit Observation→Incident linkage melalui S3.5. Referensi Asset canonical tetap menunggu S4; observasi aset pada S3.5 hanya evidence naratif dan tidak membuat authority palsu.
+- Fixed Asset sudah menjadi canonical melalui S4.2 dengan exact optional 1:1 Asset↔Device linkage, ETag concurrency, lifecycle terpisah, audit history, dan `/assets` server-authoritative.
+- Pelaksanaan Lab tetap merekam observasi Device canonical dan explicit Observation→Incident linkage. Evidence Asset dari S3.5 tidak diretrofit otomatis; historical free-text evidence tidak difabrikasi menjadi canonical Asset reference.
 
 ## P0-05 Integritas inventaris — Dalam perencanaan
 
@@ -85,4 +85,4 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | OV-01 Override kegiatan prioritas | canonical baseline | Schedule Exception cancel/relocate + Priority Event request/approval sudah canonical; tidak ada force override. | S2.7 + S2.8 delivered. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | implementation-complete melalui S3.6 | LaboratorySession + ActivityReport + `/sessions` server-authoritative; `/journals` compatibility redirect; S3.5 execution evidence; S3.6 controlled offline draft sync dengan account-scoped cache, idempotent receipts, dan fail-closed conflict/rebase. | Operator/browser offline UX matrix tetap menjadi production-rollout UAT; tidak menghalangi perencanaan S4. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, tetapi fase fungsional berikutnya adalah S4 Assets/Inventory/Loans/Preventive Maintenance. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, dan S4.1 contract lock sudah accepted. S4.2 fixed Assets adalah implementation tranche saat ini; sesudah merged-head verification, fase berikutnya S4.3 Inventory. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).

@@ -1,6 +1,6 @@
 # ADR-002: Asset, Inventory, Loan, and Preventive Maintenance Boundary
 
-**Status:** Proposed — S4.1 contract candidate  
+**Status:** Accepted — S4.1 authority lock  
 **Date:** 2026-09-06  
 **Decision owner:** Bakaran Project / SMARTLAB  
 **Applies before:** S4 runtime implementation

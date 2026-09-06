@@ -19,8 +19,11 @@ class PermissionSeeder extends Seeder
             'view' => 'Lihat Aset',
             'create' => 'Buat Aset',
             'update' => 'Ubah Aset',
-            'delete' => 'Hapus Aset',
+            'delete' => 'Hapus Aset (kompatibilitas legacy)',
             'export' => 'Ekspor Aset',
+            'link-device' => 'Tautkan Aset ke Perangkat',
+            'retire' => 'Pensiunkan Aset',
+            'dispose' => 'Hapuskan Aset secara administratif',
         ],
         'devices' => [
             'view' => 'Lihat Perangkat',

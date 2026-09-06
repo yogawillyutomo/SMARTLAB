@@ -1,0 +1,180 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Asset API module
+  version: 0.25.0
+paths:
+  /assets:
+    get:
+      operationId: listAssets
+      summary: List tenant-scoped fixed Assets
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 255 } }
+        - { name: homeLaboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: condition, in: query, schema: { $ref: '#/components/schemas/AssetCondition' } }
+        - { name: lifecycleStatus, in: query, schema: { $ref: '#/components/schemas/AssetLifecycleStatus' } }
+        - { name: linkedDeviceId, in: query, schema: { type: string, format: ulid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 25 } }
+      responses:
+        '200': { description: Paginated Asset collection }
+    post:
+      operationId: createAsset
+      summary: Create an active tenant-scoped fixed Asset
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAssetInput' }
+      responses:
+        '201': { description: Created Asset with ETag version }
+        '422': { description: Validation failure }
+  /assets/{assetId}:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getAsset
+      security: *auth
+      responses:
+        '200': { description: Asset detail }
+        '404': { description: Unknown or cross-tenant Asset }
+    patch:
+      operationId: updateAsset
+      summary: Update mutable Asset metadata or condition
+      security: *auth
+      parameters:
+        - &ifMatch { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAssetInput' }
+      responses:
+        '200': { description: Updated Asset }
+        '409': { description: Lifecycle or linked-identity conflict }
+        '412': { description: Version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /assets/{assetId}/device-link:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - *ifMatch
+    post:
+      operationId: linkAssetDevice
+      summary: Link one Asset to exactly one same-School Device
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deviceId]
+              properties:
+                deviceId: { type: string, format: ulid }
+      responses:
+        '200': { description: Asset with linked Device }
+        '404': { description: Device not found in current School }
+        '409': { description: Link or home-Laboratory conflict }
+  /assets/{assetId}/device-unlink:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - *ifMatch
+    post:
+      operationId: unlinkAssetDevice
+      summary: Remove the Asset to Device link without deleting either record
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Asset with cleared linked Device }
+  /assets/{assetId}/retire:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - *ifMatch
+    post:
+      operationId: retireAsset
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Retired Asset }
+        '409': { description: Lifecycle or linked Device conflict }
+  /assets/{assetId}/dispose:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - *ifMatch
+    post:
+      operationId: disposeAsset
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Disposed Asset }
+        '409': { description: Asset is not safely disposable }
+components:
+  schemas:
+    AssetCondition:
+      type: string
+      enum: [good, minor_damage, moderate_damage, major_damage, unknown]
+    AssetLifecycleStatus:
+      type: string
+      enum: [active, retired, disposed]
+    CreateAssetInput:
+      type: object
+      additionalProperties: false
+      required: [assetCode, name, category]
+      properties:
+        assetCode: { type: string, pattern: '^[A-Z0-9][A-Z0-9-]{2,31}$' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        category: { type: string, minLength: 1, maxLength: 120 }
+        brand: { type: [string, 'null'], maxLength: 255 }
+        model: { type: [string, 'null'], maxLength: 255 }
+        serialNumber: { type: [string, 'null'], maxLength: 255 }
+        homeLaboratoryId: { type: [string, 'null'], format: ulid }
+        condition: { $ref: '#/components/schemas/AssetCondition' }
+        acquisitionDate: { type: [string, 'null'], format: date }
+        acquisitionYear: { type: [integer, 'null'], minimum: 1900, maximum: 2100 }
+        fundingSource: { type: [string, 'null'], maxLength: 255 }
+        purchasePrice: { type: [number, 'null'], minimum: 0 }
+        supplierName: { type: [string, 'null'], maxLength: 255 }
+        warrantyUntil: { type: [string, 'null'], format: date }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+    UpdateAssetInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        category: { type: string, minLength: 1, maxLength: 120 }
+        brand: { type: [string, 'null'], maxLength: 255 }
+        model: { type: [string, 'null'], maxLength: 255 }
+        serialNumber: { type: [string, 'null'], maxLength: 255 }
+        homeLaboratoryId: { type: [string, 'null'], format: ulid }
+        condition: { $ref: '#/components/schemas/AssetCondition' }
+        acquisitionDate: { type: [string, 'null'], format: date }
+        acquisitionYear: { type: [integer, 'null'], minimum: 1900, maximum: 2100 }
+        fundingSource: { type: [string, 'null'], maxLength: 255 }
+        purchasePrice: { type: [number, 'null'], minimum: 0 }
+        supplierName: { type: [string, 'null'], maxLength: 255 }
+        warrantyUntil: { type: [string, 'null'], format: date }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+  securitySchemes:
+    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
+    sanctumBearer: { type: http, scheme: bearer }

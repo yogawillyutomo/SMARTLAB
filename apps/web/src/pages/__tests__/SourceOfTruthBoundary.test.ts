@@ -8,6 +8,7 @@ import bookingsSource from '@/pages/BookingsPage.tsx?raw';
 import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
 import sessionsSource from '@/pages/SessionsPage.tsx?raw';
 import journalsSource from '@/pages/JournalsPage.tsx?raw';
+import assetsSource from '@/pages/AssetsPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -158,6 +159,23 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).not.toContain('offlineIncidentQueue');
     expect(sessionsSource).not.toContain('offlineAttachmentQueue');
     expect(sessionsSource).not.toContain('queueAttachment');
+  });
+
+  it('cuts fixed Assets over to canonical S4.2 API authority', () => {
+    expect(assetsSource).not.toContain('useAppData');
+    expect(assetsSource).not.toContain('db.assets');
+    expect(assetsSource).not.toContain('mutate((d)');
+    expect(assetsSource).not.toContain('Stock Opname');
+    expect(assetsSource).not.toContain('QR Code Aset');
+    expect(assetsSource).not.toContain('Mutasi Aset');
+    expect(assetsSource).not.toContain('Hapus aset');
+    expect(assetsSource).toContain("from '@/services/assetApi'");
+    expect(assetsSource).toContain('assetGateway.listAll()');
+    expect(assetsSource).toContain('assetGateway.linkDevice');
+    expect(assetsSource).toContain('Tidak ada lagi mutation Asset browser-local');
+    expect(appSource).toContain('RequireServerPermission permission="assets.view"');
+    expect(navSource).toContain("assets: 'assets.view'");
+    expect(navSource).toContain("serverPermission: 'assets.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {

@@ -11,7 +11,7 @@ class RolePermissionSeeder extends Seeder
     public const ROLE_PERMISSIONS = [
         'admin-lab' => [
             'laboratories.view', 'laboratories.create', 'laboratories.update', 'laboratories.export',
-            'assets.view', 'assets.create', 'assets.update', 'assets.delete', 'assets.export',
+            'assets.view', 'assets.create', 'assets.update', 'assets.delete', 'assets.export', 'assets.link-device', 'assets.retire',
             'devices.view', 'devices.create', 'devices.update', 'devices.export',
             'device-transfers.create', 'device-transfers.view',
             'layouts.view', 'layouts.create', 'layouts.update', 'layouts.delete',
@@ -33,7 +33,7 @@ class RolePermissionSeeder extends Seeder
         ],
         'kepala-lab' => [
             'laboratories.view', 'laboratories.update', 'laboratories.export',
-            'assets.view', 'assets.export',
+            'assets.view', 'assets.export', 'assets.retire', 'assets.dispose',
             'devices.view', 'devices.export',
             'device-transfers.view',
             'layouts.view',

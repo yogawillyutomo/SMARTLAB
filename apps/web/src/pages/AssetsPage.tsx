@@ -1,379 +1,488 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Archive, Boxes, Download, Link2, Pencil, Plus, Unlink } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Boxes, Plus, Pencil, Trash2, Download, Printer, ArrowRightLeft, ScanLine, QrCode } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { usePermission } from '@/components/common/PermissionGuard';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input, Select, Textarea } from '@/components/ui/Input';
-import { Badge, StatusBadge, ConditionBadge } from '@/components/ui/Badge';
-import { FormDialog } from '@/components/forms/FormDialog';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Modal } from '@/components/ui/Modal';
-import { Tabs } from '@/components/ui/Tabs';
+import { Card, CardContent } from '@/components/ui/Card';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { FormDialog } from '@/components/forms/FormDialog';
+import { Input, Select, Textarea } from '@/components/ui/Input';
+import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/States';
-import { toast } from '@/stores/toastStore';
+import { ApiClientError } from '@/lib/apiClient';
+import { hasServerPermission } from '@/lib/authIdentity';
 import { downloadCSV, formatCurrency } from '@/utils';
-import { getAssetDeviceLink, validateAssetMutation } from '@/domain/managed-device';
-import type { Asset } from '@/types';
+import {
+  ASSET_CONDITIONS,
+  assetGateway,
+  type AssetCondition,
+  type AssetDto,
+  type CreateAssetInput,
+  type UpdateAssetInput,
+} from '@/services/assetApi';
+import { deviceGateway, type DeviceDto } from '@/services/deviceApi';
+import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
+import { useAuthStore } from '@/stores/authStore';
+import { toast } from '@/stores/toastStore';
+
+const CONDITION_LABELS: Record<AssetCondition, string> = {
+  good: 'Baik',
+  minor_damage: 'Rusak Ringan',
+  moderate_damage: 'Rusak Sedang',
+  major_damage: 'Rusak Berat',
+  unknown: 'Tidak Diketahui',
+};
+
+const LIFECYCLE_LABELS: Record<AssetDto['lifecycleStatus'], string> = {
+  active: 'Aktif',
+  retired: 'Pensiun',
+  disposed: 'Dihapuskan',
+};
+
+type AssetForm = {
+  assetCode: string;
+  name: string;
+  category: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  homeLaboratoryId: string;
+  condition: AssetCondition;
+  acquisitionDate: string;
+  acquisitionYear: string;
+  fundingSource: string;
+  purchasePrice: string;
+  supplierName: string;
+  warrantyUntil: string;
+  notes: string;
+};
+
+const EMPTY_FORM: AssetForm = {
+  assetCode: '',
+  name: '',
+  category: '',
+  brand: '',
+  model: '',
+  serialNumber: '',
+  homeLaboratoryId: '',
+  condition: 'unknown',
+  acquisitionDate: '',
+  acquisitionYear: '',
+  fundingSource: '',
+  purchasePrice: '',
+  supplierName: '',
+  warrantyUntil: '',
+  notes: '',
+};
+
+function nullIfBlank(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function toForm(asset: AssetDto): AssetForm {
+  return {
+    assetCode: asset.assetCode,
+    name: asset.name,
+    category: asset.category,
+    brand: asset.brand ?? '',
+    model: asset.model ?? '',
+    serialNumber: asset.serialNumber ?? '',
+    homeLaboratoryId: asset.homeLaboratoryId ?? '',
+    condition: asset.condition,
+    acquisitionDate: asset.acquisitionDate ?? '',
+    acquisitionYear: asset.acquisitionYear === null ? '' : String(asset.acquisitionYear),
+    fundingSource: asset.fundingSource ?? '',
+    purchasePrice: asset.purchasePrice === null ? '' : String(asset.purchasePrice),
+    supplierName: asset.supplierName ?? '',
+    warrantyUntil: asset.warrantyUntil ?? '',
+    notes: asset.notes ?? '',
+  };
+}
+
+function createInput(form: AssetForm): CreateAssetInput {
+  return {
+    assetCode: form.assetCode,
+    name: form.name,
+    category: form.category,
+    brand: nullIfBlank(form.brand),
+    model: nullIfBlank(form.model),
+    serialNumber: nullIfBlank(form.serialNumber),
+    homeLaboratoryId: nullIfBlank(form.homeLaboratoryId),
+    condition: form.condition,
+    acquisitionDate: nullIfBlank(form.acquisitionDate),
+    acquisitionYear: form.acquisitionYear === '' ? null : Number(form.acquisitionYear),
+    fundingSource: nullIfBlank(form.fundingSource),
+    purchasePrice: form.purchasePrice === '' ? null : Number(form.purchasePrice),
+    supplierName: nullIfBlank(form.supplierName),
+    warrantyUntil: nullIfBlank(form.warrantyUntil),
+    notes: nullIfBlank(form.notes),
+  };
+}
+
+function updateInput(form: AssetForm): UpdateAssetInput {
+  const { assetCode: _assetCode, ...input } = createInput(form);
+  void _assetCode;
+  return input;
+}
+
+function messageFrom(error: unknown): string {
+  if (error instanceof ApiClientError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Operasi Asset gagal.';
+}
+
+function conditionTone(condition: AssetCondition): 'success' | 'warning' | 'danger' | 'muted' {
+  if (condition === 'good') return 'success';
+  if (condition === 'minor_damage' || condition === 'unknown') return 'warning';
+  return 'danger';
+}
+
+function lifecycleTone(status: AssetDto['lifecycleStatus']): 'success' | 'warning' | 'muted' {
+  if (status === 'active') return 'success';
+  if (status === 'retired') return 'warning';
+  return 'muted';
+}
+
+async function listAllDevices(): Promise<DeviceDto[]> {
+  const first = await deviceGateway.list({ page: 1, perPage: 100 });
+  if (first.meta.lastPage === 1) return first.data;
+  const pages = await Promise.all(
+    Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
+      deviceGateway.list({ page: index + 2, perPage: 100 })),
+  );
+  return [...first.data, ...pages.flatMap((page) => page.data)];
+}
 
 export function AssetsPage() {
-  const { db, mutate } = useAppData();
   const navigate = useNavigate();
-  const canCreate = usePermission('assets', 'create');
-  const canUpdate = usePermission('assets', 'update');
-  const canDelete = usePermission('assets', 'delete');
-  const canExport = usePermission('assets', 'export');
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Asset | null>(null);
-  const [confirmDel, setConfirmDel] = useState<Asset | null>(null);
-  const [transferOpen, setTransferOpen] = useState<Asset | null>(null);
-  const [opnameOpen, setOpnameOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState<Asset | null>(null);
-  const [form, setForm] = useState<Partial<Asset>>({});
-  const [transferForm, setTransferForm] = useState({ toLabId: '', toPosition: '', reason: '', by: '' });
-  const [filters, setFilters] = useState({ category: 'all', lab: 'all', condition: 'all', status: 'all' });
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const user = useAuthStore((state) => state.user);
+  const canCreate = hasServerPermission(user, 'assets.create');
+  const canUpdate = hasServerPermission(user, 'assets.update');
+  const canExport = hasServerPermission(user, 'assets.export');
+  const canLinkDevice = hasServerPermission(user, 'assets.link-device') && hasServerPermission(user, 'devices.view');
+  const canRetire = hasServerPermission(user, 'assets.retire');
+  const canDispose = hasServerPermission(user, 'assets.dispose');
 
-  const filtered = useMemo(() => db.assets.filter((a) => {
-    if (filters.category !== 'all' && a.category !== filters.category) return false;
-    if (filters.lab !== 'all' && a.laboratoryId !== filters.lab) return false;
-    if (filters.condition !== 'all' && a.condition !== filters.condition) return false;
-    if (filters.status !== 'all' && a.status !== filters.status) return false;
+  const [assets, setAssets] = useState<AssetDto[]>([]);
+  const [labs, setLabs] = useState<LaboratoryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<AssetDto | null>(null);
+  const [form, setForm] = useState<AssetForm>(EMPTY_FORM);
+  const [linking, setLinking] = useState<AssetDto | null>(null);
+  const [devices, setDevices] = useState<DeviceDto[]>([]);
+  const [deviceId, setDeviceId] = useState('');
+  const [unlinking, setUnlinking] = useState<AssetDto | null>(null);
+  const [retiring, setRetiring] = useState<AssetDto | null>(null);
+  const [disposing, setDisposing] = useState<AssetDto | null>(null);
+  const [reason, setReason] = useState('');
+  const [filters, setFilters] = useState({ lab: 'all', condition: 'all', lifecycle: 'all' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const [nextAssets, nextLabs] = await Promise.all([assetGateway.listAll(), laboratoryGateway.list()]);
+      setAssets(nextAssets);
+      setLabs(nextLabs);
+    } catch (error) {
+      setLoadError(messageFrom(error));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const filtered = useMemo(() => assets.filter((asset) => {
+    if (filters.lab !== 'all' && asset.homeLaboratoryId !== filters.lab) return false;
+    if (filters.condition !== 'all' && asset.condition !== filters.condition) return false;
+    if (filters.lifecycle !== 'all' && asset.lifecycleStatus !== filters.lifecycle) return false;
     return true;
-  }), [db.assets, filters]);
+  }), [assets, filters]);
 
-  const categories = [...new Set(db.assets.map((a) => a.category))];
-  const totalValue = db.assets.reduce((sum, a) => sum + a.price, 0);
-  const editingLink = editing ? getAssetDeviceLink(db, editing.id) : null;
-  const editingIdentityLocked = Boolean(editingLink && editingLink.status !== 'unlinked');
+  const totalValue = assets.reduce((sum, asset) => sum + (asset.purchasePrice ?? 0), 0);
+  const linkedCount = assets.filter((asset) => asset.linkedDeviceId !== null).length;
 
   function openCreate() {
-    if (!canCreate) return;
     setEditing(null);
-    setForm({ category: 'Komputer', condition: 'Baik', status: 'Aktif', yearAcquired: 2026, fundingSource: 'BOS', price: 0, purchaseDate: new Date().toISOString().split('T')[0], laboratoryId: db.labs[0]?.id });
-    setOpen(true);
-  }
-  function openEdit(a: Asset) {
-    if (!canUpdate) return;
-    setEditing(a);
-    setForm(a);
-    setOpen(true);
+    setForm({ ...EMPTY_FORM, category: 'Komputer', homeLaboratoryId: labs[0]?.id ?? '' });
+    setFormOpen(true);
   }
 
-  function save() {
-    if (editing ? !canUpdate : !canCreate) return;
-    if (!form.name || !form.assetCode) { toast('Nama dan kode aset wajib diisi', 'error'); return; }
-    if (editing) {
-      const policy = validateAssetMutation(db, { operation: 'update', assetId: editing.id, changes: form });
-      if (!policy.ok) { toast(policy.message, 'error'); return; }
+  function openEdit(asset: AssetDto) {
+    setEditing(asset);
+    setForm(toForm(asset));
+    setFormOpen(true);
+  }
+
+  async function save() {
+    if (!form.name.trim() || !form.category.trim() || (!editing && !form.assetCode.trim())) {
+      toast('Kode, nama, dan kategori wajib diisi.', 'error');
+      return;
     }
-    const result = mutate((d) => {
+
+    try {
       if (editing) {
-        const idx = d.assets.findIndex((a) => a.id === editing.id);
-        if (idx >= 0) d.assets[idx] = { ...d.assets[idx], ...form } as Asset;
+        await assetGateway.update(editing.id, editing.version, updateInput(form));
+        toast('Asset diperbarui pada server.', 'success');
       } else {
-        d.assets.push({ ...form, id: `ast-${Date.now()}` } as Asset);
+        await assetGateway.create(createInput(form));
+        toast('Asset dibuat pada server.', 'success');
       }
+      setFormOpen(false);
+      await load();
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
+  }
+
+  async function openLink(asset: AssetDto) {
+    setLinking(asset);
+    setDeviceId('');
+    try {
+      setDevices(await listAllDevices());
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
+  }
+
+  const linkCandidates = useMemo(() => {
+    if (!linking) return [];
+    return devices.filter((device) => {
+      if (device.lifecycleStatus === 'decommissioned') return false;
+      if (linking.homeLaboratoryId && device.homeLaboratoryId && linking.homeLaboratoryId !== device.homeLaboratoryId) return false;
+      return true;
     });
-    if (!result.ok) { toast(result.error, 'error'); return; }
-    toast(editing ? 'Aset diperbarui' : 'Aset ditambahkan', 'success');
-    setOpen(false);
+  }, [devices, linking]);
+
+  async function linkDevice() {
+    if (!linking || !deviceId) return;
+    try {
+      await assetGateway.linkDevice(linking.id, linking.version, deviceId);
+      toast('Asset ditautkan ke Device canonical.', 'success');
+      setLinking(null);
+      await load();
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
   }
 
-  function remove() {
-    if (!confirmDel || !canDelete) return;
-    const policy = validateAssetMutation(db, { operation: 'delete', assetId: confirmDel.id });
-    if (!policy.ok) { toast(policy.message, 'error'); return; }
-    const result = mutate((d) => { d.assets = d.assets.filter((a) => a.id !== confirmDel.id); });
-    if (!result.ok) { toast(result.error, 'error'); return; }
-    toast('Aset dihapus', 'success');
-    setConfirmDel(null);
+  async function runReasonAction(type: 'unlink' | 'retire' | 'dispose') {
+    const target = type === 'unlink' ? unlinking : type === 'retire' ? retiring : disposing;
+    if (!target || reason.trim().length < 3) {
+      toast('Alasan minimal 3 karakter.', 'error');
+      return;
+    }
+    try {
+      if (type === 'unlink') await assetGateway.unlinkDevice(target.id, target.version, reason.trim());
+      if (type === 'retire') await assetGateway.retire(target.id, target.version, reason.trim());
+      if (type === 'dispose') await assetGateway.dispose(target.id, target.version, reason.trim());
+      toast(type === 'unlink' ? 'Tautan Device dilepas.' : type === 'retire' ? 'Asset dipensiunkan.' : 'Asset dihapuskan secara administratif.', 'success');
+      setUnlinking(null);
+      setRetiring(null);
+      setDisposing(null);
+      setReason('');
+      await load();
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
   }
 
-  function doTransfer() {
-    if (!canUpdate) return;
-    if (!transferOpen || !transferForm.toLabId) { toast('Pilih lokasi tujuan', 'error'); return; }
-    const policy = validateAssetMutation(db, { operation: 'transfer', assetId: transferOpen.id, toLaboratoryId: transferForm.toLabId });
-    if (!policy.ok) { toast(policy.message, 'error'); return; }
-    const result = mutate((d) => {
-      const idx = d.assets.findIndex((a) => a.id === transferOpen.id);
-      if (idx >= 0) {
-        d.assets[idx].laboratoryId = transferForm.toLabId;
-        d.assets[idx].position = transferForm.toPosition;
-        d.auditLogs.unshift({
-          id: `al-${Date.now()}`, at: new Date().toISOString(), userName: transferForm.by || 'Admin', role: 'Admin Lab', module: 'assets', action: 'transfer', object: transferOpen.assetCode,
-          oldValue: transferOpen.laboratoryId, newValue: transferForm.toLabId, device: 'Web',
-        });
-      }
-    });
-    if (!result.ok) { toast(result.error, 'error'); return; }
-    toast('Mutasi aset berhasil', 'success');
-    setTransferOpen(null);
-    setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' });
-  }
-
-  function requestDelete(asset: Asset) {
-    if (!canDelete) return;
-    const policy = validateAssetMutation(db, { operation: 'delete', assetId: asset.id });
-    if (!policy.ok) { toast(policy.message, 'error'); return; }
-    setConfirmDel(asset);
-  }
-
-  function openTransfer(asset: Asset) {
-    if (!canUpdate) return;
-    const policy = validateAssetMutation(db, { operation: 'transfer', assetId: asset.id, toLaboratoryId: asset.laboratoryId });
-    if (!policy.ok) { toast(policy.message, 'error'); return; }
-    setTransferOpen(asset);
-    setTransferForm({ toLabId: '', toPosition: '', reason: '', by: '' });
-  }
-
-  function exportCSV() {
-    if (!canExport) return;
-    downloadCSV('aset-tetap.csv', filtered.map((a) => ({
-      Kode: a.assetCode, Nama: a.name, Kategori: a.category, Brand: a.brand, Serial: a.serialNumber, Lab: db.labs.find((l) => l.id === a.laboratoryId)?.name, Posisi: a.position, Kondisi: a.condition, Status: a.status, Harga: a.price,
+  function exportCsv() {
+    downloadCSV('aset-canonical.csv', filtered.map((asset) => ({
+      Kode: asset.assetCode,
+      Nama: asset.name,
+      Kategori: asset.category,
+      Kondisi: CONDITION_LABELS[asset.condition],
+      Lifecycle: LIFECYCLE_LABELS[asset.lifecycleStatus],
+      Lab: labs.find((lab) => lab.id === asset.homeLaboratoryId)?.name ?? '',
+      Device: asset.linkedDeviceId ?? '',
+      Harga: asset.purchasePrice ?? '',
     })));
   }
 
-  function toggleSelect(id: string) {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  const columns: Column<Asset>[] = [
-    { key: 'select', header: '', render: (a) => <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-base-600" />, width: '40px', printHidden: true },
-    { key: 'assetCode', header: 'Kode Aset', sortable: true, render: (a) => <span className="font-medium text-ink-primary">{a.assetCode}</span> },
-    { key: 'name', header: 'Nama', sortable: true, render: (a) => <button onClick={() => navigate(`/assets/${a.id}`)} className="text-accent-content hover:underline">{a.name}</button> },
+  const columns: Column<AssetDto>[] = [
+    { key: 'assetCode', header: 'Kode Aset', sortable: true, render: (asset) => <span className="font-medium text-ink-primary">{asset.assetCode}</span> },
+    { key: 'name', header: 'Nama', sortable: true, render: (asset) => <button onClick={() => navigate(`/assets/${asset.id}`)} className="text-accent-content hover:underline">{asset.name}</button> },
     { key: 'category', header: 'Kategori', sortable: true },
-    { key: 'lab', header: 'Lab', render: (a) => db.labs.find((l) => l.id === a.laboratoryId)?.name ?? '-' },
-    { key: 'condition', header: 'Kondisi', render: (a) => <ConditionBadge condition={a.condition} /> },
-    { key: 'status', header: 'Status', render: (a) => <StatusBadge status={a.status} /> },
-    { key: 'price', header: 'Harga', sortable: true, sortValue: (a) => a.price, render: (a) => <span className="text-ink-muted">{formatCurrency(a.price)}</span> },
-    { key: 'actions', header: 'Aksi', printHidden: true, render: (a) => (
-      <div className="flex gap-1">
-        <button onClick={() => navigate(`/assets/${a.id}`)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><QrCode className="h-4 w-4" /></button>
-        {canUpdate && <button onClick={() => openEdit(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canUpdate && <button onClick={() => openTransfer(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><ArrowRightLeft className="h-4 w-4" /></button>}
-        {canDelete && <button onClick={() => requestDelete(a)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
+    { key: 'lab', header: 'Home Lab', render: (asset) => labs.find((lab) => lab.id === asset.homeLaboratoryId)?.name ?? 'Belum ditetapkan' },
+    { key: 'condition', header: 'Kondisi', render: (asset) => <Badge tone={conditionTone(asset.condition)}>{CONDITION_LABELS[asset.condition]}</Badge> },
+    { key: 'lifecycle', header: 'Lifecycle', render: (asset) => <Badge tone={lifecycleTone(asset.lifecycleStatus)}>{LIFECYCLE_LABELS[asset.lifecycleStatus]}</Badge> },
+    { key: 'device', header: 'Device', render: (asset) => asset.linkedDeviceId ? <Badge tone="accent">Tertaut</Badge> : <Badge tone="muted">Tidak tertaut</Badge> },
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (asset) => (
+      <div className="flex flex-wrap gap-1">
+        {canUpdate && asset.lifecycleStatus !== 'disposed' && <button title="Edit" onClick={() => openEdit(asset)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
+        {canLinkDevice && asset.lifecycleStatus === 'active' && asset.linkedDeviceId === null && <button title="Tautkan Device" onClick={() => void openLink(asset)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-accent-content"><Link2 className="h-4 w-4" /></button>}
+        {hasServerPermission(user, 'assets.link-device') && asset.linkedDeviceId !== null && <button title="Lepas Device" onClick={() => { setReason(''); setUnlinking(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-warning-foreground"><Unlink className="h-4 w-4" /></button>}
+        {canRetire && asset.lifecycleStatus === 'active' && asset.linkedDeviceId === null && <button title="Pensiunkan" onClick={() => { setReason(''); setRetiring(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-warning-foreground"><Archive className="h-4 w-4" /></button>}
+        {canDispose && asset.lifecycleStatus === 'retired' && asset.linkedDeviceId === null && <button title="Hapuskan administratif" onClick={() => { setReason(''); setDisposing(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Archive className="h-4 w-4" /></button>}
       </div>
     ) },
   ];
+
+  if (loading) return <Card><CardContent><p className="text-sm text-ink-muted">Memuat Asset canonical...</p></CardContent></Card>;
+  if (loadError) return <EmptyState title="Asset tidak dapat dimuat" description={loadError} action={<Button onClick={() => void load()}>Coba Lagi</Button>} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Aset Tetap"
-        description="Kelola identitas, kondisi, lokasi, dan riwayat aset tetap laboratorium."
+        description="Aset Tetap sekarang membaca source canonical Laravel/PostgreSQL. Tidak ada lagi mutation Asset browser-local."
         icon={<Boxes className="h-5 w-5" />}
-        actions={
-          <>
-            <Button variant="secondary" size="sm" icon={<ScanLine className="h-4 w-4" />} onClick={() => setOpnameOpen(true)}>Stock Opname</Button>
-            {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-            {canExport && <Button variant="secondary" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>}
-            {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Aset</Button>}
-          </>
-        }
+        actions={<>
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
+          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Asset</Button>}
+        </>}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-accent-content sm:text-2xl">{db.assets.length}</p><p className="text-xs text-ink-muted">Total Aset</p></CardContent></Card>
-        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-success-foreground sm:text-2xl">{db.assets.filter((a) => a.condition === 'Baik').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
-        <Card><CardContent className="min-w-0"><p className="text-xl font-bold text-warning-foreground sm:text-2xl">{db.assets.filter((a) => a.status === 'Maintenance').length}</p><p className="text-xs text-ink-muted">Maintenance</p></CardContent></Card>
-        <Card><CardContent className="min-w-0"><p className="whitespace-nowrap text-lg font-bold tracking-tight tabular-nums text-ink-primary sm:text-xl xl:text-2xl">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Total</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{assets.length}</p><p className="text-xs text-ink-muted">Total Asset</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{assets.filter((a) => a.condition === 'good').length}</p><p className="text-xs text-ink-muted">Kondisi Baik</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{linkedCount}</p><p className="text-xs text-ink-muted">Tertaut Device</p></CardContent></Card>
+        <Card><CardContent><p className="text-xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Snapshot</p></CardContent></Card>
       </div>
 
-      <Card className="print-hidden">
+      <Card>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <Select label="Kategori" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} placeholder="Semua" options={categories.map((c) => ({ value: c, label: c }))} />
-          <Select label="Lab" value={filters.lab} onChange={(e) => setFilters({ ...filters, lab: e.target.value })} placeholder="Semua" options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-          <Select label="Kondisi" value={filters.condition} onChange={(e) => setFilters({ ...filters, condition: e.target.value })} placeholder="Semua" options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} />
-          <Select label="Status" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} placeholder="Semua" options={['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'].map((s) => ({ value: s, label: s }))} />
-          {selected.size > 0 && <Badge tone="accent">{selected.size} dipilih</Badge>}
+          <Select label="Home Lab" value={filters.lab} onChange={(event) => setFilters({ ...filters, lab: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...labs.map((lab) => ({ value: lab.id, label: lab.name }))]} />
+          <Select label="Kondisi" value={filters.condition} onChange={(event) => setFilters({ ...filters, condition: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...ASSET_CONDITIONS.map((condition) => ({ value: condition, label: CONDITION_LABELS[condition] }))]} />
+          <Select label="Lifecycle" value={filters.lifecycle} onChange={(event) => setFilters({ ...filters, lifecycle: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))]} />
         </CardContent>
       </Card>
 
-      <Card>
-        <DataTable columns={columns} data={filtered} rowKey={(a) => a.id} searchable searchKeys={(a) => `${a.assetCode} ${a.name} ${a.serialNumber} ${a.brand}`} />
-      </Card>
+      <Card><DataTable columns={columns} data={filtered} rowKey={(asset) => asset.id} searchable searchKeys={(asset) => `${asset.assetCode} ${asset.name} ${asset.category} ${asset.brand ?? ''} ${asset.serialNumber ?? ''}`} /></Card>
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Aset' : 'Tambah Aset'} onSubmit={save} size="lg">
+      <FormDialog open={formOpen} onClose={() => setFormOpen(false)} title={editing ? 'Edit Asset' : 'Tambah Asset'} onSubmit={() => void save()} size="lg">
         <div className="space-y-4">
-          {editingIdentityLocked && (
-            <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
-              Kode, laboratorium, brand, model, dan serial number dikunci karena terhubung ke perangkat terkelola. Perubahan identitas atau lokasi harus menggunakan alur perangkat terkontrol.
-            </p>
-          )}
+          {editing?.linkedDeviceId && <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">Asset tertaut Device: home Laboratory, brand, model, dan serial dikunci untuk mencegah identity drift.</p>}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Kode Aset" value={form.assetCode ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
-            <Input label="Nama" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Input label="Kategori" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-            <Input label="Brand" value={form.brand ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-            <Input label="Model" value={form.model ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            <Input label="Serial Number" value={form.serialNumber ?? ''} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
-            <Select label="Lab" value={form.laboratoryId} disabled={editingIdentityLocked} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-            <Input label="Posisi" value={form.position ?? ''} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-            <Select label="Kondisi" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as Asset['condition'] })} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} />
-            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Asset['status'] })} options={['Aktif', 'Cadangan', 'Dipinjam', 'Maintenance', 'Rusak', 'Hilang', 'Dihapuskan'].map((s) => ({ value: s, label: s }))} />
-            <Input label="Tahun Perolehan" type="number" value={form.yearAcquired ?? 2026} onChange={(e) => setForm({ ...form, yearAcquired: Number(e.target.value) })} />
-            <Input label="Harga" type="number" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
-            <Input label="Tanggal Pembelian" type="date" value={form.purchaseDate ?? ''} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
-            <Input label="Garansi Sampai" type="date" value={form.warrantyUntil ?? ''} onChange={(e) => setForm({ ...form, warrantyUntil: e.target.value })} />
-            <Input label="Supplier" value={form.supplier ?? ''} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-            <Input label="Sumber Dana" value={form.fundingSource ?? ''} onChange={(e) => setForm({ ...form, fundingSource: e.target.value })} />
-            <div className="sm:col-span-2"><Textarea label="Catatan" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <Input label="Kode Asset" value={form.assetCode} disabled={Boolean(editing)} onChange={(event) => setForm({ ...form, assetCode: event.target.value })} />
+            <Input label="Nama" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            <Input label="Kategori" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} />
+            <Input label="Brand" value={form.brand} disabled={Boolean(editing?.linkedDeviceId)} onChange={(event) => setForm({ ...form, brand: event.target.value })} />
+            <Input label="Model" value={form.model} disabled={Boolean(editing?.linkedDeviceId)} onChange={(event) => setForm({ ...form, model: event.target.value })} />
+            <Input label="Serial Number" value={form.serialNumber} disabled={Boolean(editing?.linkedDeviceId)} onChange={(event) => setForm({ ...form, serialNumber: event.target.value })} />
+            <Select label="Home Laboratory" value={form.homeLaboratoryId} disabled={Boolean(editing?.linkedDeviceId)} onChange={(event) => setForm({ ...form, homeLaboratoryId: event.target.value })} options={[{ value: '', label: 'Belum ditetapkan' }, ...labs.filter((lab) => lab.status === 'active').map((lab) => ({ value: lab.id, label: lab.name }))]} />
+            <Select label="Kondisi" value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value as AssetCondition })} options={ASSET_CONDITIONS.map((condition) => ({ value: condition, label: CONDITION_LABELS[condition] }))} />
+            <Input label="Tanggal Perolehan" type="date" value={form.acquisitionDate} onChange={(event) => setForm({ ...form, acquisitionDate: event.target.value })} />
+            <Input label="Tahun Perolehan" type="number" value={form.acquisitionYear} onChange={(event) => setForm({ ...form, acquisitionYear: event.target.value })} />
+            <Input label="Harga Snapshot" type="number" min="0" value={form.purchasePrice} onChange={(event) => setForm({ ...form, purchasePrice: event.target.value })} />
+            <Input label="Sumber Dana" value={form.fundingSource} onChange={(event) => setForm({ ...form, fundingSource: event.target.value })} />
+            <Input label="Supplier" value={form.supplierName} onChange={(event) => setForm({ ...form, supplierName: event.target.value })} />
+            <Input label="Garansi Sampai" type="date" value={form.warrantyUntil} onChange={(event) => setForm({ ...form, warrantyUntil: event.target.value })} />
+            <div className="sm:col-span-2"><Textarea label="Catatan" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
           </div>
         </div>
       </FormDialog>
 
-      <FormDialog open={Boolean(transferOpen)} onClose={() => setTransferOpen(null)} title="Mutasi Aset" description={transferOpen?.assetCode} onSubmit={doTransfer} size="md" submitLabel="Mutasi">
+      <FormDialog open={Boolean(linking)} onClose={() => setLinking(null)} title="Tautkan Device canonical" onSubmit={() => void linkDevice()} submitLabel="Tautkan" size="md">
         <div className="space-y-4">
-          <div className="rounded-lg border border-base-700 bg-base-800/60 p-3 text-sm">
-            <p className="text-ink-muted">Lokasi saat ini</p>
-            <p className="text-ink-primary">{db.labs.find((l) => l.id === transferOpen?.laboratoryId)?.name} · {transferOpen?.position}</p>
-          </div>
-          <Select label="Lab Tujuan" value={transferForm.toLabId} onChange={(e) => setTransferForm({ ...transferForm, toLabId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-          <Input label="Posisi Tujuan" value={transferForm.toPosition} onChange={(e) => setTransferForm({ ...transferForm, toPosition: e.target.value })} />
-          <Input label="Penanggung Jawab" value={transferForm.by} onChange={(e) => setTransferForm({ ...transferForm, by: e.target.value })} />
-          <Textarea label="Alasan Mutasi" value={transferForm.reason} onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })} />
+          <p className="text-sm text-ink-muted">Tautan bersifat 1:1 dan divalidasi lagi oleh server. Asset/Device lintas School atau home Laboratory yang bertentangan akan ditolak.</p>
+          <Select label="Device" value={deviceId} onChange={(event) => setDeviceId(event.target.value)} options={[{ value: '', label: 'Pilih Device' }, ...linkCandidates.map((device) => ({ value: device.id, label: `${device.deviceCode} · ${device.brand ?? ''} ${device.model ?? ''}`.trim() }))]} />
         </div>
       </FormDialog>
 
-      <Modal open={opnameOpen} onClose={() => setOpnameOpen(false)} title="Stock Opname" description="Simulasi scan QR untuk mengecek keberadaan aset" size="md">
-        <OpnameSimulator assets={db.assets} labs={db.labs} onComplete={() => setOpnameOpen(false)} />
-      </Modal>
-
-      <Modal open={Boolean(qrOpen)} onClose={() => setQrOpen(null)} title="QR Code Aset" size="sm">
-        {qrOpen && (
-          <div className="text-center">
-            <div className="mx-auto mb-4 flex h-48 w-48 items-center justify-center rounded-xl border-2 border-base-600 bg-white p-4">
-              <div className="grid grid-cols-8 gap-0.5">
-                {Array.from({ length: 64 }).map((_, i) => (
-                  <div key={i} className={`h-4 w-4 ${((i * 7 + i * 3) % 3 === 0) ? 'bg-black' : 'bg-white'}`} />
-                ))}
-              </div>
-            </div>
-            <p className="font-semibold text-ink-primary">{qrOpen.assetCode}</p>
-            <p className="text-sm text-ink-muted">{qrOpen.name}</p>
-            {canExport && <Button variant="secondary" size="sm" className="mt-4" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print Label</Button>}
-          </div>
-        )}
-      </Modal>
-
-      <ConfirmDialog open={Boolean(confirmDel)} onClose={() => setConfirmDel(null)} onConfirm={remove} message={`Hapus aset ${confirmDel?.assetCode}?`} confirmLabel="Hapus" />
+      <ReasonDialog asset={unlinking} title="Lepas tautan Device" reason={reason} setReason={setReason} onClose={() => setUnlinking(null)} onSubmit={() => void runReasonAction('unlink')} />
+      <ReasonDialog asset={retiring} title="Pensiunkan Asset" reason={reason} setReason={setReason} onClose={() => setRetiring(null)} onSubmit={() => void runReasonAction('retire')} />
+      <ReasonDialog asset={disposing} title="Hapuskan Asset secara administratif" reason={reason} setReason={setReason} onClose={() => setDisposing(null)} onSubmit={() => void runReasonAction('dispose')} />
     </div>
   );
 }
 
-function OpnameSimulator({ assets, labs, onComplete }: { assets: Asset[]; labs: { id: string; name: string }[]; onComplete: () => void }) {
-  const [scanInput, setScanInput] = useState('');
-  const [found, setFound] = useState<Set<string>>(new Set());
-  const [missing, setMissing] = useState<Set<string>>(new Set());
-  const [selectedLab, setSelectedLab] = useState(labs[0]?.id ?? '');
-
-  const labAssets = assets.filter((a) => a.laboratoryId === selectedLab);
-
-  function scan() {
-    const asset = labAssets.find((a) => a.assetCode.toLowerCase() === scanInput.toLowerCase() || a.serialNumber.toLowerCase() === scanInput.toLowerCase());
-    if (asset) {
-      setFound((s) => new Set(s).add(asset.id));
-      toast(`${asset.assetCode} ditemukan`, 'success');
-    } else {
-      toast('Aset tidak ditemukan', 'error');
-    }
-    setScanInput('');
-  }
-
-  function markMissing(id: string) {
-    setMissing((s) => new Set(s).add(id));
-  }
-
+function ReasonDialog({ asset, title, reason, setReason, onClose, onSubmit }: {
+  asset: AssetDto | null;
+  title: string;
+  reason: string;
+  setReason: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
   return (
-    <div className="space-y-4">
-      <Select label="Pilih Lab" value={selectedLab} onChange={(e) => { setSelectedLab(e.target.value); setFound(new Set()); setMissing(new Set()); }} options={labs.map((l) => ({ value: l.id, label: l.name }))} />
-      <div className="flex gap-2">
-        <Input placeholder="Scan kode aset..." value={scanInput} onChange={(e) => setScanInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && scan()} icon={<ScanLine className="h-4 w-4" />} />
-        <Button onClick={scan}>Scan</Button>
-      </div>
-      <div className="rounded-lg border border-base-700 bg-base-800/60 p-3 max-h-60 overflow-y-auto">
-        {labAssets.map((a) => (
-          <div key={a.id} className="flex items-center justify-between border-b border-base-700/40 py-2 text-sm last:border-0">
-            <span className="text-ink-secondary">{a.assetCode} · {a.name}</span>
-            {found.has(a.id) ? <Badge tone="success">Ditemukan</Badge> : missing.has(a.id) ? <Badge tone="danger">Tidak Ditemukan</Badge> : <button onClick={() => markMissing(a.id)} className="text-xs text-ink-muted hover:text-danger">Tandai hilang</button>}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-ink-muted">Ditemukan: <span className="text-success-foreground font-semibold">{found.size}</span> / {labAssets.length}</span>
-        <Button size="sm" onClick={() => { toast(`Opname selesai: ${found.size}/${labAssets.length} ditemukan`, 'success'); onComplete(); }}>Selesai</Button>
-      </div>
-    </div>
+    <FormDialog open={Boolean(asset)} onClose={onClose} title={title} description={asset?.assetCode} onSubmit={onSubmit} submitLabel="Konfirmasi" size="md">
+      <Textarea label="Alasan" value={reason} onChange={(event) => setReason(event.target.value)} />
+    </FormDialog>
   );
 }
 
 export function AssetDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { db } = useAppData();
-  const asset = db.assets.find((a) => a.id === id);
-  const [tab, setTab] = useState('overview');
+  const user = useAuthStore((state) => state.user);
+  const [asset, setAsset] = useState<AssetDto | null>(null);
+  const [labs, setLabs] = useState<LaboratoryDto[]>([]);
+  const [device, setDevice] = useState<DeviceDto | null>(null);
+  const [error, setError] = useState('');
 
-  if (!asset) return <EmptyState title="Aset tidak ditemukan" action={<Button onClick={() => navigate('/assets')}>Kembali</Button>} />;
+  useEffect(() => {
+    if (!id) return;
+    void (async () => {
+      try {
+        const [nextAsset, nextLabs] = await Promise.all([assetGateway.show(id), laboratoryGateway.list()]);
+        setAsset(nextAsset);
+        setLabs(nextLabs);
+        if (nextAsset.linkedDeviceId && hasServerPermission(user, 'devices.view')) {
+          try {
+            setDevice(await deviceGateway.show(nextAsset.linkedDeviceId));
+          } catch {
+            setDevice(null);
+          }
+        }
+      } catch (reason) {
+        setError(messageFrom(reason));
+      }
+    })();
+  }, [id, user]);
 
-  const incidents = db.incidents.filter((i) => i.assetCode === asset.assetCode);
-  const maintenance = db.maintenance.executions.filter((m) => m.assetCode === asset.assetCode);
-  const auditLogs = db.auditLogs.filter((a) => a.object === asset.assetCode);
+  if (error) return <EmptyState title="Asset tidak dapat dimuat" description={error} action={<Button onClick={() => navigate('/assets')}>Kembali</Button>} />;
+  if (!asset) return <Card><CardContent><p className="text-sm text-ink-muted">Memuat Asset...</p></CardContent></Card>;
 
-  const tabs = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'spec', label: 'Spesifikasi' },
-    { key: 'incidents', label: `Incident (${incidents.length})` },
-    { key: 'maintenance', label: `Maintenance (${maintenance.length})` },
-    { key: 'audit', label: `Audit (${auditLogs.length})` },
-  ];
+  const labName = labs.find((lab) => lab.id === asset.homeLaboratoryId)?.name ?? 'Belum ditetapkan';
 
   return (
     <div className="space-y-6">
-      <PageHeader title={asset.name} description={`${asset.assetCode} · ${asset.brand} ${asset.model}`} icon={<Boxes className="h-5 w-5" />} actions={<Button variant="secondary" size="sm" onClick={() => navigate('/assets')}>Kembali</Button>} />
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
-      {tab === 'overview' && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card><CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-ink-muted">Kategori</span><span className="text-ink-primary">{asset.category}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Brand</span><span className="text-ink-primary">{asset.brand}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Serial</span><span className="text-ink-primary">{asset.serialNumber}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Lab</span><span className="text-ink-primary">{db.labs.find((l) => l.id === asset.laboratoryId)?.name}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Posisi</span><span className="text-ink-primary">{asset.position}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Kondisi</span><ConditionBadge condition={asset.condition} /></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Status</span><StatusBadge status={asset.status} /></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Harga</span><span className="text-ink-primary">{formatCurrency(asset.price)}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Tahun</span><span className="text-ink-primary">{asset.yearAcquired}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Sumber Dana</span><span className="text-ink-primary">{asset.fundingSource}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Supplier</span><span className="text-ink-primary">{asset.supplier}</span></div>
-            <div className="flex justify-between"><span className="text-ink-muted">Garansi</span><span className="text-ink-primary">{asset.warrantyUntil || '-'}</span></div>
-          </CardContent></Card>
-        </div>
-      )}
-      {tab === 'spec' && (
-        <Card><CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-ink-muted">Model</span><span className="text-ink-primary">{asset.model}</span></div>
-          {asset.notes && <div><span className="text-ink-muted">Catatan</span><p className="mt-1 text-ink-secondary">{asset.notes}</p></div>}
+      <PageHeader title={asset.name} description={asset.assetCode} icon={<Boxes className="h-5 w-5" />} actions={<Button variant="secondary" size="sm" onClick={() => navigate('/assets')}>Kembali</Button>} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card><CardContent className="space-y-3 text-sm">
+          <Detail label="Kategori" value={asset.category} />
+          <Detail label="Kondisi" value={CONDITION_LABELS[asset.condition]} />
+          <Detail label="Lifecycle" value={LIFECYCLE_LABELS[asset.lifecycleStatus]} />
+          <Detail label="Home Laboratory" value={labName} />
+          <Detail label="Brand / Model" value={[asset.brand, asset.model].filter(Boolean).join(' ') || '-'} />
+          <Detail label="Serial Number" value={asset.serialNumber ?? '-'} />
+          <Detail label="Versi" value={String(asset.version)} />
         </CardContent></Card>
-      )}
-      {tab === 'incidents' && (
-        <Card>{incidents.length === 0 ? <EmptyState title="Tidak ada incident" /> : <CardContent className="space-y-2">{incidents.map((i) => <div key={i.id} className="rounded-lg border border-base-700/60 p-3"><div className="flex justify-between"><span className="font-medium text-ink-primary">{i.ticketNumber}</span><StatusBadge status={i.status} /></div><p className="mt-1 text-sm text-ink-muted">{i.title}</p></div>)}</CardContent>}</Card>
-      )}
-      {tab === 'maintenance' && (
-        <Card>{maintenance.length === 0 ? <EmptyState title="Tidak ada maintenance" /> : <CardContent className="space-y-2">{maintenance.map((m) => <div key={m.id} className="rounded-lg border border-base-700/60 p-3"><p className="font-medium text-ink-primary">{m.date}</p><p className="text-sm text-ink-muted">{m.findings}</p></div>)}</CardContent>}</Card>
-      )}
-      {tab === 'audit' && (
-        <Card>{auditLogs.length === 0 ? <EmptyState title="Tidak ada audit log" /> : <CardContent className="space-y-2">{auditLogs.map((a) => <div key={a.id} className="rounded-lg border border-base-700/60 p-3"><div className="flex justify-between"><span className="text-sm text-ink-primary">{a.action}</span><span className="text-xs text-ink-muted">{a.at}</span></div><p className="text-xs text-ink-muted">{a.userName} · {a.oldValue} → {a.newValue}</p></div>)}</CardContent>}</Card>
-      )}
+        <Card><CardContent className="space-y-3 text-sm">
+          <Detail label="Tanggal Perolehan" value={asset.acquisitionDate ?? '-'} />
+          <Detail label="Tahun Perolehan" value={asset.acquisitionYear === null ? '-' : String(asset.acquisitionYear)} />
+          <Detail label="Harga Snapshot" value={asset.purchasePrice === null ? '-' : formatCurrency(asset.purchasePrice)} />
+          <Detail label="Sumber Dana" value={asset.fundingSource ?? '-'} />
+          <Detail label="Supplier" value={asset.supplierName ?? '-'} />
+          <Detail label="Garansi" value={asset.warrantyUntil ?? '-'} />
+        </CardContent></Card>
+      </div>
+      <Card><CardContent>
+        <h3 className="text-sm font-semibold text-ink-primary">Device canonical</h3>
+        {asset.linkedDeviceId ? (
+          <div className="mt-2 text-sm">
+            <p className="text-ink-secondary">{device ? `${device.deviceCode} · ${device.deviceType}` : asset.linkedDeviceId}</p>
+            {device && <button className="mt-2 text-accent-content hover:underline" onClick={() => navigate(`/devices/${device.id}`)}>Buka Device</button>}<p className="mt-2 text-xs text-ink-muted">Asset yang masih tertaut Device tidak menawarkan aksi retire/dispose dari UI Asset. Terminal lifecycle harus dikoordinasikan dengan lifecycle Device, bukan dibypass.</p>
+          </div>
+        ) : <p className="mt-2 text-sm text-ink-muted">Belum tertaut ke Device.</p>}
+      </CardContent></Card>
+      <Card><CardContent>
+        <h3 className="text-sm font-semibold text-ink-primary">Batas riwayat lintas domain</h3>
+        <p className="mt-2 text-sm text-ink-muted">Incident, Preventive Maintenance, Loan, dan audit-query lintas domain tidak digabungkan dari AppData browser. Riwayat akan muncul di sini hanya setelah source canonical masing-masing tersedia.</p>
+        {asset.notes && <p className="mt-4 whitespace-pre-wrap text-sm text-ink-secondary">{asset.notes}</p>}
+      </CardContent></Card>
     </div>
   );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <div className="flex justify-between gap-4"><span className="text-ink-muted">{label}</span><span className="text-right text-ink-primary">{value}</span></div>;
 }

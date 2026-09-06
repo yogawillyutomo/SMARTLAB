@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-06  
-**Baseline:** repository state including canonical S2 scheduling and S3.2–S3.6 Pelaksanaan Lab execution/report/evidence/offline-draft workflow
+**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, and S4.2 fixed-Asset workflow
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -14,6 +14,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Authentication / active membership | Laravel session + Sanctum |
 | Laboratories | Laboratory API |
 | Managed devices | Device API |
+| Fixed Assets | tenant-scoped Asset API with immutable School-scoped asset code, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, and append-oriented change events; linked Asset terminal lifecycle remains fail-closed until a coordinated Device terminal-lifecycle workflow exists |
 | Device transfers | Device Transfer API |
 | Laboratory layouts | Layout API |
 | Incidents | Incident API and event/history workflow |
@@ -41,7 +42,6 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
 
 - monitoring telemetry;
-- fixed assets;
 - stock/spare parts;
 - work orders;
 - preventive maintenance;
@@ -58,11 +58,14 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-2. Phase S5: Corrective Work Orders.
-3. Phase S6: PC monitoring telemetry.
-4. Phase S7: Notifications, Reporting, final Dashboard/global search.
-5. Phase S8: remove browser-local business persistence and compatibility layers.
+1. Phase S4.3: Inventory / immutable stock ledger.
+2. Phase S4.4: Loan / custody.
+3. Phase S4.5: Preventive Maintenance.
+4. Phase S4.6: S4 reconciliation/UAT.
+5. Phase S5: Corrective Work Orders.
+6. Phase S6: PC monitoring telemetry.
+7. Phase S7: Notifications, Reporting, final Dashboard/global search.
+8. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
