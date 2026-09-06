@@ -1,177 +1,370 @@
-import { useMemo, useState } from 'react';
-import { Package, Plus, Pencil, Trash2, Download, ArrowDownToLine, ArrowUpFromLine, AlertTriangle } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { usePermission } from '@/components/common/PermissionGuard';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Download, Package, Pencil, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { FormDialog } from '@/components/forms/FormDialog';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/States';
 import { toast } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
+import { hasServerPermission } from '@/lib/authIdentity';
+import { ApiClientError } from '@/lib/apiClient';
 import { downloadCSV, formatCurrency } from '@/utils';
-import type { StockItem, StockTransaction } from '@/types';
+import {
+  INVENTORY_TRANSACTION_KINDS,
+  inventoryGateway,
+  type CreateInventoryItemInput,
+  type InventoryItemDto,
+  type InventoryTransactionDto,
+  type InventoryTransactionKind,
+  type UpdateInventoryItemInput,
+} from '@/services/inventoryApi';
+
+const KIND_LABELS: Record<InventoryTransactionKind, string> = {
+  opening: 'Saldo Awal',
+  receipt: 'Stok Masuk',
+  issue: 'Stok Keluar',
+  adjustment_in: 'Penyesuaian Masuk',
+  adjustment_out: 'Penyesuaian Keluar',
+};
+
+type ItemForm = {
+  itemCode: string;
+  name: string;
+  category: string;
+  unit: string;
+  minimumStock: string;
+  storageLocation: string;
+  supplierName: string;
+  unitPriceSnapshot: string;
+};
+
+type MovementForm = {
+  inventoryItemId: string;
+  clientMutationId: string;
+  kind: InventoryTransactionKind;
+  quantity: string;
+  reason: string;
+  attempted: boolean;
+};
+
+const EMPTY_ITEM: ItemForm = {
+  itemCode: '',
+  name: '',
+  category: '',
+  unit: 'pcs',
+  minimumStock: '0',
+  storageLocation: '',
+  supplierName: '',
+  unitPriceSnapshot: '',
+};
+
+function newMutationId(): string {
+  return crypto.randomUUID();
+}
+
+function messageFrom(error: unknown): string {
+  if (error instanceof ApiClientError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Operasi Inventory gagal.';
+}
+
+function nullIfBlank(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function toItemForm(item: InventoryItemDto): ItemForm {
+  return {
+    itemCode: item.itemCode,
+    name: item.name,
+    category: item.category,
+    unit: item.unit,
+    minimumStock: String(item.minimumStock),
+    storageLocation: item.storageLocation ?? '',
+    supplierName: item.supplierName ?? '',
+    unitPriceSnapshot: item.unitPriceSnapshot === null ? '' : String(item.unitPriceSnapshot),
+  };
+}
+
+function createItemInput(form: ItemForm): CreateInventoryItemInput {
+  return {
+    itemCode: form.itemCode,
+    name: form.name,
+    category: form.category,
+    unit: form.unit,
+    minimumStock: Number(form.minimumStock || 0),
+    storageLocation: nullIfBlank(form.storageLocation),
+    supplierName: nullIfBlank(form.supplierName),
+    unitPriceSnapshot: form.unitPriceSnapshot === '' ? null : Number(form.unitPriceSnapshot),
+  };
+}
+
+function updateItemInput(form: ItemForm): UpdateInventoryItemInput {
+  const { itemCode: _itemCode, ...input } = createItemInput(form);
+  void _itemCode;
+  return input;
+}
 
 export function StockPage() {
-  const { db, mutate } = useAppData();
-  const canCreate = usePermission('stock', 'create');
-  const canUpdate = usePermission('stock', 'update');
-  const canDelete = usePermission('stock', 'delete');
-  const canExport = usePermission('stock', 'export');
-  const [open, setOpen] = useState(false);
-  const [txOpen, setTxOpen] = useState(false);
-  const [confirmDel, setConfirmDel] = useState<StockItem | null>(null);
-  const [editing, setEditing] = useState<StockItem | null>(null);
-  const [form, setForm] = useState<Partial<StockItem>>({});
-  const [txForm, setTxForm] = useState<{ itemId: string; type: 'in' | 'out' | 'adjust'; quantity: number; reason: string }>({ itemId: '', type: 'in', quantity: 1, reason: '' });
-  const [txTab, setTxTab] = useState('items');
+  const user = useAuthStore((state) => state.user);
+  const canCreate = hasServerPermission(user, 'stock.create');
+  const canUpdate = hasServerPermission(user, 'stock.update');
+  const canTransact = hasServerPermission(user, 'stock.transact');
+  const canExport = hasServerPermission(user, 'stock.export');
+
+  const [items, setItems] = useState<InventoryItemDto[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransactionDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [tab, setTab] = useState<'items' | 'transactions'>('items');
+  const [itemOpen, setItemOpen] = useState(false);
+  const [editing, setEditing] = useState<InventoryItemDto | null>(null);
+  const [itemForm, setItemForm] = useState<ItemForm>(EMPTY_ITEM);
+  const [movementOpen, setMovementOpen] = useState(false);
+  const [movement, setMovement] = useState<MovementForm>({
+    inventoryItemId: '',
+    clientMutationId: newMutationId(),
+    kind: 'receipt',
+    quantity: '1',
+    reason: '',
+    attempted: false,
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const [nextItems, nextTransactions] = await Promise.all([
+        inventoryGateway.listAllItems(),
+        inventoryGateway.listAllTransactions(),
+      ]);
+      setItems(nextItems);
+      setTransactions(nextTransactions);
+    } catch (error) {
+      setLoadError(messageFrom(error));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const transactionCountByItem = useMemo(() => {
+    const counts = new Map<string, number>();
+    transactions.forEach((transaction) => counts.set(
+      transaction.inventoryItemId,
+      (counts.get(transaction.inventoryItemId) ?? 0) + 1,
+    ));
+    return counts;
+  }, [transactions]);
 
   const stats = useMemo(() => ({
-    total: db.stock.items.length,
-    lowStock: db.stock.items.filter((s) => s.quantity <= s.minStock).length,
-    totalValue: db.stock.items.reduce((sum, s) => sum + s.quantity * s.price, 0),
-    categories: [...new Set(db.stock.items.map((s) => s.category))].length,
-  }), [db.stock]);
+    total: items.length,
+    lowStock: items.filter((item) => item.onHandQuantity <= item.minimumStock).length,
+    totalValue: items.reduce((sum, item) => sum + item.onHandQuantity * (item.unitPriceSnapshot ?? 0), 0),
+    categories: new Set(items.map((item) => item.category)).size,
+  }), [items]);
 
   function openCreate() {
-    if (!canCreate) return;
     setEditing(null);
-    setForm({ unit: 'pcs', quantity: 0, minStock: 5, price: 0, location: 'Gudang A' });
-    setOpen(true);
+    setItemForm({ ...EMPTY_ITEM });
+    setItemOpen(true);
   }
-  function openEdit(s: StockItem) { if (!canUpdate) return; setEditing(s); setForm(s); setOpen(true); }
 
-  function save() {
-    if (editing ? !canUpdate : !canCreate) return;
-    if (!form.name) { toast('Nama barang wajib diisi', 'error'); return; }
-    mutate((d) => {
+  function openEdit(item: InventoryItemDto) {
+    setEditing(item);
+    setItemForm(toItemForm(item));
+    setItemOpen(true);
+  }
+
+  async function saveItem() {
+    if (!itemForm.name.trim() || !itemForm.category.trim() || !itemForm.unit.trim() || (!editing && !itemForm.itemCode.trim())) {
+      toast('Kode, nama, kategori, dan satuan wajib diisi.', 'error');
+      return;
+    }
+
+    try {
       if (editing) {
-        const idx = d.stock.items.findIndex((s) => s.id === editing.id);
-        if (idx >= 0) d.stock.items[idx] = { ...d.stock.items[idx], ...form } as StockItem;
+        await inventoryGateway.updateItem(editing.id, editing.version, updateItemInput(itemForm));
+        toast('Metadata item diperbarui pada server.', 'success');
       } else {
-        d.stock.items.push({ ...form, id: `stk-${Date.now()}` } as StockItem);
+        await inventoryGateway.createItem(createItemInput(itemForm));
+        toast('Item stok dibuat dengan saldo awal 0.', 'success');
       }
+
+      setItemOpen(false);
+      await load();
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
+  }
+
+  function openMovement(item: InventoryItemDto, kind: InventoryTransactionKind) {
+    setMovement({
+      inventoryItemId: item.id,
+      clientMutationId: newMutationId(),
+      kind,
+      quantity: '1',
+      reason: '',
+      attempted: false,
     });
-    toast(editing ? 'Barang diperbarui' : 'Barang ditambahkan', 'success');
-    setOpen(false);
+    setMovementOpen(true);
   }
 
-  function remove() {
-    if (!confirmDel || !canDelete) return;
-    mutate((d) => { d.stock.items = d.stock.items.filter((s) => s.id !== confirmDel.id); });
-    toast('Barang dihapus', 'success');
-    setConfirmDel(null);
+  function updateMovement(patch: Partial<Omit<MovementForm, 'clientMutationId' | 'attempted'>>) {
+    setMovement((current) => ({
+      ...current,
+      ...patch,
+      clientMutationId: current.attempted ? newMutationId() : current.clientMutationId,
+      attempted: false,
+    }));
   }
 
-  function addTransaction() {
-    if (!canCreate) return;
-    if (!txForm.itemId || txForm.quantity <= 0) { toast('Lengkapi data transaksi', 'error'); return; }
-    const item = db.stock.items.find((s) => s.id === txForm.itemId);
-    if (!item) return;
-    if (txForm.type === 'out' && txForm.quantity > item.quantity) { toast('Stok tidak mencukupi. Tidak boleh negatif.', 'error'); return; }
-    mutate((d) => {
-      const idx = d.stock.items.findIndex((s) => s.id === txForm.itemId);
-      if (idx >= 0) {
-        const delta = txForm.type === 'in' ? txForm.quantity : txForm.type === 'out' ? -txForm.quantity : 0;
-        d.stock.items[idx].quantity = Math.max(0, d.stock.items[idx].quantity + delta);
-        d.stock.transactions.unshift({ id: `stx-${Date.now()}`, itemId: txForm.itemId, type: txForm.type, quantity: txForm.quantity, date: new Date().toISOString().split('T')[0], reason: txForm.reason, by: 'Admin' });
-      }
-    });
-    toast('Transaksi stok ditambahkan', 'success');
-    setTxOpen(false);
-    setTxForm({ itemId: '', type: 'in', quantity: 1, reason: '' });
+  async function submitMovement() {
+    const quantity = Number(movement.quantity);
+    if (!movement.inventoryItemId || !Number.isFinite(quantity) || quantity <= 0 || movement.reason.trim().length < 3) {
+      toast('Item, jumlah positif, dan alasan minimal 3 karakter wajib diisi.', 'error');
+      return;
+    }
+
+    setMovement((current) => ({ ...current, attempted: true }));
+
+    try {
+      const result = await inventoryGateway.transact({
+        inventoryItemId: movement.inventoryItemId,
+        clientMutationId: movement.clientMutationId,
+        kind: movement.kind,
+        quantity,
+        reason: movement.reason.trim(),
+      });
+
+      toast(
+        result.replayed
+          ? 'Retry dikenali; transaksi lama direplay tanpa movement baru.'
+          : 'Transaksi stok dicatat pada immutable ledger.',
+        'success',
+      );
+      setMovementOpen(false);
+      await load();
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    }
   }
 
-  function exportCSV() {
-    if (!canExport) return;
-    downloadCSV('stok-spare-part.csv', db.stock.items.map((s) => ({ Nama: s.name, Kategori: s.category, Jumlah: s.quantity, Min: s.minStock, Satuan: s.unit, Lokasi: s.location, Supplier: s.supplier, Harga: s.price })));
+  function exportCsv() {
+    downloadCSV('stok-canonical.csv', items.map((item) => ({
+      Kode: item.itemCode,
+      Nama: item.name,
+      Kategori: item.category,
+      Jumlah: item.onHandQuantity,
+      Minimum: item.minimumStock,
+      Satuan: item.unit,
+      Lokasi: item.storageLocation ?? '',
+      Supplier: item.supplierName ?? '',
+      HargaSnapshot: item.unitPriceSnapshot ?? '',
+    })));
   }
 
-  const columns: Column<StockItem>[] = [
-    { key: 'name', header: 'Nama', sortable: true, render: (s) => <span className="font-medium text-ink-primary">{s.name}</span> },
+  const itemColumns: Column<InventoryItemDto>[] = [
+    { key: 'code', header: 'Kode', sortable: true, render: (item) => <span className="font-medium text-ink-primary">{item.itemCode}</span> },
+    { key: 'name', header: 'Nama', sortable: true },
     { key: 'category', header: 'Kategori', sortable: true },
-    { key: 'quantity', header: 'Jumlah', sortable: true, render: (s) => <span className={s.quantity <= s.minStock ? 'text-danger font-semibold' : 'text-ink-primary'}>{s.quantity} {s.unit}</span> },
-    { key: 'minStock', header: 'Min', render: (s) => <span className="text-ink-muted">{s.minStock} {s.unit}</span> },
-    { key: 'status', header: 'Status', render: (s) => s.quantity <= s.minStock ? <Badge tone="danger" withIcon>Stok Rendah</Badge> : <Badge tone="success">Aman</Badge> },
-    { key: 'location', header: 'Lokasi' },
-    { key: 'supplier', header: 'Supplier' },
-    { key: 'price', header: 'Harga', sortable: true, sortValue: (s) => s.price, render: (s) => <span className="text-ink-muted">{formatCurrency(s.price)}</span> },
-    { key: 'actions', header: 'Aksi', printHidden: true, render: (s) => (
+    { key: 'quantity', header: 'On Hand', sortable: true, sortValue: (item) => item.onHandQuantity, render: (item) => <span className={item.onHandQuantity <= item.minimumStock ? 'font-semibold text-danger' : 'text-ink-primary'}>{item.onHandQuantity} {item.unit}</span> },
+    { key: 'minimum', header: 'Minimum', render: (item) => <span className="text-ink-muted">{item.minimumStock} {item.unit}</span> },
+    { key: 'status', header: 'Status', render: (item) => item.onHandQuantity <= item.minimumStock ? <Badge tone="danger" withIcon>Stok Rendah</Badge> : <Badge tone="success">Aman</Badge> },
+    { key: 'location', header: 'Lokasi', render: (item) => item.storageLocation ?? '-' },
+    { key: 'price', header: 'Harga Snapshot', sortValue: (item) => item.unitPriceSnapshot ?? 0, render: (item) => item.unitPriceSnapshot === null ? '-' : formatCurrency(item.unitPriceSnapshot) },
+    { key: 'actions', header: 'Aksi', printHidden: true, render: (item) => (
       <div className="flex gap-1">
-        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'in', quantity: 1, reason: '' }); }} className="rounded p-1 text-success-foreground hover:bg-success/10" title="Stok masuk"><ArrowDownToLine className="h-4 w-4" /></button>}
-        {canCreate && <button onClick={() => { setTxOpen(true); setTxForm({ itemId: s.id, type: 'out', quantity: 1, reason: '' }); }} className="rounded p-1 text-warning-foreground hover:bg-warning/10" title="Stok keluar"><ArrowUpFromLine className="h-4 w-4" /></button>}
-        {canUpdate && <button onClick={() => openEdit(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
-        {canDelete && <button onClick={() => setConfirmDel(s)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
+        {canTransact && transactionCountByItem.get(item.id) === undefined && item.onHandQuantity === 0 && <button title="Saldo awal" onClick={() => openMovement(item, 'opening')} className="rounded p-1 text-accent-content hover:bg-base-700"><ArrowDownToLine className="h-4 w-4" /></button>}
+        {canTransact && <button title="Stok masuk" onClick={() => openMovement(item, 'receipt')} className="rounded p-1 text-success-foreground hover:bg-success/10"><ArrowDownToLine className="h-4 w-4" /></button>}
+        {canTransact && <button title="Stok keluar" onClick={() => openMovement(item, 'issue')} className="rounded p-1 text-warning-foreground hover:bg-warning/10"><ArrowUpFromLine className="h-4 w-4" /></button>}
+        {canUpdate && <button title="Edit metadata" onClick={() => openEdit(item)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
       </div>
     ) },
   ];
 
-  const txColumns: Column<StockTransaction>[] = [
-    { key: 'date', header: 'Tanggal', sortable: true },
-    { key: 'item', header: 'Barang', render: (t) => db.stock.items.find((s) => s.id === t.itemId)?.name ?? '-' },
-    { key: 'type', header: 'Tipe', render: (t) => <Badge tone={t.type === 'in' ? 'success' : t.type === 'out' ? 'warning' : 'info'}>{t.type === 'in' ? 'Masuk' : t.type === 'out' ? 'Keluar' : 'Adjust'}</Badge> },
-    { key: 'quantity', header: 'Jumlah', render: (t) => `${t.type === 'out' ? '-' : '+'}${t.quantity}` },
+  const transactionColumns: Column<InventoryTransactionDto>[] = [
+    { key: 'date', header: 'Waktu', sortable: true, sortValue: (tx) => tx.occurredAt, render: (tx) => new Date(tx.occurredAt).toLocaleString('id-ID') },
+    { key: 'item', header: 'Item', render: (tx) => <span>{tx.itemCodeSnapshot} · {tx.itemNameSnapshot}</span> },
+    { key: 'kind', header: 'Jenis', render: (tx) => <Badge tone={tx.signedDelta > 0 ? 'success' : 'warning'}>{KIND_LABELS[tx.kind]}</Badge> },
+    { key: 'delta', header: 'Delta', render: (tx) => <span className={tx.signedDelta > 0 ? 'text-success-foreground' : 'text-warning-foreground'}>{tx.signedDelta > 0 ? '+' : ''}{tx.signedDelta} {tx.unitSnapshot}</span> },
+    { key: 'balance', header: 'Saldo Setelah', render: (tx) => `${tx.balanceAfter} ${tx.unitSnapshot}` },
     { key: 'reason', header: 'Alasan' },
-    { key: 'by', header: 'Oleh' },
+    { key: 'actor', header: 'Oleh', render: (tx) => tx.actorNameSnapshot },
   ];
+
+  if (loading) {
+    return <Card><CardContent><p className="text-sm text-ink-muted">Memuat inventory canonical...</p></CardContent></Card>;
+  }
+
+  if (loadError) {
+    return <EmptyState title="Inventory tidak dapat dimuat" description={loadError} action={<Button onClick={() => void load()}>Coba Lagi</Button>} />;
+  }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Stok & Spare Part" description="Kelola persediaan barang habis pakai, komponen pengganti, dan transaksi stok." icon={<Package className="h-5 w-5" />}
+      <PageHeader
+        title="Stok & Spare Part"
+        description="Saldo stok sekarang hanya berubah melalui immutable InventoryTransaction di server. Tidak ada direct quantity edit browser-local."
+        icon={<Package className="h-5 w-5" />}
         actions={<>
-          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Barang</Button>}
+          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
+          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tambah Item</Button>}
         </>}
       />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.total}</p><p className="text-xs text-ink-muted">Jenis Barang</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.total}</p><p className="text-xs text-ink-muted">Jenis Item</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.lowStock}</p><p className="text-xs text-ink-muted">Stok Rendah</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(stats.totalValue)}</p><p className="text-xs text-ink-muted">Nilai Stok</p></CardContent></Card>
+        <Card><CardContent><p className="text-2xl font-bold text-ink-primary">{formatCurrency(stats.totalValue)}</p><p className="text-xs text-ink-muted">Nilai Snapshot</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.categories}</p><p className="text-xs text-ink-muted">Kategori</p></CardContent></Card>
       </div>
 
       {stats.lowStock > 0 && (
         <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
-          <AlertTriangle className="h-4 w-4" /> {stats.lowStock} barang di bawah stok minimum
+          <AlertTriangle className="h-4 w-4" />{stats.lowStock} item berada pada atau di bawah minimum stok.
         </div>
       )}
 
       <div className="print-hidden flex gap-2 border-b border-base-700">
-        <button onClick={() => setTxTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'items' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Daftar Barang</button>
-        <button onClick={() => setTxTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${txTab === 'transactions' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Histori Transaksi</button>
+        <button onClick={() => setTab('items')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'items' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Daftar Item</button>
+        <button onClick={() => setTab('transactions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'transactions' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Immutable Ledger</button>
       </div>
 
-      {txTab === 'items' ? (
-        <Card><DataTable columns={columns} data={db.stock.items} rowKey={(s) => s.id} searchable searchKeys={(s) => `${s.name} ${s.category} ${s.supplier}`} /></Card>
-      ) : (
-        <Card><DataTable columns={txColumns} data={db.stock.transactions} rowKey={(t) => t.id} searchable searchKeys={(t) => `${t.reason} ${t.by}`} /></Card>
-      )}
+      {tab === 'items'
+        ? <Card><DataTable columns={itemColumns} data={items} rowKey={(item) => item.id} searchable searchKeys={(item) => `${item.itemCode} ${item.name} ${item.category} ${item.storageLocation ?? ''} ${item.supplierName ?? ''}`} /></Card>
+        : <Card><DataTable columns={transactionColumns} data={transactions} rowKey={(tx) => tx.id} searchable searchKeys={(tx) => `${tx.itemCodeSnapshot} ${tx.itemNameSnapshot} ${tx.reason} ${tx.actorNameSnapshot}`} /></Card>}
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Barang' : 'Tambah Barang'} onSubmit={save} size="md">
+      <FormDialog open={itemOpen} onClose={() => setItemOpen(false)} title={editing ? 'Edit Metadata Item' : 'Tambah Item Stok'} onSubmit={() => void saveItem()} size="md">
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2"><Input label="Nama Barang" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <Input label="Kategori" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-          <Input label="Satuan" value={form.unit ?? ''} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-          <Input label="Jumlah" type="number" value={form.quantity ?? 0} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
-          <Input label="Min Stok" type="number" value={form.minStock ?? 0} onChange={(e) => setForm({ ...form, minStock: Number(e.target.value) })} />
-          <Input label="Lokasi" value={form.location ?? ''} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <Input label="Supplier" value={form.supplier ?? ''} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-          <Input label="Harga" type="number" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+          <Input label="Kode Item" value={itemForm.itemCode} disabled={Boolean(editing)} onChange={(event) => setItemForm({ ...itemForm, itemCode: event.target.value })} />
+          <Input label="Nama Item" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} />
+          <Input label="Kategori" value={itemForm.category} onChange={(event) => setItemForm({ ...itemForm, category: event.target.value })} />
+          <Input label="Satuan" value={itemForm.unit} disabled={Boolean(editing && transactionCountByItem.get(editing.id))} onChange={(event) => setItemForm({ ...itemForm, unit: event.target.value })} />
+          <Input label="Minimum Stok" type="number" min="0" step="0.001" value={itemForm.minimumStock} onChange={(event) => setItemForm({ ...itemForm, minimumStock: event.target.value })} />
+          <Input label="Lokasi Simpan" value={itemForm.storageLocation} onChange={(event) => setItemForm({ ...itemForm, storageLocation: event.target.value })} />
+          <Input label="Supplier" value={itemForm.supplierName} onChange={(event) => setItemForm({ ...itemForm, supplierName: event.target.value })} />
+          <Input label="Harga Satuan Snapshot" type="number" min="0" step="0.01" value={itemForm.unitPriceSnapshot} onChange={(event) => setItemForm({ ...itemForm, unitPriceSnapshot: event.target.value })} />
+          {!editing && <p className="sm:col-span-2 rounded-lg border border-base-700 bg-base-800/60 p-3 text-xs text-ink-muted">Jumlah tidak diisi di form metadata. Saldo awal harus dicatat sebagai transaksi <strong>opening</strong> agar history dapat direkonstruksi.</p>}
         </div>
       </FormDialog>
 
-      <FormDialog open={txOpen} onClose={() => setTxOpen(false)} title="Transaksi Stok" onSubmit={addTransaction} size="md" submitLabel="Simpan Transaksi">
+      <FormDialog open={movementOpen} onClose={() => setMovementOpen(false)} title="Transaksi Stok" onSubmit={() => void submitMovement()} submitLabel="Catat Transaksi" size="md">
         <div className="space-y-4">
-          <Select label="Barang" value={txForm.itemId} onChange={(e) => setTxForm({ ...txForm, itemId: e.target.value })} options={db.stock.items.map((s) => ({ value: s.id, label: `${s.name} (${s.quantity} ${s.unit})` }))} />
-          <Select label="Tipe" value={txForm.type} onChange={(e) => setTxForm({ ...txForm, type: e.target.value as 'in' | 'out' | 'adjust' })} options={[{ value: 'in', label: 'Stok Masuk' }, { value: 'out', label: 'Stok Keluar' }, { value: 'adjust', label: 'Penyesuaian' }]} />
-          <Input label="Jumlah" type="number" value={txForm.quantity} onChange={(e) => setTxForm({ ...txForm, quantity: Number(e.target.value) })} />
-          <Textarea label="Alasan" value={txForm.reason} onChange={(e) => setTxForm({ ...txForm, reason: e.target.value })} />
+          <Select label="Item" value={movement.inventoryItemId} onChange={(event) => updateMovement({ inventoryItemId: event.target.value })} options={items.map((item) => ({ value: item.id, label: `${item.itemCode} · ${item.name} (${item.onHandQuantity} ${item.unit})` }))} />
+          <Select label="Jenis" value={movement.kind} onChange={(event) => updateMovement({ kind: event.target.value as InventoryTransactionKind })} options={INVENTORY_TRANSACTION_KINDS.map((kind) => ({ value: kind, label: KIND_LABELS[kind] }))} />
+          <Input label="Jumlah" type="number" min="0.001" step="0.001" value={movement.quantity} onChange={(event) => updateMovement({ quantity: event.target.value })} />
+          <Textarea label="Alasan" value={movement.reason} onChange={(event) => updateMovement({ reason: event.target.value })} />
+          <p className="text-xs text-ink-muted">Retry submit yang sama memakai clientMutationId yang sama. Jika payload diubah setelah percobaan, UI membuat mutation ID baru.</p>
         </div>
       </FormDialog>
-
-      <ConfirmDialog open={Boolean(confirmDel)} onClose={() => setConfirmDel(null)} onConfirm={remove} message={`Hapus barang ${confirmDel?.name}?`} confirmLabel="Hapus" />
     </div>
   );
 }

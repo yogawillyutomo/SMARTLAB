@@ -34,11 +34,14 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 - Fixed Asset sudah menjadi canonical melalui S4.2 dengan exact optional 1:1 Asset↔Device linkage, ETag concurrency, lifecycle terpisah, audit history, dan `/assets` server-authoritative.
 - Pelaksanaan Lab tetap merekam observasi Device canonical dan explicit Observation→Incident linkage. Evidence Asset dari S3.5 tidak diretrofit otomatis; historical free-text evidence tidak difabrikasi menjadi canonical Asset reference.
 
-## P0-05 Integritas inventaris — Dalam perencanaan
+## P0-05 Integritas inventaris — S4.3 implementation tranche
 
-- Tolak penggunaan spare part melebihi stok tersedia.
-- Gunakan perilaku domain transaksional saat Inventory API Laravel tersedia.
-- Browser-local stock tidak boleh dijadikan final business invariant.
+- S4.3 menyediakan `InventoryItem` canonical dan immutable `InventoryTransaction` dengan quantity precision tiga digit desimal.
+- Movement mengunci row item, menghitung saldo di dalam transaksi, dan menolak hasil negatif di application layer serta PostgreSQL.
+- Stable School-scoped `clientMutationId` mereplay retry identik dan menolak ID yang dipakai kembali untuk payload berbeda.
+- Opening balance harus berupa transaksi `opening`; metadata create/PATCH tidak dapat menulis balance.
+- `/stock` pada PR #80 sudah server-authoritative dan tidak menggunakan `db.stock` / browser mutation / hard delete.
+- Cross-domain consumption oleh Preventive Maintenance dan Work Order belum menjadi authority S4.3; masing-masing tetap menunggu S4.5 dan S5.
 
 ## P0-06 Penomoran dokumen — Sebagian selesai
 
@@ -85,4 +88,4 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | OV-01 Override kegiatan prioritas | canonical baseline | Schedule Exception cancel/relocate + Priority Event request/approval sudah canonical; tidak ada force override. | S2.7 + S2.8 delivered. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | implementation-complete melalui S3.6 | LaboratorySession + ActivityReport + `/sessions` server-authoritative; `/journals` compatibility redirect; S3.5 execution evidence; S3.6 controlled offline draft sync dengan account-scoped cache, idempotent receipts, dan fail-closed conflict/rebase. | Operator/browser offline UX matrix tetap menjadi production-rollout UAT; tidak menghalangi perencanaan S4. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, dan S4.1 contract lock sudah accepted. S4.2 fixed Assets adalah implementation tranche saat ini; sesudah merged-head verification, fase berikutnya S4.3 Inventory. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, dan S4.1 contract lock sudah accepted. S4.2 fixed Assets sudah merged sebagai PR #79 dan exact merged-head CI hijau. S4.3 Inventory adalah implementation tranche PR #80; setelah explicit merge + exact merged-head verification, fase berikutnya S4.4 Loan custody. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).

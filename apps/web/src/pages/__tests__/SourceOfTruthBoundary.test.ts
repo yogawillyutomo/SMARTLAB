@@ -9,6 +9,7 @@ import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
 import sessionsSource from '@/pages/SessionsPage.tsx?raw';
 import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import assetsSource from '@/pages/AssetsPage.tsx?raw';
+import stockSource from '@/pages/StockPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -176,6 +177,23 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="assets.view"');
     expect(navSource).toContain("assets: 'assets.view'");
     expect(navSource).toContain("serverPermission: 'assets.view'");
+  });
+
+  it('cuts stock and spare parts over to the canonical S4.3 immutable ledger', () => {
+    expect(stockSource).not.toContain('useAppData');
+    expect(stockSource).not.toContain('db.stock');
+    expect(stockSource).not.toContain('mutate((d)');
+    expect(stockSource).not.toContain('ConfirmDialog');
+    expect(stockSource).not.toContain('Trash2');
+    expect(stockSource).toContain("from '@/services/inventoryApi'");
+    expect(stockSource).toContain('inventoryGateway.listAllItems()');
+    expect(stockSource).toContain('inventoryGateway.listAllTransactions()');
+    expect(stockSource).toContain('inventoryGateway.transact');
+    expect(stockSource).toContain('Tidak ada direct quantity edit browser-local');
+    expect(stockSource).toContain('Saldo awal harus dicatat sebagai transaksi');
+    expect(appSource).toContain('RequireServerPermission permission="stock.view"');
+    expect(navSource).toContain("stock: 'stock.view'");
+    expect(navSource).toContain("serverPermission: 'stock.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {

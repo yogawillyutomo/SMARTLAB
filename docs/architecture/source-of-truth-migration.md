@@ -47,7 +47,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
-| `/stock` | stock/spare parts | inventory + immutable transaction domain |
 | `/work-orders` | corrective work orders | work-order domain linked to Incident |
 | `/maintenance` | preventive maintenance | maintenance plan/execution domain |
 | `/loans` | item loans | custody/loan domain |
@@ -345,8 +344,8 @@ S4 begins with the accepted S4.1 contract/authority lock in [S4 Asset, Inventory
 Planned slices:
 
 - **S4.1 — complete/locked:** authority + semantic contract, prototype reconciliation;
-- **S4.2 — implementation tranche:** fixed Asset backend, exact Asset↔Device link, ETag/audit lifecycle actions, OpenAPI 0.25, and `/assets` server-authoritative cutover;
-- **S4.3:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and /stock cutover;
+- **S4.2 — complete on merged main:** fixed Asset backend, exact Asset↔Device link, ETag/audit lifecycle actions, OpenAPI 0.25, and `/assets` server-authoritative cutover; merged as PR #79 / `69cf3305`;
+- **S4.3 — implementation tranche in PR #80:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and `/stock` cutover; becomes merged authority only after exact-head merge verification;
 - **S4.4:** Loan/LoanItem custody and /loans cutover;
 - **S4.5:** Preventive Maintenance plan/execution, Inventory consumption, and /maintenance cutover;
 - **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
@@ -360,6 +359,18 @@ Delivered by S4.2 when this tranche is present on merged `main`:
 - retirement/disposal are dedicated reasoned actions and fail closed against an incompatible linked Device lifecycle;
 - `/assets` and `/assets/:id` read canonical API data only; browser-local delete, transfer, fake QR, and stock-opname mutations are removed from authoritative Asset UI;
 - OpenAPI 0.25 describes only implemented Asset surfaces.
+
+Delivered by the S4.3 implementation tranche:
+
+- `InventoryItem` owns quantity-tracked stock metadata; item creation always starts at server-derived zero balance and metadata PATCH cannot write `onHandQuantity`;
+- quantity precision is decimal to three fractional digits so the model does not assume integer-only units;
+- every balance change is an immutable `InventoryTransaction` with server-derived signed delta and before/after balances;
+- `opening`, `receipt`, `issue`, `adjustment_in`, and `adjustment_out` are explicit movement kinds; opening balance is evidence, never a hidden quantity assignment;
+- the InventoryItem row is locked `FOR UPDATE` while calculating and committing a movement, and both application logic and PostgreSQL reject a negative resulting balance;
+- stable School-scoped `clientMutationId` plus a canonical request SHA-256 gives exact retry replay; reuse for a different payload fails with `STOCK_MUTATION_REUSED`;
+- ledger business evidence is protected from update/delete at the database layer while nullable live actor FKs may be cleared on actor deletion; immutable actor/item snapshots remain;
+- `/stock` reads Inventory APIs only; direct browser quantity mutation and item hard-delete controls are removed;
+- Work Order stock consumption is **not** implemented in S4.3 and remains S5; Maintenance inventory consumption waits for S4.5.
 
 Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 

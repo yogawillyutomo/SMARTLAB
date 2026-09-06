@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\IdentityAdministrationController;
 use App\Http\Controllers\Api\V1\IncidentController;
+use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
@@ -29,6 +30,7 @@ use App\Http\Middleware\RequireAssetVersionPrecondition;
 use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
+use App\Http\Middleware\RequireInventoryItemVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
@@ -193,6 +195,14 @@ Route::prefix('v1')->group(function (): void {
         Route::get('incidents/reporting-context/laboratories/{laboratoryId}/devices', [IncidentController::class, 'reportingDevices'])->middleware('permission:incidents.create');
         Route::get('incidents/assignee-candidates', [IncidentController::class, 'assigneeCandidates'])->middleware('permission:incidents.assign');
         Route::get('incidents/submissions/{submissionId}', [IncidentController::class, 'submission'])->middleware('permission:incidents.view');
+        Route::get('stock-items', [InventoryController::class, 'index'])->middleware('permission:stock.view');
+        Route::post('stock-items', [InventoryController::class, 'store'])->middleware('permission:stock.create');
+        Route::get('stock-items/{itemId}', [InventoryController::class, 'show'])->middleware('permission:stock.view');
+        Route::patch('stock-items/{itemId}', [InventoryController::class, 'update'])
+            ->middleware(['permission:stock.update', RequireInventoryItemVersionPrecondition::class]);
+        Route::get('stock-transactions', [InventoryController::class, 'transactions'])->middleware('permission:stock.view');
+        Route::post('stock-transactions', [InventoryController::class, 'transact'])->middleware('permission:stock.transact');
+
         Route::get('incidents', [IncidentController::class, 'index'])->middleware('permission:incidents.view');
         Route::post('incidents', [IncidentController::class, 'store'])->middleware('permission:incidents.create');
         Route::get('incidents/{incidentId}', [IncidentController::class, 'show'])->middleware('permission:incidents.view');

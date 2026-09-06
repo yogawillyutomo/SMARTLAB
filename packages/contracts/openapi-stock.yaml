@@ -1,0 +1,127 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Inventory API module
+  version: 0.26.0
+paths:
+  /stock-items:
+    get:
+      operationId: listStockItems
+      summary: List tenant-scoped quantity-tracked InventoryItems
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: category, in: query, schema: { type: string, minLength: 1, maxLength: 120 } }
+        - { name: lowStock, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 25 } }
+      responses:
+        '200': { description: Paginated InventoryItem collection }
+    post:
+      operationId: createStockItem
+      summary: Create zero-balance InventoryItem metadata
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInventoryItemInput' }
+      responses:
+        '201': { description: Created zero-balance InventoryItem with ETag }
+        '422': { description: Validation failure }
+  /stock-items/{itemId}:
+    parameters:
+      - { name: itemId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getStockItem
+      security: *auth
+      responses:
+        '200': { description: InventoryItem detail }
+        '404': { description: Unknown or cross-tenant item }
+    patch:
+      operationId: updateStockItem
+      summary: Update InventoryItem metadata without changing balance
+      security: *auth
+      parameters:
+        - &ifMatch { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateInventoryItemInput' }
+      responses:
+        '200': { description: Updated InventoryItem }
+        '409': { description: Unit locked after movement exists }
+        '412': { description: Version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /stock-transactions:
+    get:
+      operationId: listStockTransactions
+      summary: List immutable tenant-scoped stock movements
+      security: *auth
+      parameters:
+        - { name: inventoryItemId, in: query, schema: { type: string, format: ulid } }
+        - { name: kind, in: query, schema: { $ref: '#/components/schemas/InventoryTransactionKind' } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+      responses:
+        '200': { description: Paginated immutable stock transaction collection }
+    post:
+      operationId: createStockTransaction
+      summary: Apply one serialized idempotent stock movement
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInventoryTransactionInput' }
+      responses:
+        '201': { description: New immutable movement committed }
+        '200': { description: Exact retry replayed without another balance change }
+        '404': { description: Unknown or cross-tenant item }
+        '409': { description: Insufficient stock, opening conflict, or mutation ID reuse mismatch }
+        '422': { description: Validation failure }
+components:
+  schemas:
+    InventoryTransactionKind:
+      type: string
+      enum: [opening, receipt, issue, adjustment_in, adjustment_out]
+    CreateInventoryItemInput:
+      type: object
+      additionalProperties: false
+      required: [itemCode, name, category, unit]
+      properties:
+        itemCode: { type: string, pattern: '^[A-Z0-9][A-Z0-9-]{2,31}$' }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        category: { type: string, minLength: 1, maxLength: 120 }
+        unit: { type: string, minLength: 1, maxLength: 32 }
+        minimumStock: { type: number, minimum: 0, multipleOf: 0.001 }
+        storageLocation: { type: [string, 'null'], maxLength: 255 }
+        supplierName: { type: [string, 'null'], maxLength: 255 }
+        unitPriceSnapshot: { type: [number, 'null'], minimum: 0, multipleOf: 0.01 }
+    UpdateInventoryItemInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        category: { type: string, minLength: 1, maxLength: 120 }
+        unit: { type: string, minLength: 1, maxLength: 32 }
+        minimumStock: { type: number, minimum: 0, multipleOf: 0.001 }
+        storageLocation: { type: [string, 'null'], maxLength: 255 }
+        supplierName: { type: [string, 'null'], maxLength: 255 }
+        unitPriceSnapshot: { type: [number, 'null'], minimum: 0, multipleOf: 0.01 }
+    CreateInventoryTransactionInput:
+      type: object
+      additionalProperties: false
+      required: [inventoryItemId, clientMutationId, kind, quantity, reason]
+      properties:
+        inventoryItemId: { type: string, format: ulid }
+        clientMutationId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/InventoryTransactionKind' }
+        quantity: { type: number, exclusiveMinimum: 0, multipleOf: 0.001 }
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+  securitySchemes:
+    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
+    sanctumBearer: { type: http, scheme: bearer }
