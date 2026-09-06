@@ -6,6 +6,7 @@ if [[ -f "$ROOT/apps/web/package.json" ]]; then
   cd "$ROOT/apps/web"
   npm ci
   npm run lint
+  node "$ROOT/scripts/check-relative-doc-links.mjs"
   npm run typecheck
   npm run test
   npm run build

@@ -41,6 +41,9 @@ jobs:
       - name: Lint web application
         run: npm run lint
 
+      - name: Validate relative Markdown links
+        run: node ../../scripts/check-relative-doc-links.mjs
+
       - name: Validate OpenAPI YAML syntax
         run: ruby ../../scripts/check-openapi-syntax.rb
 

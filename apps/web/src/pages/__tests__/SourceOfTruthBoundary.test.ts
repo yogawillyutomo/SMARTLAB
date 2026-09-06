@@ -241,6 +241,39 @@ describe('source-of-truth migration foundation', () => {
     expect(navSource).toContain("serverPermission: 'maintenance.view'");
   });
 
+  it('closes the S4 production source-of-truth boundary across all four canonical routes', () => {
+    const s4Sources = [assetsSource, stockSource, loansSource, maintenanceSource];
+
+    for (const source of s4Sources) {
+      expect(source).not.toContain('useAppData');
+      expect(source).not.toContain('mutate((d)');
+      expect(source).not.toContain('services/repositories');
+      expect(source).not.toContain('usePermission');
+      expect(source).not.toContain('db.workOrders');
+      expect(source).not.toContain('workOrderRepository');
+    }
+
+    expect(assetsSource).not.toContain('db.assets');
+    expect(stockSource).not.toContain('db.stock');
+    expect(loansSource).not.toContain('db.loans');
+    expect(maintenanceSource).not.toContain('db.maintenance');
+
+    expect(assetsSource).toContain('assetGateway');
+    expect(stockSource).toContain('inventoryGateway');
+    expect(loansSource).toContain('loanGateway');
+    expect(maintenanceSource).toContain('maintenanceGateway');
+
+    expect(appSource).toContain('RequireServerPermission permission="assets.view"');
+    expect(appSource).toContain('RequireServerPermission permission="stock.view"');
+    expect(appSource).toContain('RequireServerPermission permission="loans.view"');
+    expect(appSource).toContain('RequireServerPermission permission="maintenance.view"');
+
+    expect(navSource).toContain("assets: 'assets.view'");
+    expect(navSource).toContain("stock: 'stock.view'");
+    expect(navSource).toContain("loans: 'loans.view'");
+    expect(navSource).toContain("maintenance: 'maintenance.view'");
+  });
+
   it('does not seed an active Laboratory identifier into UI state', () => {
     expect(uiStoreSource).toContain("activeLabId: ''");
     expect(uiStoreSource).not.toContain("activeLabId: 'lab-rpl-1'");
