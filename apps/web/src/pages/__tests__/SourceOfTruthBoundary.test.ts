@@ -10,6 +10,7 @@ import sessionsSource from '@/pages/SessionsPage.tsx?raw';
 import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import assetsSource from '@/pages/AssetsPage.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
+import loansSource from '@/pages/LoansPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -194,6 +195,27 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="stock.view"');
     expect(navSource).toContain("stock: 'stock.view'");
     expect(navSource).toContain("serverPermission: 'stock.view'");
+  });
+
+  it('cuts Loan custody over to canonical S4.4 exact-Asset server authority', () => {
+    expect(loansSource).not.toContain('useAppData');
+    expect(loansSource).not.toContain('db.loans');
+    expect(loansSource).not.toContain('mutate((d)');
+    expect(loansSource).not.toContain('usePermission');
+    expect(loansSource).not.toContain('markOverdue');
+    expect(loansSource).not.toContain('createIncident');
+    expect(loansSource).not.toContain('itemName');
+    expect(loansSource).not.toContain('quantity');
+    expect(loansSource).toContain("from '@/services/loanApi'");
+    expect(loansSource).toContain("from '@/services/assetApi'");
+    expect(loansSource).toContain('loanGateway.listAll()');
+    expect(loansSource).toContain('loanGateway.checkout');
+    expect(loansSource).toContain('loanGateway.returnLoan');
+    expect(loansSource).toContain('satu LoanItem → satu Asset ULID exact');
+    expect(loansSource).toContain('Kerusakan tidak membuat Incident');
+    expect(appSource).toContain('RequireServerPermission permission="loans.view"');
+    expect(navSource).toContain("loans: 'loans.view'");
+    expect(navSource).toContain("serverPermission: 'loans.view'");
   });
 
   it('does not seed an active Laboratory identifier into UI state', () => {
