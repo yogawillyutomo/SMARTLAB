@@ -56,10 +56,13 @@ The detailed evidence record is preserved in [Documentation Convergence Audit](a
 - [Dated Schedule Exception](architecture/dated-schedule-exception-contract.md)
 - [Priority Event](architecture/priority-event-contract.md)
 - [Laboratory Session + Activity Report](architecture/laboratory-session-activity-report-contract.md)
+- [S4 Asset, Inventory, Loan, and Preventive Maintenance](architecture/asset-inventory-loan-maintenance-contract.md)
+- [S4 Prototype Reconciliation Audit](architecture/S4_PROTOTYPE_RECONCILIATION.md)
 
 ### ADR
 
 - [ADR-001 — Master Data, TESSELA, and SMARTLAB Scheduling Boundary](architecture/ADR-001-master-data-tessela-smartlab-scheduling-boundary.md)
+- [ADR-002 — Asset, Inventory, Loan, and Preventive Maintenance Boundary](architecture/ADR-002-asset-inventory-loan-maintenance-boundary.md)
 
 ADRs currently live under `docs/architecture/`. A future `docs/adr/` directory is a taxonomy target only; existing ADRs are not moved merely for symmetry.
 
@@ -160,7 +163,8 @@ Status reflects **merged `main`** unless the row explicitly says an open PR is i
 | S3.4 — Pelaksanaan Lab frontend cutover | Complete | canonical `/sessions`, server source discovery/actions, report workflow, `/journals` compatibility redirect | browser-local retirement only after all remaining consumers migrate | S3.2–S3.3 | current state + migration doc | PR #72 / `723744b4` | do not restore local Session/Journal authority |
 | S3.5 — Execution evidence | Complete | immutable observations, explicit idempotent Observation→Incident promotion, private report attachments | no attachment delete path in S3.5 by design | S3.4 | Session + ActivityReport contract | PR #73 / `a15d3912` | preserve immutable evidence/private storage boundary |
 | S3.6 — Offline Report Draft Sync + Operational UAT | **Implementation complete; production-rollout UAT pending** | controlled offline draft working copies, idempotent server sync ledger, conflict/rebase UX, OpenAPI 0.24, automated contract/UAT coverage, and checked-in operator matrix | execute authenticated-browser/DevTools network-toggle scenarios in the target rollout environment and record deployment/UAT evidence | S3.5 | Session/Report contract + `docs/reviews/s3.6-offline-draft-uat.md` | PR #74 / S3.6 implementation | keep server/version authority fail-closed; proceed to S4 implementation planning while rollout UAT remains a production gate |
-| S4 — Assets / Inventory / Loans / Preventive Maintenance | Planned | none canonical yet | fixed assets, stock ledger, loans/custody, preventive maintenance; transactional non-negative inventory | S3 exit gate | future domain contracts | none | lock S4 authority/contracts before implementation |
+| S4.1 — Asset / Inventory / Loan / Preventive Maintenance contract | **Candidate on this branch; not authority until merged** | ADR-002, S4 semantic contract, prototype reconciliation audit | merge/accept contract before runtime work | S3 complete | ADR-002 + S4 contract | current S4.1 branch | exact-head CI, review, explicit merge decision |
+| S4.2–S4.6 — S4 implementation | Planned | none canonical yet | Asset + Device link; immutable stock ledger; Loan custody; Preventive Maintenance; cross-domain UAT | S4.1 accepted | S4 contract | none | start S4.2 only after S4.1 merges |
 | S5 — Corrective Work Orders | Planned | Incident already canonical as upstream evidence | Work Orders, assignment/repair lifecycle, spare-part consumption, Incident linkage | S4 inventory | future contract | none | keep waiting-for-parts in Work Order, not Incident status |
 | S6 — PC Monitoring Telemetry | Planned | privacy direction documented only | agent enrollment/revocation, telemetry ingestion/read models, buffering/update policy | device authority + production security | AGENTS/current state; future telemetry contract | none | implement revocable machine auth and approved telemetry only |
 | S7 — Notifications / Reporting / Final Reads | Planned | partial canonical source domains exist | notifications, analytics/reporting, final dashboard/global search, audit reads | S4–S6 source maturity | future reporting/read-model docs | none | no metrics from browser seed/local prototype |
