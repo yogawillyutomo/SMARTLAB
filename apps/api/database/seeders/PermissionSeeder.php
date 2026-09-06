@@ -36,6 +36,17 @@ class PermissionSeeder extends Seeder
             'cancel' => 'Batalkan Peminjaman',
             'export' => 'Ekspor Peminjaman',
         ],
+        'maintenance' => [
+            'view' => 'Lihat Preventive Maintenance',
+            'create-plan' => 'Buat Rencana Preventive Maintenance',
+            'update-plan' => 'Ubah atau Aktifkan/Nonaktifkan Rencana Maintenance',
+            'schedule' => 'Jadwalkan Eksekusi Preventive Maintenance',
+            'start' => 'Mulai Eksekusi dan Ambil Maintenance Custody',
+            'complete' => 'Selesaikan Eksekusi Preventive Maintenance',
+            'cancel' => 'Batalkan Eksekusi Preventive Maintenance',
+            'consume-stock' => 'Gunakan Spare Part Inventory dalam Maintenance',
+            'export' => 'Ekspor Preventive Maintenance',
+        ],
         'stock' => [
             'view' => 'Lihat Stok dan Spare Part',
             'create' => 'Buat Item Stok',
