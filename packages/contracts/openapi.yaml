@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.26.0
-  description: Canonical SmartLab API v1 contract. Version 0.26 adds S4.3 quantity-tracked InventoryItems and immutable idempotent stock movements with non-negative serialized balance enforcement while preserving prior S4.2 and S3.6 surfaces.
+  version: 0.27.0
+  description: Canonical SmartLab API v1 contract. Version 0.27 adds S4.4 exact-Asset Loan custody with optimistic lifecycle concurrency, checkout exclusion, condition snapshots, and server-authoritative loan workflows while preserving prior S4.3 inventory authority.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -13,6 +13,14 @@ paths:
   /auth/logout: { $ref: './openapi-0.11.yaml#/paths/~1auth~1logout' }
   /laboratories: { $ref: './openapi-0.11.yaml#/paths/~1laboratories' }
   /laboratories/{laboratoryId}: { $ref: './openapi-0.11.yaml#/paths/~1laboratories~1{laboratoryId}' }
+  /loans: { $ref: './openapi-loans.yaml#/paths/~1loans' }
+  /loans/{loanId}: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}' }
+  /loans/{loanId}/approve: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1approve' }
+  /loans/{loanId}/reject: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1reject' }
+  /loans/{loanId}/cancel: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1cancel' }
+  /loans/{loanId}/checkout: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1checkout' }
+  /loans/{loanId}/return: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1return' }
+  /loans/{loanId}/close: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1close' }
   /stock-items: { $ref: './openapi-stock.yaml#/paths/~1stock-items' }
   /stock-items/{itemId}: { $ref: './openapi-stock.yaml#/paths/~1stock-items~1{itemId}' }
   /stock-transactions: { $ref: './openapi-stock.yaml#/paths/~1stock-transactions' }

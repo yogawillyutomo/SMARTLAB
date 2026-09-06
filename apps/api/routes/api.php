@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\IdentityAdministrationController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InventoryController;
+use App\Http\Controllers\Api\V1\LoanController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
@@ -31,6 +32,7 @@ use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireInventoryItemVersionPrecondition;
+use App\Http\Middleware\RequireLoanVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
@@ -195,6 +197,22 @@ Route::prefix('v1')->group(function (): void {
         Route::get('incidents/reporting-context/laboratories/{laboratoryId}/devices', [IncidentController::class, 'reportingDevices'])->middleware('permission:incidents.create');
         Route::get('incidents/assignee-candidates', [IncidentController::class, 'assigneeCandidates'])->middleware('permission:incidents.assign');
         Route::get('incidents/submissions/{submissionId}', [IncidentController::class, 'submission'])->middleware('permission:incidents.view');
+        Route::get('loans', [LoanController::class, 'index'])->middleware('permission:loans.view');
+        Route::post('loans', [LoanController::class, 'store'])->middleware('permission:loans.create');
+        Route::get('loans/{loanId}', [LoanController::class, 'show'])->middleware('permission:loans.view');
+        Route::post('loans/{loanId}/approve', [LoanController::class, 'approve'])
+            ->middleware(['permission:loans.approve', RequireLoanVersionPrecondition::class]);
+        Route::post('loans/{loanId}/reject', [LoanController::class, 'reject'])
+            ->middleware(['permission:loans.approve', RequireLoanVersionPrecondition::class]);
+        Route::post('loans/{loanId}/cancel', [LoanController::class, 'cancel'])
+            ->middleware(['permission:loans.cancel', RequireLoanVersionPrecondition::class]);
+        Route::post('loans/{loanId}/checkout', [LoanController::class, 'checkout'])
+            ->middleware(['permission:loans.checkout', RequireLoanVersionPrecondition::class]);
+        Route::post('loans/{loanId}/return', [LoanController::class, 'returnLoan'])
+            ->middleware(['permission:loans.return', RequireLoanVersionPrecondition::class]);
+        Route::post('loans/{loanId}/close', [LoanController::class, 'close'])
+            ->middleware(['permission:loans.close', RequireLoanVersionPrecondition::class]);
+
         Route::get('stock-items', [InventoryController::class, 'index'])->middleware('permission:stock.view');
         Route::post('stock-items', [InventoryController::class, 'store'])->middleware('permission:stock.create');
         Route::get('stock-items/{itemId}', [InventoryController::class, 'show'])->middleware('permission:stock.view');

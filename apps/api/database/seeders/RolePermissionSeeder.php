@@ -13,6 +13,7 @@ class RolePermissionSeeder extends Seeder
             'laboratories.view', 'laboratories.create', 'laboratories.update', 'laboratories.export',
             'assets.view', 'assets.create', 'assets.update', 'assets.delete', 'assets.export', 'assets.link-device', 'assets.retire',
             'stock.view', 'stock.create', 'stock.update', 'stock.transact', 'stock.export',
+            'loans.view', 'loans.view-all', 'loans.create', 'loans.approve', 'loans.checkout', 'loans.return', 'loans.close', 'loans.cancel', 'loans.export',
             'devices.view', 'devices.create', 'devices.update', 'devices.export',
             'device-transfers.create', 'device-transfers.view',
             'layouts.view', 'layouts.create', 'layouts.update', 'layouts.delete',
@@ -36,6 +37,7 @@ class RolePermissionSeeder extends Seeder
             'laboratories.view', 'laboratories.update', 'laboratories.export',
             'assets.view', 'assets.export', 'assets.retire', 'assets.dispose',
             'stock.view', 'stock.export',
+            'loans.view', 'loans.view-all', 'loans.approve', 'loans.checkout', 'loans.return', 'loans.close', 'loans.cancel', 'loans.export',
             'devices.view', 'devices.export',
             'device-transfers.view',
             'layouts.view',
@@ -74,6 +76,7 @@ class RolePermissionSeeder extends Seeder
         ],
         'guru' => [
             'laboratories.view', 'assets.view', 'devices.view',
+            'loans.view', 'loans.create', 'loans.cancel',
             'incidents.view', 'incidents.create', 'incidents.comment',
             'schedules.view',
             'calendar.view', 'availability.view',
@@ -94,6 +97,7 @@ class RolePermissionSeeder extends Seeder
         'pimpinan' => [
             'laboratories.view', 'laboratories.export',
             'assets.view', 'assets.export',
+            'loans.view', 'loans.view-all', 'loans.export',
             'devices.view', 'devices.export',
             'device-transfers.view',
             'layouts.view',
