@@ -25,6 +25,17 @@ class PermissionSeeder extends Seeder
             'retire' => 'Pensiunkan Aset',
             'dispose' => 'Hapuskan Aset secara administratif',
         ],
+        'loans' => [
+            'view' => 'Lihat Peminjaman Barang',
+            'view-all' => 'Lihat Semua Peminjaman Sekolah',
+            'create' => 'Ajukan Peminjaman',
+            'approve' => 'Setujui atau Tolak Peminjaman',
+            'checkout' => 'Serahkan Asset Peminjaman',
+            'return' => 'Terima Pengembalian Asset',
+            'close' => 'Tutup Peminjaman Setelah Pemeriksaan',
+            'cancel' => 'Batalkan Peminjaman',
+            'export' => 'Ekspor Peminjaman',
+        ],
         'stock' => [
             'view' => 'Lihat Stok dan Spare Part',
             'create' => 'Buat Item Stok',
