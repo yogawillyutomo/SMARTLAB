@@ -143,9 +143,59 @@ class InventoryMutationService
      */
     public function transact(CurrentMembershipContext $context, User $actor, array $data): array
     {
+        return $this->transactWithSource($context, $actor, $data, null, null);
+    }
+
+    /**
+     * @param list<array{inventoryItemId:string,clientMutationId:string,quantity:mixed}> $issues
+     * @return list<InventoryTransaction>
+     */
+    public function issueForMaintenance(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $executionId,
+        string $executionNumber,
+        array $issues,
+    ): array {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Maintenance inventory consumption requires an active outer transaction.');
+        }
+
+        usort($issues, fn (array $a, array $b): int => strcmp(
+            (string) $a['inventoryItemId'],
+            (string) $b['inventoryItemId'],
+        ));
+
+        $transactions = [];
+        foreach ($issues as $issue) {
+            $result = $this->transactWithSource($context, $actor, [
+                'inventoryItemId' => (string) $issue['inventoryItemId'],
+                'clientMutationId' => (string) $issue['clientMutationId'],
+                'kind' => 'issue',
+                'quantity' => $issue['quantity'],
+                'reason' => 'Preventive maintenance '.$executionNumber,
+            ], 'maintenance_execution', $executionId);
+
+            $transactions[] = $result['transaction'];
+        }
+
+        return $transactions;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array{transaction:InventoryTransaction,replayed:bool}
+     */
+    private function transactWithSource(
+        CurrentMembershipContext $context,
+        User $actor,
+        array $data,
+        ?string $sourceType,
+        ?string $sourceId,
+    ): array {
         $schoolId = (string) $context->membership->school_id;
         $clientMutationId = (string) $data['clientMutationId'];
-        $payloadHash = $this->movementPayloadHash($data);
+        $payloadHash = $this->movementPayloadHash($data, $sourceType, $sourceId);
 
         try {
             return DB::transaction(function () use (
@@ -155,6 +205,8 @@ class InventoryMutationService
                 $schoolId,
                 $clientMutationId,
                 $payloadHash,
+                $sourceType,
+                $sourceId,
             ): array {
                 $existing = InventoryTransaction::query()
                     ->where('school_id', $schoolId)
@@ -233,8 +285,8 @@ class InventoryMutationService
                     'balance_after' => $this->fromMilli($afterMilli),
                     'item_version_after' => $item->version,
                     'reason' => trim((string) $data['reason']),
-                    'source_type' => null,
-                    'source_id' => null,
+                    'source_type' => $sourceType,
+                    'source_id' => $sourceId,
                     'actor_user_id' => $actor->id,
                     'actor_membership_id' => $context->membership->id,
                     'actor_user_id_snapshot' => $actor->id,
@@ -309,15 +361,15 @@ class InventoryMutationService
     }
 
     /** @param array<string, mixed> $data */
-    private function movementPayloadHash(array $data): string
+    private function movementPayloadHash(array $data, ?string $sourceType, ?string $sourceId): string
     {
         $canonical = [
             'inventoryItemId' => (string) $data['inventoryItemId'],
             'kind' => (string) $data['kind'],
             'quantity' => $this->fromMilli($this->toMilli($data['quantity'])),
             'reason' => trim((string) $data['reason']),
-            'sourceType' => null,
-            'sourceId' => null,
+            'sourceType' => $sourceType,
+            'sourceId' => $sourceId,
         ];
 
         return hash('sha256', json_encode(

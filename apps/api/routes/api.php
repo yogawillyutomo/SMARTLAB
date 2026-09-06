@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\IdentityAdministrationController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\LoanController;
+use App\Http\Controllers\Api\V1\MaintenanceController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
@@ -33,6 +34,8 @@ use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireInventoryItemVersionPrecondition;
 use App\Http\Middleware\RequireLoanVersionPrecondition;
+use App\Http\Middleware\RequireMaintenanceExecutionVersionPrecondition;
+use App\Http\Middleware\RequireMaintenancePlanVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
@@ -212,6 +215,26 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:loans.return', RequireLoanVersionPrecondition::class]);
         Route::post('loans/{loanId}/close', [LoanController::class, 'close'])
             ->middleware(['permission:loans.close', RequireLoanVersionPrecondition::class]);
+
+        Route::get('maintenance-plans', [MaintenanceController::class, 'plans'])->middleware('permission:maintenance.view');
+        Route::post('maintenance-plans', [MaintenanceController::class, 'storePlan'])->middleware(['permission:maintenance.create-plan', 'permission:assets.view']);
+        Route::get('maintenance-plans/{planId}', [MaintenanceController::class, 'showPlan'])->middleware('permission:maintenance.view');
+        Route::patch('maintenance-plans/{planId}', [MaintenanceController::class, 'updatePlan'])
+            ->middleware(['permission:maintenance.update-plan', RequireMaintenancePlanVersionPrecondition::class]);
+        Route::post('maintenance-plans/{planId}/activate', [MaintenanceController::class, 'activatePlan'])
+            ->middleware(['permission:maintenance.update-plan', RequireMaintenancePlanVersionPrecondition::class]);
+        Route::post('maintenance-plans/{planId}/deactivate', [MaintenanceController::class, 'deactivatePlan'])
+            ->middleware(['permission:maintenance.update-plan', RequireMaintenancePlanVersionPrecondition::class]);
+        Route::post('maintenance-plans/{planId}/executions', [MaintenanceController::class, 'schedule'])
+            ->middleware(['permission:maintenance.schedule', RequireMaintenancePlanVersionPrecondition::class]);
+        Route::get('maintenance-executions', [MaintenanceController::class, 'executions'])->middleware('permission:maintenance.view');
+        Route::get('maintenance-executions/{executionId}', [MaintenanceController::class, 'showExecution'])->middleware('permission:maintenance.view');
+        Route::post('maintenance-executions/{executionId}/start', [MaintenanceController::class, 'start'])
+            ->middleware(['permission:maintenance.start', RequireMaintenanceExecutionVersionPrecondition::class]);
+        Route::post('maintenance-executions/{executionId}/complete', [MaintenanceController::class, 'complete'])
+            ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
+        Route::post('maintenance-executions/{executionId}/cancel', [MaintenanceController::class, 'cancel'])
+            ->middleware(['permission:maintenance.cancel', RequireMaintenanceExecutionVersionPrecondition::class]);
 
         Route::get('stock-items', [InventoryController::class, 'index'])->middleware('permission:stock.view');
         Route::post('stock-items', [InventoryController::class, 'store'])->middleware('permission:stock.create');

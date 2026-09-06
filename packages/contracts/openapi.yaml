@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.27.0
-  description: Canonical SmartLab API v1 contract. Version 0.27 adds S4.4 exact-Asset Loan custody with optimistic lifecycle concurrency, checkout exclusion, condition snapshots, and server-authoritative loan workflows while preserving prior S4.3 inventory authority.
+  version: 0.28.0
+  description: Canonical SmartLab API v1 contract. Version 0.28 adds S4.5 exact-Asset Preventive Maintenance plans/executions, symmetric Loan↔Maintenance custody exclusion, audited Asset-condition completion, atomic Inventory issue consumption, and server-authoritative maintenance workflows while preserving prior S4.4 Loan authority.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -13,6 +13,16 @@ paths:
   /auth/logout: { $ref: './openapi-0.11.yaml#/paths/~1auth~1logout' }
   /laboratories: { $ref: './openapi-0.11.yaml#/paths/~1laboratories' }
   /laboratories/{laboratoryId}: { $ref: './openapi-0.11.yaml#/paths/~1laboratories~1{laboratoryId}' }
+  /maintenance-plans: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans' }
+  /maintenance-plans/{planId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}' }
+  /maintenance-plans/{planId}/activate: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}~1activate' }
+  /maintenance-plans/{planId}/deactivate: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}~1deactivate' }
+  /maintenance-plans/{planId}/executions: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}~1executions' }
+  /maintenance-executions: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions' }
+  /maintenance-executions/{executionId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}' }
+  /maintenance-executions/{executionId}/start: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1start' }
+  /maintenance-executions/{executionId}/complete: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1complete' }
+  /maintenance-executions/{executionId}/cancel: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1cancel' }
   /loans: { $ref: './openapi-loans.yaml#/paths/~1loans' }
   /loans/{loanId}: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}' }
   /loans/{loanId}/approve: { $ref: './openapi-loans.yaml#/paths/~1loans~1{loanId}~1approve' }

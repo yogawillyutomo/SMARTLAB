@@ -69,7 +69,7 @@ function AppRoutes() {
         <Route path="/incidents/:incidentId" element={<RequireServerPermission permission="incidents.view"><IncidentDetailPage /></RequireServerPermission>} />
         <Route path="/work-orders" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
         <Route path="/work-orders/:id" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
-        <Route path="/maintenance" element={<RequirePermission module="maintenance"><MaintenancePage /></RequirePermission>} />
+        <Route path="/maintenance" element={<RequireServerPermission permission="maintenance.view"><MaintenancePage /></RequireServerPermission>} />
         <Route path="/loans" element={<RequireServerPermission permission="loans.view"><LoansPage /></RequireServerPermission>} />
         <Route path="/calendar" element={<RequireServerPermission permission="calendar.view"><CalendarPage /></RequireServerPermission>} />
         <Route path="/reports" element={<RequirePermission module="reports"><ReportsPage /></RequirePermission>} />
