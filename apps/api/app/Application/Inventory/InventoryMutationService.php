@@ -61,7 +61,7 @@ class InventoryMutationService
 
                 return $item;
             });
-        } catch (UniqueConstraintViolationException) {
+        } catch (UniqueConstraintViolationException $exception) {
             throw ValidationException::withMessages([
                 'itemCode' => ['The item code has already been taken.'],
             ]);
@@ -260,7 +260,7 @@ class InventoryMutationService
                 return $this->replayOrReject($existing, $payloadHash);
             }
 
-            throw;
+            throw $exception;
         }
     }
 
@@ -392,7 +392,7 @@ class InventoryMutationService
             return null;
         }
 
-        if (is_string($value) && is_numeric($value)) {
+        if (is_string($value) && is_numeric($value) && str_contains($value, '.')) {
             return rtrim(rtrim($value, '0'), '.');
         }
 

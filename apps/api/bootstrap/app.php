@@ -8,6 +8,7 @@ use App\Domain\Device\DeviceDomainException;
 use App\Domain\DeviceTransfer\TransferDomainException;
 use App\Domain\Identity\IdentityAdministrationException;
 use App\Domain\Incident\IncidentDomainException;
+use App\Domain\Inventory\InventoryDomainException;
 use App\Domain\Layout\LayoutDomainException;
 use App\Domain\Schedule\PublishedTimetableException;
 use App\Domain\Calendar\OperationalCalendarException;
@@ -139,6 +140,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 'code' => $exception->errorCode,
             ], $exception->status);
         });
+        $exceptions->render(function (InventoryDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+        });
+
         $exceptions->render(function (IncidentDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;

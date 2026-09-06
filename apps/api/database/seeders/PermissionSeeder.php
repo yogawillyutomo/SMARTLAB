@@ -25,6 +25,13 @@ class PermissionSeeder extends Seeder
             'retire' => 'Pensiunkan Aset',
             'dispose' => 'Hapuskan Aset secara administratif',
         ],
+        'stock' => [
+            'view' => 'Lihat Stok dan Spare Part',
+            'create' => 'Buat Item Stok',
+            'update' => 'Ubah Metadata Item Stok',
+            'transact' => 'Catat Transaksi Stok',
+            'export' => 'Ekspor Stok dan Transaksi',
+        ],
         'devices' => [
             'view' => 'Lihat Perangkat',
             'create' => 'Buat Perangkat',
