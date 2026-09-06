@@ -39,7 +39,7 @@ class MaintenanceApiTest extends TestCase
 
     public function test_plan_creation_requires_asset_view_permission_for_exact_asset_selection(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['maintenance.create-plan']);
+        [, $school] = $this->authenticateWithPermissions(['maintenance.create-plan', 'assets.view']);
         $asset = $this->asset($school);
 
         $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))
@@ -49,9 +49,19 @@ class MaintenanceApiTest extends TestCase
         $this->assertDatabaseCount('maintenance_plans', 0);
     }
 
+    public function test_plan_creation_requires_asset_read_authority_in_addition_to_maintenance_create(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['maintenance.create-plan']);
+        $asset = $this->asset($school);
+
+        $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))
+            ->assertForbidden()
+            ->assertJsonPath('code', 'FORBIDDEN');
+    }
+
     public function test_plan_creation_binds_one_exact_school_asset_and_writes_history(): void
     {
-        [$user, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan']);
+        [$user, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'assets.view']);
         $asset = $this->asset($school, ['asset_code' => 'AST-PM-001', 'name' => 'Laptop Preventive']);
 
         $response = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))
@@ -84,7 +94,7 @@ class MaintenanceApiTest extends TestCase
 
     public function test_linked_device_lifecycle_is_fail_closed_for_plan_creation_and_start(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start']);
+        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start']);
         $device = Device::factory()->for($school)->create(['lifecycle_status' => 'decommissioned']);
         $asset = $this->asset($school, ['linked_device_id' => $device->id]);
 
@@ -108,7 +118,7 @@ class MaintenanceApiTest extends TestCase
 
     public function test_plan_update_requires_exact_permission_if_match_and_keeps_asset_identity_immutable(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan']);
+        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'assets.view']);
         $asset = $this->asset($school);
         $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))->assertCreated();
         $id = (string) $plan->json('data.id');
@@ -139,7 +149,7 @@ class MaintenanceApiTest extends TestCase
 
     public function test_custom_interval_rules_fail_closed_on_create_and_update(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'maintenance.update-plan']);
+        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.update-plan']);
         $asset = $this->asset($school);
 
         $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id, [
@@ -168,7 +178,7 @@ class MaintenanceApiTest extends TestCase
     public function test_scheduling_snapshots_plan_asset_and_checklist_and_later_plan_edits_do_not_rewrite_execution(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.view', 'maintenance.create-plan', 'maintenance.update-plan', 'maintenance.schedule',
+            'assets.view', 'maintenance.view', 'maintenance.create-plan', 'assets.view', 'maintenance.update-plan', 'maintenance.schedule',
         ]);
         $asset = $this->asset($school, ['asset_code' => 'AST-SNAP']);
         $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id, [
@@ -198,7 +208,7 @@ class MaintenanceApiTest extends TestCase
     public function test_maintenance_start_fails_when_asset_is_under_active_loan_custody(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
             'loans.create', 'loans.approve', 'loans.checkout',
         ]);
         $asset = $this->asset($school);
@@ -225,7 +235,7 @@ class MaintenanceApiTest extends TestCase
     public function test_active_maintenance_custody_blocks_loan_checkout_symmetrically(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
             'loans.create', 'loans.approve', 'loans.checkout',
         ]);
         $asset = $this->asset($school);
@@ -255,7 +265,7 @@ class MaintenanceApiTest extends TestCase
     public function test_database_guard_blocks_two_active_maintenance_custodies_for_one_asset(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
         ]);
         $asset = $this->asset($school);
 
@@ -282,7 +292,7 @@ class MaintenanceApiTest extends TestCase
     public function test_completion_atomically_updates_asset_condition_consumes_inventory_and_advances_plan(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
             'maintenance.complete', 'maintenance.consume-stock',
             'stock.create', 'stock.transact',
         ]);
@@ -354,7 +364,7 @@ class MaintenanceApiTest extends TestCase
     public function test_insufficient_inventory_rolls_back_completion_asset_condition_plan_due_and_custody_release(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
             'maintenance.complete', 'maintenance.consume-stock',
             'stock.create', 'stock.transact',
         ]);
@@ -402,7 +412,7 @@ class MaintenanceApiTest extends TestCase
     public function test_asset_version_drift_after_start_fails_closed_before_stock_consumption(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start',
             'maintenance.complete', 'maintenance.consume-stock',
             'stock.create', 'stock.transact',
         ]);
@@ -437,7 +447,7 @@ class MaintenanceApiTest extends TestCase
     public function test_spare_part_consumption_requires_explicit_maintenance_permission(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete',
             'stock.create', 'stock.transact',
         ]);
         $asset = $this->asset($school);
@@ -468,7 +478,7 @@ class MaintenanceApiTest extends TestCase
     public function test_cancel_requires_reason_and_releases_in_progress_custody_without_mutating_asset(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.cancel',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule', 'maintenance.start', 'maintenance.cancel',
         ]);
         $asset = $this->asset($school, ['condition' => 'minor_damage', 'version' => 4]);
 
@@ -499,7 +509,7 @@ class MaintenanceApiTest extends TestCase
     public function test_maintenance_history_and_captured_identity_are_database_protected_and_no_hard_delete_routes_exist(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule',
+            'assets.view', 'maintenance.create-plan', 'assets.view', 'maintenance.schedule',
         ]);
         $asset = $this->asset($school);
         $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))->assertCreated();
