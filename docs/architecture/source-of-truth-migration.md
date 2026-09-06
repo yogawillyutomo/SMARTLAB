@@ -47,7 +47,6 @@ The following production routes still depend wholly or materially on `AppDataPro
 | Route / surface | Domain | Required canonical backend before cutover |
 | --- | --- | --- |
 | `/monitoring` | device telemetry | device telemetry ingestion/read model |
-| `/assets` | fixed assets | asset domain |
 | `/stock` | stock/spare parts | inventory + immutable transaction domain |
 | `/work-orders` | corrective work orders | work-order domain linked to Incident |
 | `/maintenance` | preventive maintenance | maintenance plan/execution domain |
@@ -341,16 +340,26 @@ S3 is complete. Next phase:
 
 ### Phase S4 - Asset and inventory operations
 
-S4 begins with an explicit contract/authority lock. The candidate contract is [S4 Asset, Inventory, Loan, and Preventive Maintenance Contract](asset-inventory-loan-maintenance-contract.md), governed by [ADR-002](ADR-002-asset-inventory-loan-maintenance-boundary.md).
+S4 begins with the accepted S4.1 contract/authority lock in [S4 Asset, Inventory, Loan, and Preventive Maintenance Contract](asset-inventory-loan-maintenance-contract.md), governed by accepted [ADR-002](ADR-002-asset-inventory-loan-maintenance-boundary.md).
 
 Planned slices:
 
-- **S4.1:** authority + semantic contract, prototype reconciliation;
-- **S4.2:** fixed Asset backend, Asset↔Device link, and /assets cutover;
+- **S4.1 — complete/locked:** authority + semantic contract, prototype reconciliation;
+- **S4.2 — implementation tranche:** fixed Asset backend, exact Asset↔Device link, ETag/audit lifecycle actions, OpenAPI 0.25, and `/assets` server-authoritative cutover;
 - **S4.3:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and /stock cutover;
 - **S4.4:** Loan/LoanItem custody and /loans cutover;
 - **S4.5:** Preventive Maintenance plan/execution, Inventory consumption, and /maintenance cutover;
 - **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
+
+Delivered by S4.2 when this tranche is present on merged `main`:
+
+- canonical `assets` persistence is School-scoped with ULID identity, School-scoped normalized immutable `assetCode`, separated physical condition and lifecycle, and PostgreSQL constraints;
+- Asset→Device uses one explicit nullable unique foreign key and never recreates Device-side Asset authority;
+- link/unlink is explicit, same-School, version-checked, audited, and fails closed on conflicting home Laboratory or existing one-to-one ownership;
+- linked Asset home Laboratory / brand / model / serial cannot drift through ordinary Asset PATCH;
+- retirement/disposal are dedicated reasoned actions and fail closed against an incompatible linked Device lifecycle;
+- `/assets` and `/assets/:id` read canonical API data only; browser-local delete, transfer, fake QR, and stock-opname mutations are removed from authoritative Asset UI;
+- OpenAPI 0.25 describes only implemented Asset surfaces.
 
 Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 

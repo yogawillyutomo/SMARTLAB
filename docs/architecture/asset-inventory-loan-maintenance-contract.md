@@ -1,6 +1,6 @@
 # S4 Asset, Inventory, Loan, and Preventive Maintenance Contract
 
-**Status:** Proposed — S4.1 contract candidate  
+**Status:** Accepted — S4.1 semantic contract  
 **Scope:** semantic contract and implementation sequencing; no S4 runtime API/database cutover in this tranche  
 **Authority:** governed by [ADR-002](ADR-002-asset-inventory-loan-maintenance-boundary.md)
 
