@@ -4,6 +4,8 @@ SmartLab is a school laboratory management platform for planning laboratory use,
 
 The repository is a monorepo so the web application, API, PC monitoring agent, shared contracts, infrastructure, and product documentation can evolve with explicit boundaries.
 
+Canonical human documentation entry point: [SMARTLAB Documentation](docs/README.md).
+
 ## Repository map
 
 ```text
@@ -21,11 +23,12 @@ smartlab/
 │   ├── nginx/                # Planned reverse-proxy configuration
 │   └── deployment/           # Planned deployment / backup / rollback docs
 ├── docs/
+│   ├── README.md             # Canonical human documentation index
 │   ├── product/
 │   ├── architecture/
 │   ├── development/
 │   ├── backlog/
-│   └── reviews/
+│   └── references/
 ├── scripts/
 ├── .github/
 ├── AGENTS.md
