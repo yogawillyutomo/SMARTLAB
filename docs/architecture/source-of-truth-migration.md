@@ -341,14 +341,18 @@ S3 is complete. Next phase:
 
 ### Phase S4 - Asset and inventory operations
 
-Build canonical domains for:
+S4 begins with an explicit contract/authority lock. The candidate contract is [S4 Asset, Inventory, Loan, and Preventive Maintenance Contract](asset-inventory-loan-maintenance-contract.md), governed by [ADR-002](ADR-002-asset-inventory-loan-maintenance-boundary.md).
 
-- fixed assets;
-- stock/spare parts and immutable quantity transactions;
-- loans/custody;
-- preventive maintenance plans/executions.
+Planned slices:
 
-Inventory must reject negative stock transactionally.
+- **S4.1:** authority + semantic contract, prototype reconciliation;
+- **S4.2:** fixed Asset backend, Asset↔Device link, and /assets cutover;
+- **S4.3:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and /stock cutover;
+- **S4.4:** Loan/LoanItem custody and /loans cutover;
+- **S4.5:** Preventive Maintenance plan/execution, Inventory consumption, and /maintenance cutover;
+- **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
+
+Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 
 ### Phase S5 - Corrective maintenance
 
