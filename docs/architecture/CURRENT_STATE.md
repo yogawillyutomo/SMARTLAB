@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
-**Snapshot date:** 2026-09-05  
-**Baseline:** repository state including canonical S2 scheduling and S3.2–S3.5 Pelaksanaan Lab execution/report/evidence workflow
+**Snapshot date:** 2026-09-06  
+**Baseline:** repository state including canonical S2 scheduling and S3.2–S3.6 Pelaksanaan Lab execution/report/evidence/offline-draft workflow
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
