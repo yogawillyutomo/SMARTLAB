@@ -4,18 +4,21 @@ This directory is the canonical human entry point for SMARTLAB documentation.
 
 Repository source, committed contracts, migrations, tests, Git history, pull requests, and exact-head CI remain higher-order evidence when a narrative document disagrees with implementation reality. This index must summarize that evidence; it must not create a second authority.
 
-## Verified checkpoint
+## Convergence audit baseline
 
-Verified on **2026-09-06** against remote GitHub:
+The documentation-convergence audit was performed on **2026-09-06** against `main@a15d39128126f42591b4b5e1236e8d3e4711fd53`, immediately before the convergence PR was merged. This section is intentionally **historical audit evidence**, not a live repository-status field.
 
-- remote `main`: `a15d39128126f42591b4b5e1236e8d3e4711fd53`;
-- latest merged PR: **#73 — S3.5 execution observations, Incident linkage, and report attachments**;
-- open functional PR: **#74 — S3.6 offline ActivityReport draft sync and operational UAT**, head `0dc1556554835d5da3c363976a6ab49adb41d44d`, based on the current `main`;
-- `main` exact-head GitHub Actions: `api-ci` PASS and `web-ci` PASS;
-- the same `main` commit also has a failing Vercel commit status caused by the Vercel build-rate-limit; therefore this checkpoint is **not** described as universally/all-checks green;
-- PR #74 exact-head `api-ci` and `web-ci` are PASS, but PR #74 is still unmerged and operator-required browser UAT remains a rollout gate.
+At that audit baseline:
 
-This is a dated verification snapshot, not permission to merge PR #74 and not release evidence for production.
+- latest merged functional PR was **#73 — S3.5 execution observations, Incident linkage, and report attachments**;
+- functional PR **#74 — S3.6 offline ActivityReport draft sync and operational UAT** was open at head `0dc1556554835d5da3c363976a6ab49adb41d44d`;
+- baseline `main` exact-head GitHub Actions `api-ci` and `web-ci` passed;
+- baseline `main` also had a failing Vercel commit status caused by the Vercel build-rate-limit;
+- PR #74 exact-head `api-ci` and `web-ci` passed, while operator-required browser UAT remained a rollout gate.
+
+For **current** branch, HEAD, PR, and CI status, verify remote GitHub directly. This index intentionally does not embed a mutable “current main SHA”: merging documentation would invalidate such a field immediately and create self-induced documentation drift.
+
+The detailed evidence record is preserved in [Documentation Convergence Audit](architecture/DOCUMENTATION_CONVERGENCE.md).
 
 ## Documentation map
 
