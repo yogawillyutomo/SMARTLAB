@@ -61,7 +61,7 @@ class InventoryMutationService
 
                 return $item;
             });
-        } catch (UniqueConstraintViolationException $exception) {
+        } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
                 'itemCode' => ['The item code has already been taken.'],
             ]);
@@ -250,7 +250,7 @@ class InventoryMutationService
 
                 return ['transaction' => $transaction, 'replayed' => false];
             });
-        } catch (UniqueConstraintViolationException) {
+        } catch (UniqueConstraintViolationException $exception) {
             $existing = InventoryTransaction::query()
                 ->where('school_id', $schoolId)
                 ->where('client_mutation_id', $clientMutationId)
