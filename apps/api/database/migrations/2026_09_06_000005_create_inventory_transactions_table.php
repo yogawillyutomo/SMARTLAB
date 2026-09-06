@@ -66,7 +66,7 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql
             SQL);
-            DB::statement('CREATE TRIGGER inventory_transactions_immutable_update BEFORE UPDATE ON inventory_transactions FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_inventory_transaction_mutation()');
+            DB::statement('CREATE TRIGGER inventory_transactions_immutable_update BEFORE UPDATE OF school_id, inventory_item_id, client_mutation_id, kind, quantity, signed_delta, balance_before, balance_after, item_version_after, reason, source_type, source_id, actor_user_id_snapshot, actor_membership_id_snapshot, actor_name_snapshot, item_code_snapshot, item_name_snapshot, unit_snapshot, request_sha256, occurred_at, created_at ON inventory_transactions FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_inventory_transaction_mutation()');
             DB::statement('CREATE TRIGGER inventory_transactions_immutable_delete BEFORE DELETE ON inventory_transactions FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_inventory_transaction_mutation()');
         }
 
@@ -80,7 +80,7 @@ return new class extends Migration
                     OR ((NEW.kind IN ('issue', 'adjustment_out')) AND NEW.signed_delta >= 0)
                     OR ((NEW.source_type IS NULL) <> (NEW.source_id IS NULL))
                 BEGIN SELECT RAISE(ABORT, 'Inventory transaction integrity constraint failed'); END");
-            DB::unprepared("CREATE TRIGGER inventory_transactions_immutable_update BEFORE UPDATE ON inventory_transactions
+            DB::unprepared("CREATE TRIGGER inventory_transactions_immutable_update BEFORE UPDATE OF school_id, inventory_item_id, client_mutation_id, kind, quantity, signed_delta, balance_before, balance_after, item_version_after, reason, source_type, source_id, actor_user_id_snapshot, actor_membership_id_snapshot, actor_name_snapshot, item_code_snapshot, item_name_snapshot, unit_snapshot, request_sha256, occurred_at, created_at ON inventory_transactions
                 BEGIN SELECT RAISE(ABORT, 'Inventory transactions are immutable'); END");
             DB::unprepared("CREATE TRIGGER inventory_transactions_immutable_delete BEFORE DELETE ON inventory_transactions
                 BEGIN SELECT RAISE(ABORT, 'Inventory transactions are immutable'); END");
