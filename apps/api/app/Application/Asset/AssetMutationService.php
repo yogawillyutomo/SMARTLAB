@@ -3,6 +3,7 @@
 namespace App\Application\Asset;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Domain\Asset\AssetCatalog;
 use App\Domain\Asset\AssetDomainException;
 use App\Models\Asset;
 use App\Models\AssetChangeEvent;
@@ -359,6 +360,52 @@ class AssetMutationService
 
             return $asset->refresh();
         });
+    }
+
+    public function applyMaintenanceCondition(
+        CurrentMembershipContext $context,
+        Asset $asset,
+        int $expectedVersion,
+        string $condition,
+        string $maintenanceExecutionId,
+    ): Asset {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Maintenance Asset condition updates require an active transaction.');
+        }
+
+        if ((string) $asset->school_id !== (string) $context->membership->school_id) {
+            throw new AssetDomainException('Asset not found.', 'ASSET_NOT_FOUND', 404);
+        }
+
+        if (! in_array($condition, AssetCatalog::CONDITIONS, true)) {
+            throw new \LogicException('Invalid Asset condition supplied by Maintenance authority.');
+        }
+
+        $this->assertVersion($asset, $expectedVersion);
+
+        if ($asset->lifecycle_status !== 'active') {
+            throw new AssetDomainException(
+                'Preventive Maintenance can only update condition on an active Asset.',
+                'ASSET_LIFECYCLE_LOCKED',
+                409,
+            );
+        }
+
+        if ($asset->condition === $condition) {
+            return $asset;
+        }
+
+        $before = $asset->condition;
+        $asset->condition = $condition;
+        $asset->version++;
+        $asset->save();
+
+        $this->writeEvent($context, $asset, 'asset.maintenance_condition_updated', ['condition'], [
+            'condition' => ['before' => $before, 'after' => $condition],
+            'maintenanceExecutionId' => ['after' => $maintenanceExecutionId],
+        ]);
+
+        return $asset->refresh();
     }
 
     private function lockAsset(CurrentMembershipContext $context, string $assetId): Asset

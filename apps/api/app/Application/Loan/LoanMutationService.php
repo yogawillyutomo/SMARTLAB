@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Models\Loan;
 use App\Models\LoanEvent;
 use App\Models\LoanItem;
+use App\Models\MaintenanceExecution;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -449,9 +450,18 @@ class LoanMutationService
             );
         }
 
-        // S4.5 introduces MaintenanceExecution authority. There is no Maintenance
-        // custody row to query before that tranche exists; S4.5 must add the
-        // symmetric Loan↔Maintenance exclusion under the same Asset lock order.
+        $maintenanceConflict = MaintenanceExecution::query()
+            ->whereIn('asset_id', $assetIds)
+            ->where('custody_active', true)
+            ->exists();
+
+        if ($maintenanceConflict) {
+            throw new LoanDomainException(
+                'One or more Assets are under active Preventive Maintenance custody.',
+                'LOAN_ASSET_UNAVAILABLE',
+                409,
+            );
+        }
     }
 
     /** @param array<mixed> $assetIds @return list<string> */
