@@ -49,6 +49,7 @@ const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
   schedules: 'schedules.view',
   calendar: 'calendar.view',
   bookings: 'bookings.view',
+  assets: 'assets.view',
 };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -68,7 +69,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/devices', label: 'Perangkat', icon: Laptop, serverPermission: 'devices.view' },
       { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring' },
-      { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets' },
+      { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets', serverPermission: 'assets.view' },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock' },
       { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, serverPermission: 'incidents.view' },
       { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders' },
