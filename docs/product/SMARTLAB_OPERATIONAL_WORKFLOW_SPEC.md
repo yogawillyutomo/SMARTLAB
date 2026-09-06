@@ -156,7 +156,7 @@ Override prioritas selalu bertanggal; jadwal berulang tidak pernah dihapus. Seti
 | --- | --- |
 | Implementasi saat ini | Jadwal, Unified Availability, Reservasi, Schedule Exception cancel/relocate, dan Priority Event sudah canonical di Laravel/PostgreSQL; `/schedules`, `/bookings`, dan `/priority-events` memakai server authority. Publication TESSELA baru juga melewati impact/reconciliation gate sebelum activation. |
 | Perilaku target yang disetujui | Satu layanan ketersediaan memutuskan semua konflik tanpa mengaburkan domain Jadwal Reguler dan Reservasi Lab. |
-| Implementasi masa depan | Phase S3 membangun Pelaksanaan Lab + Journal di atas occurrence dan operational state yang sekarang sudah stabil. |
+| Implementasi masa depan | Pelaksanaan Lab sudah canonical melalui S3.6, termasuk controlled offline ActivityReport draft sync yang tetap menjaga server/version authority. Browser/DevTools offline UX matrix tetap wajib dijalankan di target environment sebelum production rollout. Fase fungsional berikutnya adalah S4 Asset/Inventory/Loans/Preventive Maintenance. |
 | Di luar scope PR dokumentasi | Menganggap validasi browser sebagai jaminan konkurensi atau otorisasi. |
 
 ## 5. Pelaksanaan Lab dan laporan
@@ -192,9 +192,9 @@ Laporan manual hanya untuk backfill, migrasi, darurat, atau data legacy yang dii
 
 | Status | Keterangan |
 | --- | --- |
-| Implementasi saat ini | S3.2 LaboratorySession backend sudah canonical dan source-bound, tetapi `/sessions` dan `/journals` frontend masih memakai prototype browser-local. ActivityReport belum canonical; karena itu end→draft atomik target belum dianggap delivered. |
+| Implementasi saat ini | S3.2–S3.6 sudah canonical secara implementasi: LaboratorySession source-bound, ActivityReport 1:1 dengan atomic end→draft, `/sessions` memakai server authority, `/journals` hanya compatibility/deep-link redirect, execution evidence mencakup immutable observations, explicit Observation→Incident promotion, private ActivityReport attachments, dan controlled offline draft sync dengan idempotent receipts serta fail-closed conflict/rebase handling. |
 | Perilaku target yang disetujui | Pengguna mengalami satu workflow Pelaksanaan Lab dengan laporan wajib dan verifikasi. |
-| Implementasi masa depan | Lanjut S3.3 ActivityReport backend, S3.4 antarmuka Pelaksanaan Lab terpadu, S3.5 explicit Incident/attachment linkage, lalu S3.6 offline draft sync dan UAT. |
+| Implementasi masa depan | Operator/browser scenario pada matrix S3.6 tetap menjadi production-rollout UAT. Tidak ada perluasan ke full-offline Session/Incident/attachment queue. Fase fungsional berikutnya adalah S4. |
 | Di luar scope PR dokumentasi | Menghapus jurnal/sesi lama atau menetapkan SLA pengingat yang belum disetujui. |
 
 ## 6. Denah laboratorium
@@ -326,7 +326,9 @@ flowchart LR
 | Implementasi masa depan | Kontrak dan vertical slice backend untuk perangkat–aset–incident–work order dengan transaksi stok. |
 | Di luar scope PR dokumentasi | Pengawasan invasif oleh PC Agent atau perubahan alur incident saat ini. |
 
-## 10. Kesenjangan implementasi saat ini
+## 10. Register kesenjangan baseline (historical planning context)
+
+Tabel di bawah dipertahankan sebagai baseline perencanaan awal dan **bukan** authority untuk milestone current. Sejumlah baris telah selesai pada S0–S3.5. Status/roadmap current harus dibaca dari [SMARTLAB Documentation](../README.md) dan [Current Architecture State](../architecture/CURRENT_STATE.md).
 
 | Kesenjangan | Implementasi saat ini | Perilaku target | Risiko | Tahap rencana |
 | --- | --- | --- | --- | --- |
@@ -346,9 +348,9 @@ flowchart LR
 | Identitas sekolah | Hanya sebagian dipersistenkan. | Konfigurasi sekolah otoritatif. | Data tampilan tidak konsisten. | 12 |
 | Persistensi aplikasi | Browser-local. | Backend terotorisasi dan teraudit. | Data hilang/berbeda antar perangkat. | 12 |
 
-## 11. Roadmap implementasi
+## 11. Roadmap implementasi baseline (historical)
 
-Tidak semua tahap adalah P0. Setiap tahap memerlukan scope, acceptance criteria, dan PR terfokus sendiri.
+Tabel tahap berikut dipertahankan untuk konteks evolusi produk, bukan sebagai roadmap current. Roadmap milestone S0–S8 yang direkonsiliasi dengan source/Git/PR/CI berada di [SMARTLAB Documentation](../README.md). Setiap pekerjaan baru tetap memerlukan scope, acceptance criteria, dan PR terfokus sendiri.
 
 | Tahap | Tujuan | Dependensi | Deliverable | Risiko utama | Branch yang disarankan |
 | --- | --- | --- | --- | --- | --- |

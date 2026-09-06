@@ -4,6 +4,8 @@ SmartLab is a school laboratory management platform for planning laboratory use,
 
 The repository is a monorepo so the web application, API, PC monitoring agent, shared contracts, infrastructure, and product documentation can evolve with explicit boundaries.
 
+Canonical human documentation entry point: [SMARTLAB Documentation](docs/README.md).
+
 ## Repository map
 
 ```text
@@ -21,11 +23,12 @@ smartlab/
 │   ├── nginx/                # Planned reverse-proxy configuration
 │   └── deployment/           # Planned deployment / backup / rollback docs
 ├── docs/
+│   ├── README.md             # Canonical human documentation index
 │   ├── product/
 │   ├── architecture/
 │   ├── development/
 │   ├── backlog/
-│   └── reviews/
+│   └── references/
 ├── scripts/
 ├── .github/
 ├── AGENTS.md
@@ -63,7 +66,7 @@ The application is in a staged source-of-truth migration.
 
 ### Transitional browser-local domains
 
-Pelaksanaan Lab is now server-authoritative through S3.6, including explicit issue evidence, Incident linkage, private report attachments, and controlled offline ActivityReport draft working copies that preserve server/version authority. Remaining transitional work includes telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next phase is S4 Assets, Inventory, Loans, and Preventive Maintenance.
+Pelaksanaan Lab is now server-authoritative through S3.6, including explicit issue evidence, Incident linkage, private report attachments, and controlled offline ActivityReport draft working copies that preserve server/version authority. Remaining transitional work includes telemetry monitoring, fixed assets, inventory/stock, work orders, maintenance, loans, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. The next functional phase is S4 Assets, Inventory, Loans, and Preventive Maintenance. Operator/browser offline UX scenarios remain a production-rollout UAT requirement rather than a reason to weaken server authority.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 

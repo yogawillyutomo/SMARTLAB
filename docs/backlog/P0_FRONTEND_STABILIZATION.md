@@ -32,7 +32,7 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 - Device dan Incident sudah memiliki stable server identity dan canonical API.
 - Device transfer dan Incident workflow sudah server-backed.
 - Fixed Asset masih transitional; penyatuan identity Device ↔ Asset pada workflow aset belum selesai.
-- Pelaksanaan Lab yang menautkan kondisi perangkat/aset tetap mengikuti Phase S3/S4.
+- Pelaksanaan Lab sudah dapat merekam observasi Device canonical dan explicit Observation→Incident linkage melalui S3.5. Referensi Asset canonical tetap menunggu S4; observasi aset pada S3.5 hanya evidence naratif dan tidak membuat authority palsu.
 
 ## P0-05 Integritas inventaris — Dalam perencanaan
 
@@ -47,8 +47,8 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 
 ## P0-07 Deep link — Sebagian selesai
 
-- Detail canonical seperti Laboratory, Device, dan Incident sudah memakai route identity yang dapat direfresh/deep-link.
-- Sesi, jurnal, work order, notifikasi, dan global search belum dianggap selesai sampai domain terkait canonical.
+- Detail canonical seperti Laboratory, Device, Incident, dan Pelaksanaan Lab sudah memakai route/server identity yang dapat direfresh/deep-link.
+- `/sessions` sudah canonical dan `/journals` hanya compatibility/deep-link redirect. Work order, notifikasi, dan global search belum dianggap selesai sampai domain terkait canonical.
 
 ## P0-08 Filter dan pengaturan fungsional — Sebagian selesai
 
@@ -80,9 +80,9 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | MD-01 Master akademik stable ID | selesai | Guru, kelas, mapel, JP, tahun, semester. | Menjadi entry dependency untuk schedule integration. |
 | IMP-01 Fondasi import Excel | belum | Template, mapping, preview, validasi, audit. | Ownership sudah dikunci oleh ADR-001; implementasi tetap perlu contract import terfokus. |
 | IMP-02 Import Master Data | belum | Referensi sederhana, akademik, laboratorium. | Sesudah IMP-01; academic authority mengikuti ADR-001 dan Laboratory tetap domain SmartLab. |
-| IMP-03 Integrasi published timetable | selesai baseline | Full snapshot TESSELA, stable refs, version/hash/idempotency, occurrence materialization, activation/audit, current-plan read API, canonical `/schedules`. | S2.2 + S2.3 delivered. Excel/file bila diperlukan hanya adapter, bukan authority; operational overlays lanjut di S2.4+. |
+| IMP-03 Integrasi published timetable | selesai | Full snapshot TESSELA, stable refs, version/hash/idempotency, occurrence materialization, activation/audit, current-plan read API, canonical `/schedules`. | S2.2–S2.8 delivered, termasuk Calendar, Availability, Reservation, Schedule Exception, Priority Event, dan publication reconciliation. Excel/file bila diperlukan hanya adapter, bukan authority. |
 | AV-01 Unified availability | canonical lengkap untuk S2 | Laboratory status + active ScheduleOccurrence + dated Schedule Exception + schedule coverage + Calendar + submitted/approved Reservation + approved Priority Event sudah unified. | S2.5–S2.8 delivered. |
 | OV-01 Override kegiatan prioritas | canonical baseline | Schedule Exception cancel/relocate + Priority Event request/approval sudah canonical; tidak ada force override. | S2.7 + S2.8 delivered. |
-| EX-01 Pelaksanaan Lab/laporan terpadu | backend Session S3.2 selesai; UI/report masih transitional | LaboratorySession canonical sudah source-bound, versioned, audited, revalidated, menjadi actual occupancy, dan melindungi source mutation. `/sessions` masih local karena ActivityReport belum canonical. | Lanjut S3.3 ActivityReport, lalu S3.4 frontend cutover. |
+| EX-01 Pelaksanaan Lab/laporan terpadu | implementation-complete melalui S3.6 | LaboratorySession + ActivityReport + `/sessions` server-authoritative; `/journals` compatibility redirect; S3.5 execution evidence; S3.6 controlled offline draft sync dengan account-scoped cache, idempotent receipts, dan fail-closed conflict/rebase. | Operator/browser offline UX matrix tetap menjadi production-rollout UAT; tidak menghalangi perencanaan S4. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci dan seluruh S2.2–S2.8 sudah delivered: published timetable, current-plan read model, Calendar/Closure, Unified Availability, Reservation, Schedule Exception, Priority Event, serta publication impact/reconciliation UAT. Pekerjaan berikutnya adalah Phase S3 Laboratory Session + Journal.
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. Operator/browser S3.6 UAT tetap wajib sebelum production rollout, tetapi fase fungsional berikutnya adalah S4 Assets/Inventory/Loans/Preventive Maintenance. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
