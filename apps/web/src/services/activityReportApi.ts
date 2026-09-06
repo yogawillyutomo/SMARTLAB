@@ -109,11 +109,28 @@ export interface CreateActivityReportBackfillInput extends UpdateActivityReportI
   plannedParticipantCount?: number | null;
 }
 
+export interface SyncActivityReportDraftInput {
+  clientMutationId: string;
+  baseVersion: number;
+  patch: UpdateActivityReportInput;
+}
+
+export interface SyncActivityReportDraftResult {
+  report: ActivityReportDto;
+  sync: {
+    clientMutationId: string;
+    baseVersion: number;
+    appliedVersion: number;
+    replayed: boolean;
+  };
+}
+
 export interface ActivityReportGateway {
   list: (filters: ActivityReportFilters) => Promise<ActivityReportPage>;
   listAll: (filters: Omit<ActivityReportFilters, 'page' | 'perPage'>) => Promise<ActivityReportDto[]>;
   show: (id: string) => Promise<ActivityReportDto>;
   update: (id: string, version: number, input: UpdateActivityReportInput) => Promise<ActivityReportDto>;
+  syncDraft: (id: string, input: SyncActivityReportDraftInput) => Promise<SyncActivityReportDraftResult>;
   submit: (id: string, version: number) => Promise<ActivityReportDto>;
   requestRevision: (id: string, version: number, reason: string) => Promise<ActivityReportDto>;
   reopen: (id: string, version: number) => Promise<ActivityReportDto>;
@@ -266,6 +283,32 @@ function parseEnvelope(value: unknown): ActivityReportDto {
   return parseActivityReport(value.data);
 }
 
+function parseDraftSyncEnvelope(value: unknown): SyncActivityReportDraftResult {
+  if (!record(value) || !('data' in value) || !record(value.sync)) {
+    throw new ActivityReportContractError('Respons sinkronisasi draft tidak sesuai kontrak API.');
+  }
+
+  const sync = value.sync;
+  if (!string(sync.clientMutationId)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sync.clientMutationId)
+    || !positive(sync.baseVersion)
+    || !positive(sync.appliedVersion)
+    || sync.appliedVersion !== sync.baseVersion + 1
+    || typeof sync.replayed !== 'boolean') {
+    throw new ActivityReportContractError('Metadata sinkronisasi draft tidak valid.');
+  }
+
+  return {
+    report: parseActivityReport(value.data),
+    sync: {
+      clientMutationId: sync.clientMutationId,
+      baseVersion: sync.baseVersion,
+      appliedVersion: sync.appliedVersion,
+      replayed: sync.replayed,
+    },
+  };
+}
+
 function parseAttachment(value: unknown): ActivityReportAttachmentDto {
   if (!record(value)
     || !string(value.id) || !isUlid(value.id)
@@ -364,6 +407,17 @@ export function createActivityReportGateway(client: ApiClient): ActivityReportGa
     async show(id) { return parseEnvelope(await client.get<unknown>(`/activity-reports/${pathId(id)}`)); },
     async update(id, version, input) {
       return parseEnvelope(await client.patch<unknown>(`/activity-reports/${pathId(id)}`, input, { ifMatch: `"${version}"` }));
+    },
+    async syncDraft(id, input) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientMutationId)
+        || !positive(input.baseVersion)
+        || Object.keys(input.patch).length === 0) {
+        throw new ActivityReportContractError('Payload sinkronisasi draft tidak valid.');
+      }
+      return parseDraftSyncEnvelope(await client.post<unknown>(
+        `/activity-reports/${pathId(id)}/sync-draft`,
+        input,
+      ));
     },
     async submit(id, version) {
       return parseEnvelope(await client.post<unknown>(`/activity-reports/${pathId(id)}/submit`, undefined, { ifMatch: `"${version}"` }));

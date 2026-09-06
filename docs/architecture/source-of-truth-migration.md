@@ -320,9 +320,24 @@ Delivered in S3.5:
 - `/sessions` exposes explicit Temuan→Incident promotion and report evidence upload without restoring browser-local Session/Journal behavior;
 - OpenAPI 0.23.
 
-Next slice:
+Delivered in S3.6:
 
-- S3.6 offline draft sync + operational UAT.
+- only ActivityReport editable draft fields receive controlled offline working-copy support; Session lifecycle, observations/Incidents, backfill, submit/verify/revision, and attachments stay online-only;
+- browser drafts are scoped to the authenticated School + membership + user + report and expire after seven days;
+- each local mutation keeps the server base version, base snapshot, local snapshot, and a stable cryptographically generated client mutation ID;
+- the server persists a report-scoped mutation receipt with canonical payload SHA-256 and resulting version;
+- exact retries replay without duplicate writes, version increments, or audit events, while mutation-ID reuse with changed content is rejected;
+- stale base versions return an explicit conflict and never overwrite newer canonical state;
+- conflict UX compares base/local/server versions and offers either canonical-server discard or explicit three-way local rebase;
+- three-way rebase preserves newer server values on fields the offline user did not change;
+- pending local text must be synchronized before attachment upload, avoiding silent version invalidation;
+- automated backend/frontend/source-boundary tests cover the deterministic sync contract;
+- docs/reviews/s3.6-offline-draft-uat.md defines browser/network operational checks and distinguishes operator-required validation from automated CI evidence;
+- OpenAPI 0.24.
+
+S3 is complete. Next phase:
+
+- S4 Assets, Inventory, Loans, and Preventive Maintenance.
 
 ### Phase S4 - Asset and inventory operations
 

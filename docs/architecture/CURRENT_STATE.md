@@ -33,6 +33,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Pelaksanaan Lab frontend | canonical `/sessions` workspace over server-scoped execution-source discovery, LaboratorySession, and ActivityReport APIs; `/journals` is compatibility/deep-link only |
 | Session issue observations | immutable execution evidence scoped to canonical Sessions; Device references are same-Laboratory canonical IDs; Incident creation is an explicit idempotent promotion, never an automatic side effect |
 | ActivityReport attachments | immutable private-file metadata with SHA-256, draft-only upload, ActivityReport version/audit integration, authorized download, and no exposed storage key |
+| ActivityReport offline draft sync | account-scoped seven-day browser working copy + server receipt ledger with stable client mutation IDs, canonical payload hashes, explicit stale-version conflicts, idempotent replay, and three-way rebase UX; server remains authoritative |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -57,12 +58,11 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Phase S3.6: offline report-draft sync, conflict UX, and operational UAT.
-2. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
-3. Phase S5: Corrective Work Orders.
-4. Phase S6: PC monitoring telemetry.
-5. Phase S7: Notifications, Reporting, final Dashboard/global search.
-6. Phase S8: remove browser-local business persistence and compatibility layers.
+1. Phase S4: Assets, Inventory, Loans, Preventive Maintenance.
+2. Phase S5: Corrective Work Orders.
+3. Phase S6: PC monitoring telemetry.
+4. Phase S7: Notifications, Reporting, final Dashboard/global search.
+5. Phase S8: remove browser-local business persistence and compatibility layers.
 
 ## Reserved / placeholder
 
@@ -102,6 +102,7 @@ The locked target boundary is:
 - S3.3 implements the ActivityReport backend: normal Session end atomically creates exactly one draft; report variants are server-validated; aggregate attendance remains non-authoritative for individual students; manual backfill is elevated and never creates a fake Session; report lifecycle/version/audit are canonical under OpenAPI 0.21.
 - S3.4 cuts Pelaksanaan Lab to server authority: ownership-safe `GET /laboratory-session-sources` supplies eligible current sources without display-name inference; `/sessions` provides Today/In Progress/Awaiting Report/History views and canonical Session/report mutations; `/journals` only redirects/deep-links into canonical report history; route/action guards use server permissions; OpenAPI advances to 0.22.
 - S3.5 makes execution evidence explicit: immutable SessionIssueObservation rows may be recorded only during actual execution or while the ended Session report remains draft; Device observations require an eligible same-Laboratory canonical Device; Asset reference IDs are intentionally refused until S4; Incident promotion requires explicit permissions and uses a server-stored idempotency correlation so one observation cannot create duplicate tickets. ActivityReport attachments use configurable private Laravel storage, server MIME/size policy, SHA-256 metadata, draft-only versioned upload, audit events, authorized no-store/nosniff download, and no deletion path in S3.5. OpenAPI advances to 0.23.
+- S3.6 completes the execution/report phase with controlled offline ActivityReport working copies: cache scope is School+membership+user+report with seven-day expiry; stable client mutation IDs and a server receipt ledger make retries idempotent; stale base versions fail closed without overwrite; conflict UX uses explicit base/local/server comparison and three-way rebase; Session lifecycle, Incident/Observation, report lifecycle mutations, backfill, and attachments remain online-only. OpenAPI advances to 0.24 and the operational UAT matrix records automated versus operator-browser evidence.
 
 ## Validation contract
 

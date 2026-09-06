@@ -11,6 +11,7 @@ use App\Http\Requests\CreateActivityReportBackfillRequest;
 use App\Http\Requests\EmptyActivityReportMutationRequest;
 use App\Http\Requests\ListActivityReportsRequest;
 use App\Http\Requests\RequestActivityReportRevisionRequest;
+use App\Http\Requests\SyncActivityReportDraftRequest;
 use App\Http\Requests\UpdateActivityReportRequest;
 use App\Http\Resources\ActivityReportResource;
 use App\Models\ActivityReport;
@@ -68,6 +69,31 @@ class ActivityReportController extends Controller
             ),
             $request,
         );
+    }
+
+    public function syncDraft(
+        SyncActivityReportDraftRequest $request,
+        string $reportId,
+        ActivityReportMutationService $service,
+    ): JsonResponse {
+        $result = $service->syncDraft(
+            $this->context($request),
+            $this->actor($request),
+            $reportId,
+            (string) $request->validated('clientMutationId'),
+            (int) $request->validated('baseVersion'),
+            (array) $request->validated('patch'),
+        );
+
+        return response()->json([
+            'data' => (new ActivityReportResource($result['report']))->resolve($request),
+            'sync' => [
+                'clientMutationId' => $result['clientMutationId'],
+                'baseVersion' => $result['baseVersion'],
+                'appliedVersion' => $result['appliedVersion'],
+                'replayed' => $result['replayed'],
+            ],
+        ])->header('ETag', '"'.$result['report']->version.'"');
     }
 
     public function submit(

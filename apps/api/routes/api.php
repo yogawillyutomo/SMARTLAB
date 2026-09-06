@@ -124,6 +124,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('activity-reports/backfill', [ActivityReportController::class, 'backfill'])->middleware('permission:activity-reports.create-backfill');
         Route::get('activity-reports/{reportId}', [ActivityReportController::class, 'show'])->middleware('permission:activity-reports.view');
         Route::patch('activity-reports/{reportId}', [ActivityReportController::class, 'update'])->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);
+        Route::post('activity-reports/{reportId}/sync-draft', [ActivityReportController::class, 'syncDraft'])->middleware('permission:activity-reports.edit');
         Route::post('activity-reports/{reportId}/submit', [ActivityReportController::class, 'submit'])->middleware(['permission:activity-reports.submit', RequireActivityReportVersionPrecondition::class]);
         Route::post('activity-reports/{reportId}/request-revision', [ActivityReportController::class, 'requestRevision'])->middleware(['permission:activity-reports.request-revision', RequireActivityReportVersionPrecondition::class]);
         Route::post('activity-reports/{reportId}/reopen', [ActivityReportController::class, 'reopen'])->middleware(['permission:activity-reports.edit', RequireActivityReportVersionPrecondition::class]);

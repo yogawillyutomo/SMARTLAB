@@ -5,6 +5,7 @@ namespace App\Application\ActivityReport;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\ActivityReport\ActivityReportDomainException;
 use App\Models\ActivityReport;
+use App\Models\ActivityReportDraftSyncMutation;
 use App\Models\Laboratory;
 use App\Models\LaboratorySession;
 use App\Models\School;
@@ -292,6 +293,128 @@ class ActivityReportMutationService
         });
     }
 
+    /**
+     * @param array<string,mixed> $patch
+     * @return array{report:ActivityReport,replayed:bool,clientMutationId:string,baseVersion:int,appliedVersion:int}
+     */
+    public function syncDraft(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $id,
+        string $clientMutationId,
+        int $baseVersion,
+        array $patch,
+    ): array {
+        return DB::transaction(function () use ($context, $actor, $id, $clientMutationId, $baseVersion, $patch): array {
+            $report = $this->lockForMutation($context, $id);
+            $this->assertAccess($context, $report);
+
+            $payloadHash = $this->syncPayloadHash($patch);
+            $existing = ActivityReportDraftSyncMutation::query()
+                ->where('school_id', $context->membership->school_id)
+                ->where('report_id', $report->id)
+                ->where('client_mutation_id', $clientMutationId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing !== null) {
+                if ($existing->base_version !== $baseVersion || ! hash_equals((string) $existing->payload_sha256, $payloadHash)) {
+                    throw ActivityReportDomainException::syncMutationReused();
+                }
+
+                return [
+                    'report' => $this->reload($report),
+                    'replayed' => true,
+                    'clientMutationId' => $clientMutationId,
+                    'baseVersion' => (int) $existing->base_version,
+                    'appliedVersion' => (int) $existing->resulting_version,
+                ];
+            }
+
+            if ($report->status !== 'draft') {
+                throw ActivityReportDomainException::stateConflict('Only draft Activity Reports accept offline draft synchronization.');
+            }
+
+            if ($report->version !== $baseVersion) {
+                throw ActivityReportDomainException::offlineSyncConflict($report);
+            }
+
+            $reportType = (string) ($patch['reportType'] ?? $report->report_type);
+            $common = $patch['commonContent'] ?? $report->common_content ?? [];
+            $specific = $patch['typeSpecificContent'] ?? $report->type_specific_content ?? [];
+            $attendance = [
+                'presentCount' => array_key_exists('presentCount', $patch) ? $patch['presentCount'] : $report->present_count,
+                'absentCount' => array_key_exists('absentCount', $patch) ? $patch['absentCount'] : $report->absent_count,
+            ];
+
+            $this->validateContent($reportType, $common, $specific, false);
+            $this->validateAttendance($attendance);
+
+            $before = $report->version;
+            $changed = [];
+
+            foreach ([
+                'reportType' => 'report_type',
+                'presentCount' => 'present_count',
+                'absentCount' => 'absent_count',
+                'attendanceNotes' => 'attendance_notes',
+                'externalAttendanceSystem' => 'external_attendance_system',
+                'externalAttendanceReferenceId' => 'external_attendance_reference_id',
+                'commonContent' => 'common_content',
+                'typeSpecificContent' => 'type_specific_content',
+            ] as $input => $column) {
+                if (! array_key_exists($input, $patch)) {
+                    continue;
+                }
+
+                $value = $patch[$input];
+                if (in_array($input, ['attendanceNotes', 'externalAttendanceSystem', 'externalAttendanceReferenceId'], true)) {
+                    $value = $this->nullableTrim($value);
+                }
+
+                $report->{$column} = $value;
+                $changed[] = $input;
+            }
+
+            $report->version++;
+            $report->save();
+
+            ActivityReportDraftSyncMutation::query()->create([
+                'school_id' => $context->membership->school_id,
+                'report_id' => $report->id,
+                'client_mutation_id' => $clientMutationId,
+                'base_version' => $baseVersion,
+                'payload_sha256' => $payloadHash,
+                'resulting_version' => $report->version,
+                'applied_by_user_id' => $actor->id,
+                'applied_by_membership_id' => $context->membership->id,
+                'applied_at' => now(),
+            ]);
+
+            $this->recorder->record(
+                $context,
+                $actor,
+                $report,
+                'activity_report.offline_sync_applied',
+                [
+                    'clientMutationId' => $clientMutationId,
+                    'baseVersion' => $baseVersion,
+                    'changedFields' => $changed,
+                ],
+                $before,
+                $report->version,
+            );
+
+            return [
+                'report' => $this->reload($report),
+                'replayed' => false,
+                'clientMutationId' => $clientMutationId,
+                'baseVersion' => $baseVersion,
+                'appliedVersion' => (int) $report->version,
+            ];
+        });
+    }
+
     public function submit(CurrentMembershipContext $context, User $actor, string $id, int $expectedVersion): ActivityReport
     {
         return DB::transaction(function () use ($context, $actor, $id, $expectedVersion): ActivityReport {
@@ -476,6 +599,36 @@ class ActivityReportMutationService
         if ($report->version !== $expectedVersion) {
             throw ActivityReportDomainException::versionConflict();
         }
+    }
+
+    /** @param array<string,mixed> $patch */
+    private function syncPayloadHash(array $patch): string
+    {
+        $json = json_encode(
+            $this->canonicalizeSyncValue($patch),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
+
+        return hash('sha256', $json);
+    }
+
+    private function canonicalizeSyncValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(fn (mixed $item): mixed => $this->canonicalizeSyncValue($item), $value);
+        }
+
+        ksort($value, SORT_STRING);
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->canonicalizeSyncValue($item);
+        }
+
+        return $value;
     }
 
     /** @param array<string,mixed> $common @param array<string,mixed> $specific */

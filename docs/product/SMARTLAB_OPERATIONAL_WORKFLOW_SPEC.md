@@ -156,7 +156,7 @@ Override prioritas selalu bertanggal; jadwal berulang tidak pernah dihapus. Seti
 | --- | --- |
 | Implementasi saat ini | Jadwal, Unified Availability, Reservasi, Schedule Exception cancel/relocate, dan Priority Event sudah canonical di Laravel/PostgreSQL; `/schedules`, `/bookings`, dan `/priority-events` memakai server authority. Publication TESSELA baru juga melewati impact/reconciliation gate sebelum activation. |
 | Perilaku target yang disetujui | Satu layanan ketersediaan memutuskan semua konflik tanpa mengaburkan domain Jadwal Reguler dan Reservasi Lab. |
-| Implementasi masa depan | Pelaksanaan Lab sudah canonical melalui S3.5 pada `main`. S3.6 offline report-draft sync + operational UAT sedang berada di open PR #74 dan belum boleh dianggap merged; sesudah exit gate S3, roadmap bergerak ke S4 Asset/Inventory/Loans/Preventive Maintenance. |
+| Implementasi masa depan | Pelaksanaan Lab sudah canonical melalui S3.6, termasuk controlled offline ActivityReport draft sync yang tetap menjaga server/version authority. Browser/DevTools offline UX matrix tetap wajib dijalankan di target environment sebelum production rollout. Fase fungsional berikutnya adalah S4 Asset/Inventory/Loans/Preventive Maintenance. |
 | Di luar scope PR dokumentasi | Menganggap validasi browser sebagai jaminan konkurensi atau otorisasi. |
 
 ## 5. Pelaksanaan Lab dan laporan
@@ -192,9 +192,9 @@ Laporan manual hanya untuk backfill, migrasi, darurat, atau data legacy yang dii
 
 | Status | Keterangan |
 | --- | --- |
-| Implementasi saat ini | S3.2–S3.5 sudah canonical pada `main`: LaboratorySession source-bound, ActivityReport 1:1 dengan atomic end→draft, `/sessions` memakai server authority, `/journals` hanya compatibility/deep-link redirect, dan execution evidence mencakup immutable observations, explicit Observation→Incident promotion, serta private ActivityReport attachments. |
+| Implementasi saat ini | S3.2–S3.6 sudah canonical secara implementasi: LaboratorySession source-bound, ActivityReport 1:1 dengan atomic end→draft, `/sessions` memakai server authority, `/journals` hanya compatibility/deep-link redirect, execution evidence mencakup immutable observations, explicit Observation→Incident promotion, private ActivityReport attachments, dan controlled offline draft sync dengan idempotent receipts serta fail-closed conflict/rebase handling. |
 | Perilaku target yang disetujui | Pengguna mengalami satu workflow Pelaksanaan Lab dengan laporan wajib dan verifikasi. |
-| Implementasi masa depan | S3.6 offline draft sync + operational UAT sedang dikerjakan di open PR #74. Karena belum merged, S3 belum dinyatakan complete pada `main`; setelah S3.6 exit gate, fase berikutnya adalah S4. |
+| Implementasi masa depan | Operator/browser scenario pada matrix S3.6 tetap menjadi production-rollout UAT. Tidak ada perluasan ke full-offline Session/Incident/attachment queue. Fase fungsional berikutnya adalah S4. |
 | Di luar scope PR dokumentasi | Menghapus jurnal/sesi lama atau menetapkan SLA pengingat yang belum disetujui. |
 
 ## 6. Denah laboratorium

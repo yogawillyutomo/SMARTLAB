@@ -147,6 +147,19 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).not.toContain('createIncidentFromBrokenPc');
   });
 
+  it('keeps S3.6 offline support limited to ActivityReport draft working copies', () => {
+    expect(sessionsSource).toContain("from '@/services/activityReportOfflineDraft'");
+    expect(sessionsSource).toContain('activityReportGateway.syncDraft');
+    expect(sessionsSource).toContain('Mode offline terbatas');
+    expect(sessionsSource).toContain('Rebase Draft Lokal');
+    expect(sessionsSource).toContain('Gunakan Versi Server');
+    expect(sessionsSource).toContain('Session lifecycle, Temuan/Incident, submit/verifikasi, backfill, dan attachment tetap online-only');
+    expect(sessionsSource).not.toContain('offlineSessionQueue');
+    expect(sessionsSource).not.toContain('offlineIncidentQueue');
+    expect(sessionsSource).not.toContain('offlineAttachmentQueue');
+    expect(sessionsSource).not.toContain('queueAttachment');
+  });
+
   it('does not seed an active Laboratory identifier into UI state', () => {
     expect(uiStoreSource).toContain("activeLabId: ''");
     expect(uiStoreSource).not.toContain("activeLabId: 'lab-rpl-1'");

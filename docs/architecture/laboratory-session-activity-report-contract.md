@@ -1117,9 +1117,34 @@ Delivered frontend semantics:
 - draft editors can upload evidence through the canonical multipart API;
 - browser-local Session/Journal/Incident side effects are not reintroduced.
 
-### S3.6 — Offline draft sync and UAT
+### S3.6 — Offline draft sync and UAT — implemented
 
-Implement controlled offline report draft support, conflict UX, idempotent sync, and end-to-end operational UAT.
+Delivered offline-draft semantics:
+
+- offline support is intentionally limited to editable ActivityReport text/count working-copy fields;
+- the browser working copy is never canonical authority and never changes Session, Incident, attachment, or report lifecycle state by itself;
+- cached drafts are scoped to School + membership + user + report and expire after seven days;
+- no attachment/blob, Session lifecycle, Observation/Incident, backfill, submit, revision, or verification queue exists in S3.6;
+- each pending sync carries a cryptographically generated stable clientMutationId, the server baseVersion, a base snapshot, and the local draft snapshot;
+- the server persists an immutable sync receipt keyed by report + client mutation ID with canonical payload SHA-256 and resulting version;
+- an exact retry is idempotent: it returns the previously applied result without another report version bump or duplicate audit event;
+- reusing the same client mutation ID with a different base version or patch is rejected;
+- if the canonical server version differs from the draft base version, sync fails closed with an explicit conflict and never overwrites the newer report;
+- the frontend performs explicit three-way conflict analysis using base/local/server snapshots;
+- choosing the server version discards the local working copy;
+- choosing local rebase reapplies only fields the user changed onto the newest server snapshot, preserves untouched server changes, creates a new client mutation ID, and requires another explicit sync;
+- attachments may be uploaded only after draft text is clean/synchronized, preventing an attachment-triggered report version bump from silently invalidating pending local text;
+- successful sync or submission clears the matching local working copy;
+- a full application boot/deep-link while completely offline is not represented as supported: controlled offline editing begins from an ActivityReport already loaded in the authenticated application.
+
+Delivered operational validation:
+
+- integration tests cover first apply, exact replay, mutation-ID misuse, stale-base conflict, no-overwrite, and non-draft rejection;
+- frontend tests cover account-scoped/expiring cache, diff generation, three-way rebase, conflict-field detection, and canonical gateway contracts;
+- source-of-truth regression tests keep Session/Incident/attachment offline queues out of the canonical Pelaksanaan route;
+- the operational browser UAT matrix is recorded in docs/reviews/s3.6-offline-draft-uat.md; scenarios requiring a real browser/network toggle are explicitly marked as operator validation rather than falsely claimed as automated execution.
+
+S3 is complete after S3.6. The next implementation phase is S4 Assets, Inventory, Loans, and Preventive Maintenance.
 
 ## 36. S3.1 exit criteria
 
