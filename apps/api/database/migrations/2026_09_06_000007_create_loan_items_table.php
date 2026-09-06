@@ -42,7 +42,7 @@ return new class extends Migration
 
             DB::unprepared(<<<'SQL'
                 CREATE OR REPLACE FUNCTION smartlab_protect_loan_item_evidence()
-                RETURNS trigger AS $
+                RETURNS trigger AS $smartlab$
                 BEGIN
                     IF TG_OP = 'DELETE' THEN
                         RAISE EXCEPTION 'LoanItem evidence cannot be deleted';
@@ -63,7 +63,7 @@ return new class extends Migration
 
                     RETURN NEW;
                 END;
-                $ LANGUAGE plpgsql
+                $smartlab$ LANGUAGE plpgsql
             SQL);
             DB::statement('CREATE TRIGGER loan_items_evidence_update BEFORE UPDATE ON loan_items FOR EACH ROW EXECUTE FUNCTION smartlab_protect_loan_item_evidence()');
             DB::statement('CREATE TRIGGER loan_items_evidence_delete BEFORE DELETE ON loan_items FOR EACH ROW EXECUTE FUNCTION smartlab_protect_loan_item_evidence()');
