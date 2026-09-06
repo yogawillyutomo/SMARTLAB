@@ -218,10 +218,10 @@ class AssetApiTest extends TestCase
         $device = Device::factory()->for($school)->create();
         $asset = Asset::factory()->for($school)->create(['linked_device_id' => $device->id]);
 
-        $this->deleteJson('/api/v1/assets/'.$asset->id.'/device-link', [], ['If-Match' => '"1"'])
+        $this->postJson('/api/v1/assets/'.$asset->id.'/device-unlink', [], ['If-Match' => '"1"'])
             ->assertUnprocessable();
 
-        $this->deleteJson('/api/v1/assets/'.$asset->id.'/device-link', ['reason' => 'Correction'], ['If-Match' => '"1"'])
+        $this->postJson('/api/v1/assets/'.$asset->id.'/device-unlink', ['reason' => 'Correction'], ['If-Match' => '"1"'])
             ->assertOk()
             ->assertHeader('ETag', '"2"')
             ->assertJsonPath('data.linkedDeviceId', null);

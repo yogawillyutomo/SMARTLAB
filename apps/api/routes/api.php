@@ -162,7 +162,7 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('assets/{assetId}', [AssetController::class, 'update'])->middleware(['permission:assets.update', RequireAssetVersionPrecondition::class]);
         Route::post('assets/{assetId}/device-link', [AssetController::class, 'linkDevice'])
             ->middleware(['permission:assets.link-device', 'permission:devices.view', RequireAssetVersionPrecondition::class]);
-        Route::delete('assets/{assetId}/device-link', [AssetController::class, 'unlinkDevice'])
+        Route::post('assets/{assetId}/device-unlink', [AssetController::class, 'unlinkDevice'])
             ->middleware(['permission:assets.link-device', RequireAssetVersionPrecondition::class]);
         Route::post('assets/{assetId}/retire', [AssetController::class, 'retire'])
             ->middleware(['permission:assets.retire', RequireAssetVersionPrecondition::class]);

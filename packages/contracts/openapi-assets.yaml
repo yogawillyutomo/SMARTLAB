@@ -77,7 +77,21 @@ paths:
         '200': { description: Asset with linked Device }
         '404': { description: Device not found in current School }
         '409': { description: Link or home-Laboratory conflict }
-    delete:
+
+      summary: Remove the Asset to Device link without deleting either record
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: Asset with cleared linked Device }
+  /assets/{assetId}/device-unlink:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - *ifMatch
+    post:
       operationId: unlinkAssetDevice
       summary: Remove the Asset to Device link without deleting either record
       security: *auth
