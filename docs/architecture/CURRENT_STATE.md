@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-06  
-**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, merged S4.2 fixed Assets, merged S4.3 Inventory, merged S4.4 Loan custody, and the S4.5 Preventive Maintenance implementation tranche
+**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, merged S4.2 fixed Assets, merged S4.3 Inventory, merged S4.4 Loan custody, merged S4.5 Preventive Maintenance, and the S4.6 reconciliation/UAT implementation tranche
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -17,7 +17,8 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Fixed Assets | tenant-scoped Asset API with immutable School-scoped asset code, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, and append-oriented change events; linked Asset terminal lifecycle remains fail-closed until a coordinated Device terminal-lifecycle workflow exists |
 | Inventory / stock | **S4.3 merged / canonical:** tenant-scoped InventoryItem metadata plus immutable InventoryTransaction movements, 3-decimal quantity precision, serialized row-lock balance updates, non-negative DB/application guards, stable clientMutationId replay semantics, and server-authoritative `/stock`; merged as PR #80 / `1a34dc23` with exact merged-head CI green |
 | Loan / custody | **S4.4 merged / canonical:** one LoanItem references one exact School-scoped Asset; lifecycle is versioned and action-specific; checkout revalidates and locks Assets, active custody has a DB uniqueness guard, condition evidence is protected, overdue is derived, return does not mutate Asset/Device authority or auto-create Incident, and `/loans` is server-authoritative; merged as PR #81 / `f85f2edf` with exact merged-head CI green |
-| Preventive Maintenance | **S4.5 implementation tranche / PR #82:** MaintenancePlan and MaintenanceExecution bind one exact School-scoped Asset; plan/execution versions use ETag preconditions; `in_progress` owns Maintenance custody; Loan and Maintenance block each other under Asset locks; completion records checklist/condition evidence, updates Asset condition through Asset audit authority, consumes spare parts only through immutable Inventory `issue` transactions, advances next due date atomically, and `/maintenance` is server-authoritative on the PR branch; this becomes merged authority only after explicit merge + exact merged-head verification |
+| Preventive Maintenance | **S4.5 merged / canonical:** MaintenancePlan and MaintenanceExecution bind one exact School-scoped Asset; plan/execution versions use ETag preconditions; `in_progress` owns Maintenance custody; Loan and Maintenance block each other under Asset locks; completion records checklist/condition evidence, updates Asset condition through Asset audit authority, consumes spare parts only through immutable Inventory `issue` transactions, advances next due date atomically, and `/maintenance` is server-authoritative; merged as PR #82 / `e3da257c` with exact merged-head CI green |
+| Asset operational state | **S4.6 implementation tranche / PR #83:** read-only `GET /assets/{assetId}/operational-state` derives `available`, `on_loan`, `in_maintenance`, `retired`, `disposed`, `blocked_condition`, or fail-closed `unknown` from canonical Asset/Loan/Maintenance/Device evidence with provenance; no writable availability field is introduced |
 | Device transfers | Device Transfer API |
 | Laboratory layouts | Layout API |
 | Incidents | Incident API and event/history workflow |
@@ -46,7 +47,6 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 - monitoring telemetry;
 - work orders;
-- preventive maintenance;
 - notifications;
 - reports/analytics;
 - audit-log query UI;
@@ -59,12 +59,12 @@ These routes/domains still rely wholly or materially on browser-local repositori
 
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
-1. Close S4.5 by merging PR #82 only after exact-head review/CI, then verify the exact merged `main` head.
-2. Phase S4.6: S4 reconciliation/UAT, including negative-stock/double-loan contention evidence, Maintenance/Loan exclusion evidence, storage-cleared browser UAT, and final S4 source-of-truth reconciliation.
-3. Phase S5: Corrective Work Orders.
+1. Close S4.6 automated reconciliation on PR #83 with exact-head CI, including the dedicated PostgreSQL contention gate and source-of-truth/doc-link regression checks.
+2. Execute and record the storage-cleared browser UAT in [S4.6 Reconciliation & Storage-Cleared UAT](../reviews/s4.6-reconciliation-uat.md). S4 is not complete while this operator evidence is pending.
+3. After S4.6 is merged and exact merged `main` is green, perform a contract-first S5 Corrective Work Order review before runtime implementation.
 4. Phase S6: PC monitoring telemetry.
 5. Phase S7: Notifications, Reporting, final Dashboard/global search.
-6. Phase S8: remove browser-local business persistence and compatibility layers.
+6. Phase S8: remove remaining browser-local business persistence and compatibility layers after all consumers migrate.
 
 ## Reserved / placeholder
 

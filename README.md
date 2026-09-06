@@ -65,12 +65,13 @@ The application is in a staged source-of-truth migration.
 - canonical S4.2 fixed Assets with School-scoped identity, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, append-oriented change events, and server-authoritative `/assets` UI;
 - canonical S4.3 Inventory on merged `main@1a34dc23`: quantity-tracked InventoryItems plus immutable idempotent InventoryTransactions, serialized non-negative balance enforcement, OpenAPI 0.26, and server-authoritative `/stock`;
 - canonical S4.4 Loan custody on merged `main@f85f2edf`: exact-Asset Loan/LoanItem custody, ETag lifecycle actions, symmetric-ready double-checkout exclusion, immutable condition evidence, OpenAPI 0.27, and server-authoritative `/loans`;
-- S4.5 implementation candidate in PR #82: exact-Asset Preventive Maintenance plans/executions, active Maintenance custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and server-authoritative `/maintenance`; it becomes merged authority only after explicit merge and exact merged-head verification;
+- canonical S4.5 Preventive Maintenance on merged `main@e3da257c`: exact-Asset MaintenancePlan/Execution, active Maintenance custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and server-authoritative `/maintenance`;
+- S4.6 reconciliation candidate in PR #83: read-only Asset operational-state projection with provenance, active-custody lifecycle/unlink reconciliation, real PostgreSQL contention tests, S4 source-of-truth closure scans, documentation-link CI, and storage-cleared browser UAT contract; manual browser execution remains a required S4 exit gate;
 - Dashboard metrics for laboratories, devices, and incidents.
 
 ### Transitional browser-local domains
 
-Pelaksanaan Lab is server-authoritative through S3.6, and S4.2–S4.4 Assets, Inventory, and Loan custody are merged canonical domains. Remaining transitional work includes telemetry monitoring, work orders, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. On PR #82, `/maintenance` is cut over to exact-Asset server authority with no browser-local Maintenance mutation; merged `main` does not gain S4.5 authority until PR #82 is explicitly merged and the exact merged head is verified. After S4.5 merge verification, the next functional gate is S4.6 cross-domain reconciliation/UAT. Operator/browser offline UX scenarios remain a production-rollout UAT requirement rather than a reason to weaken server authority.
+Pelaksanaan Lab is server-authoritative through S3.6, and all four S4 routes (`/assets`, `/stock`, `/loans`, `/maintenance`) are canonical on merged `main` through S4.5. Remaining transitional work includes telemetry monitoring, work orders, notifications, reports, tenant settings, audit-log query UI, and several cross-domain summaries. PR #83 is the S4.6 proof/reconciliation tranche; it must not add S5 Work Order authority. Automated S4.6 evidence can run in CI, but S4 is not declared complete until the checked-in storage-cleared browser UAT matrix is actually executed and recorded.
 
 See [Full Source-of-Truth Migration](docs/architecture/source-of-truth-migration.md) and [Current Architecture State](docs/architecture/CURRENT_STATE.md).
 
@@ -110,7 +111,7 @@ composer install --no-interaction
 php artisan test
 ```
 
-GitHub CI additionally validates PostgreSQL migrations/seeders and Composer metadata.
+GitHub CI additionally validates PostgreSQL migrations/seeders, the dedicated S4 PostgreSQL contention suite, relative Markdown links, and Composer metadata.
 
 ## Repository-wide validation
 
