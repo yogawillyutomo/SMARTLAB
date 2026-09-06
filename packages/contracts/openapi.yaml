@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.28.0
-  description: Canonical SmartLab API v1 contract. Version 0.28 adds S4.5 exact-Asset Preventive Maintenance plans/executions, symmetric Loan↔Maintenance custody exclusion, audited Asset-condition completion, atomic Inventory issue consumption, and server-authoritative maintenance workflows while preserving prior S4.4 Loan authority.
+  version: 0.29.0
+  description: Canonical SmartLab API v1 contract. Version 0.29 adds S4.6 read-only Asset operational-state reconciliation with provenance and closes active-custody lifecycle/unlink gaps while preserving S4.2–S4.5 authorities.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -36,6 +36,7 @@ paths:
   /stock-transactions: { $ref: './openapi-stock.yaml#/paths/~1stock-transactions' }
   /assets: { $ref: './openapi-assets.yaml#/paths/~1assets' }
   /assets/{assetId}: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}' }
+  /assets/{assetId}/operational-state: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1operational-state' }
   /assets/{assetId}/device-link: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-link' }
   /assets/{assetId}/device-unlink: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-unlink' }
   /assets/{assetId}/retire: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1retire' }

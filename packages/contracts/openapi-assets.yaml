@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Asset API module
-  version: 0.25.0
+  version: 0.29.0
 paths:
   /assets:
     get:
@@ -55,6 +55,25 @@ paths:
         '409': { description: Lifecycle or linked-identity conflict }
         '412': { description: Version conflict }
         '428': { description: Missing or invalid If-Match }
+  /assets/{assetId}/operational-state:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getAssetOperationalState
+      summary: Derive cross-domain Asset operational state without creating a writable availability authority
+      security: *auth
+      responses:
+        '200':
+          description: Derived Asset operational state with exact provenance
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AssetOperationalState' }
+        '404': { description: Unknown or cross-tenant Asset }
   /assets/{assetId}/device-link:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
@@ -130,6 +149,60 @@ components:
     AssetLifecycleStatus:
       type: string
       enum: [active, retired, disposed]
+    AssetOperationalState:
+      type: object
+      additionalProperties: false
+      required: [assetId, state, integrityCode, provenance]
+      properties:
+        assetId: { type: string, format: ulid }
+        state:
+          type: string
+          enum: [available, on_loan, in_maintenance, retired, disposed, blocked_condition, unknown]
+        integrityCode:
+          type: [string, 'null']
+          enum: [MULTIPLE_ACTIVE_LOAN_CUSTODY, MULTIPLE_ACTIVE_MAINTENANCE_CUSTODY, CONFLICTING_ACTIVE_CUSTODY, LIFECYCLE_CUSTODY_CONFLICT, LINKED_DEVICE_SCOPE_MISMATCH, LINKED_DEVICE_LIFECYCLE_BLOCKED, UNKNOWN_ASSET_LIFECYCLE, null]
+        provenance:
+          type: object
+          additionalProperties: false
+          required: [asset, loanCustodies, maintenanceCustodies, linkedDevice]
+          properties:
+            asset:
+              type: object
+              additionalProperties: false
+              required: [lifecycleStatus, condition, version]
+              properties:
+                lifecycleStatus: { $ref: '#/components/schemas/AssetLifecycleStatus' }
+                condition: { $ref: '#/components/schemas/AssetCondition' }
+                version: { type: integer, minimum: 1 }
+            loanCustodies:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [loanId, loanItemId, status]
+                properties:
+                  loanId: { type: string, format: ulid }
+                  loanItemId: { type: string, format: ulid }
+                  status: { type: string }
+            maintenanceCustodies:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [executionId, maintenancePlanId, status]
+                properties:
+                  executionId: { type: string, format: ulid }
+                  maintenancePlanId: { type: string, format: ulid }
+                  status: { type: string }
+            linkedDevice:
+              oneOf:
+                - type: 'null'
+                - type: object
+                  additionalProperties: false
+                  required: [deviceId, lifecycleStatus]
+                  properties:
+                    deviceId: { type: string, format: ulid }
+                    lifecycleStatus: { type: string }
     CreateAssetInput:
       type: object
       additionalProperties: false
