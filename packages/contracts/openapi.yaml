@@ -16,6 +16,7 @@ paths:
   /assets: { $ref: './openapi-assets.yaml#/paths/~1assets' }
   /assets/{assetId}: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}' }
   /assets/{assetId}/device-link: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-link' }
+  /assets/{assetId}/device-unlink: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-unlink' }
   /assets/{assetId}/retire: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1retire' }
   /assets/{assetId}/dispose: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1dispose' }
   /devices: { $ref: './openapi-0.11.yaml#/paths/~1devices' }
