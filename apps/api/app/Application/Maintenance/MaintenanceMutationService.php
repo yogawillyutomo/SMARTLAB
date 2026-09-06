@@ -78,6 +78,14 @@ class MaintenanceMutationService
             $this->assertPlanVersion($plan, $expectedVersion);
 
             $frequency = (string) ($data['frequencyKind'] ?? $plan->frequency_kind);
+            if ($frequency !== 'custom_interval'
+                && array_key_exists('intervalDays', $data)
+                && $data['intervalDays'] !== null) {
+                throw ValidationException::withMessages([
+                    'intervalDays' => ['intervalDays is only valid for custom_interval.'],
+                ]);
+            }
+
             $interval = array_key_exists('intervalDays', $data)
                 ? $data['intervalDays']
                 : $plan->interval_days;

@@ -156,7 +156,7 @@ class MaintenanceApiTest extends TestCase
     public function test_scheduling_snapshots_plan_asset_and_checklist_and_later_plan_edits_do_not_rewrite_execution(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'maintenance.create-plan', 'maintenance.update-plan', 'maintenance.schedule',
+            'maintenance.view', 'maintenance.create-plan', 'maintenance.update-plan', 'maintenance.schedule',
         ]);
         $asset = $this->asset($school, ['asset_code' => 'AST-SNAP']);
         $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id, [
