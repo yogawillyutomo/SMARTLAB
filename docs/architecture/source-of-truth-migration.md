@@ -369,7 +369,7 @@ Delivered by S4.3 on merged `main`:
 - stable School-scoped `clientMutationId` plus a canonical request SHA-256 gives exact retry replay; reuse for a different payload fails with `STOCK_MUTATION_REUSED`;
 - ledger business evidence is protected from update/delete at the database layer while nullable live actor FKs may be cleared on actor deletion; immutable actor/item snapshots remain;
 - `/stock` reads Inventory APIs only; direct browser quantity mutation and item hard-delete controls are removed;
-- Work Order stock consumption is **not** implemented in S4.3 and remains S5; Maintenance inventory consumption waits for S4.5.
+- Work Order stock consumption is **not** implemented in S4.3 and remains S5; Preventive Maintenance consumption is implemented only by S4.5 through sourced immutable Inventory `issue` transactions.
 
 Delivered by S4.4 on merged `main`:
 
