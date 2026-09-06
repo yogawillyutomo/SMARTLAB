@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AcademicDirectoryMasterController;
 use App\Http\Controllers\Api\V1\ActivityReportController;
 use App\Http\Controllers\Api\V1\ActivityReportAttachmentController;
 use App\Http\Controllers\Api\V1\AcademicPeriodMasterController;
+use App\Http\Controllers\Api\V1\AssetController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Api\V1\PriorityEventController;
 use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
+use App\Http\Middleware\RequireAssetVersionPrecondition;
 use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
@@ -153,6 +155,19 @@ Route::prefix('v1')->group(function (): void {
         Route::get('timetable-publications/{publicationId}', [TimetablePublicationController::class, 'show'])->middleware('permission:schedules.view');
         Route::get('timetable-publications/{publicationId}/impact', [TimetablePublicationController::class, 'impact'])->middleware('permission:schedules.activate');
         Route::post('timetable-publications/{publicationId}/activate', [TimetablePublicationController::class, 'activate'])->middleware('permission:schedules.activate');
+
+        Route::get('assets', [AssetController::class, 'index'])->middleware('permission:assets.view');
+        Route::post('assets', [AssetController::class, 'store'])->middleware('permission:assets.create');
+        Route::get('assets/{assetId}', [AssetController::class, 'show'])->middleware('permission:assets.view');
+        Route::patch('assets/{assetId}', [AssetController::class, 'update'])->middleware(['permission:assets.update', RequireAssetVersionPrecondition::class]);
+        Route::post('assets/{assetId}/device-link', [AssetController::class, 'linkDevice'])
+            ->middleware(['permission:assets.link-device', 'permission:devices.view', RequireAssetVersionPrecondition::class]);
+        Route::delete('assets/{assetId}/device-link', [AssetController::class, 'unlinkDevice'])
+            ->middleware(['permission:assets.link-device', RequireAssetVersionPrecondition::class]);
+        Route::post('assets/{assetId}/retire', [AssetController::class, 'retire'])
+            ->middleware(['permission:assets.retire', RequireAssetVersionPrecondition::class]);
+        Route::post('assets/{assetId}/dispose', [AssetController::class, 'dispose'])
+            ->middleware(['permission:assets.dispose', RequireAssetVersionPrecondition::class]);
 
         Route::get('devices', [DeviceController::class, 'index'])->middleware('permission:devices.view');
         Route::post('devices', [DeviceController::class, 'store'])->middleware('permission:devices.create');

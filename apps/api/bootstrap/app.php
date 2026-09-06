@@ -2,6 +2,7 @@
 
 use App\Application\Identity\SpaAuthenticationException;
 use App\Domain\Academic\AcademicMasterException;
+use App\Domain\Asset\AssetDomainException;
 use App\Domain\ActivityReport\ActivityReportDomainException;
 use App\Domain\Device\DeviceDomainException;
 use App\Domain\DeviceTransfer\TransferDomainException;
@@ -89,6 +90,16 @@ return Application::configure(basePath: dirname(__DIR__))
             ], $exception->status);
         });
         $exceptions->render(function (AcademicMasterException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+        });
+        $exceptions->render(function (AssetDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }

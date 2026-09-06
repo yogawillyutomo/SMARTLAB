@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.24.0
-  description: Canonical SmartLab API v1 contract. Version 0.24 adds S3.6 idempotent ActivityReport draft synchronization for controlled offline working copies while preserving server authority, explicit conflict resolution, and all S3.5 surfaces.
+  version: 0.25.0
+  description: Canonical SmartLab API v1 contract. Version 0.25 adds the S4.2 canonical fixed-Asset API, exact Asset-to-Device linkage, optimistic concurrency, lifecycle actions, and append-oriented history while preserving prior S3.6 surfaces.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -13,6 +13,11 @@ paths:
   /auth/logout: { $ref: './openapi-0.11.yaml#/paths/~1auth~1logout' }
   /laboratories: { $ref: './openapi-0.11.yaml#/paths/~1laboratories' }
   /laboratories/{laboratoryId}: { $ref: './openapi-0.11.yaml#/paths/~1laboratories~1{laboratoryId}' }
+  /assets: { $ref: './openapi-assets.yaml#/paths/~1assets' }
+  /assets/{assetId}: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}' }
+  /assets/{assetId}/device-link: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-link' }
+  /assets/{assetId}/retire: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1retire' }
+  /assets/{assetId}/dispose: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1dispose' }
   /devices: { $ref: './openapi-0.11.yaml#/paths/~1devices' }
   /devices/{deviceId}: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}' }
   /devices/{deviceId}/transfers: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}~1transfers' }
