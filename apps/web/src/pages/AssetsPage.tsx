@@ -319,8 +319,8 @@ export function AssetsPage() {
         {canUpdate && asset.lifecycleStatus !== 'disposed' && <button title="Edit" onClick={() => openEdit(asset)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-ink-primary"><Pencil className="h-4 w-4" /></button>}
         {canLinkDevice && asset.lifecycleStatus === 'active' && asset.linkedDeviceId === null && <button title="Tautkan Device" onClick={() => void openLink(asset)} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-accent-content"><Link2 className="h-4 w-4" /></button>}
         {hasServerPermission(user, 'assets.link-device') && asset.linkedDeviceId !== null && <button title="Lepas Device" onClick={() => { setReason(''); setUnlinking(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-warning-foreground"><Unlink className="h-4 w-4" /></button>}
-        {canRetire && asset.lifecycleStatus === 'active' && <button title="Pensiunkan" onClick={() => { setReason(''); setRetiring(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-warning-foreground"><Archive className="h-4 w-4" /></button>}
-        {canDispose && asset.lifecycleStatus === 'retired' && <button title="Hapuskan administratif" onClick={() => { setReason(''); setDisposing(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Archive className="h-4 w-4" /></button>}
+        {canRetire && asset.lifecycleStatus === 'active' && asset.linkedDeviceId === null && <button title="Pensiunkan" onClick={() => { setReason(''); setRetiring(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-warning-foreground"><Archive className="h-4 w-4" /></button>}
+        {canDispose && asset.lifecycleStatus === 'retired' && asset.linkedDeviceId === null && <button title="Hapuskan administratif" onClick={() => { setReason(''); setDisposing(asset); }} className="rounded p-1 text-ink-muted hover:bg-base-700 hover:text-danger"><Archive className="h-4 w-4" /></button>}
       </div>
     ) },
   ];
@@ -470,7 +470,7 @@ export function AssetDetailPage() {
         {asset.linkedDeviceId ? (
           <div className="mt-2 text-sm">
             <p className="text-ink-secondary">{device ? `${device.deviceCode} · ${device.deviceType}` : asset.linkedDeviceId}</p>
-            {device && <button className="mt-2 text-accent-content hover:underline" onClick={() => navigate(`/devices/${device.id}`)}>Buka Device</button>}
+            {device && <button className="mt-2 text-accent-content hover:underline" onClick={() => navigate(`/devices/${device.id}`)}>Buka Device</button>}<p className="mt-2 text-xs text-ink-muted">Asset yang masih tertaut Device tidak menawarkan aksi retire/dispose dari UI Asset. Terminal lifecycle harus dikoordinasikan dengan lifecycle Device, bukan dibypass.</p>
           </div>
         ) : <p className="mt-2 text-sm text-ink-muted">Belum tertaut ke Device.</p>}
       </CardContent></Card>

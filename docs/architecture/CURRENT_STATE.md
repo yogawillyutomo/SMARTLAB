@@ -14,7 +14,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Authentication / active membership | Laravel session + Sanctum |
 | Laboratories | Laboratory API |
 | Managed devices | Device API |
-| Fixed Assets | tenant-scoped Asset API with immutable School-scoped asset code, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, and append-oriented change events |
+| Fixed Assets | tenant-scoped Asset API with immutable School-scoped asset code, separated condition/lifecycle, exact optional 1:1 Device linkage, ETag concurrency, and append-oriented change events; linked Asset terminal lifecycle remains fail-closed until a coordinated Device terminal-lifecycle workflow exists |
 | Device transfers | Device Transfer API |
 | Laboratory layouts | Layout API |
 | Incidents | Incident API and event/history workflow |
