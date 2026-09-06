@@ -246,6 +246,47 @@ class LoanApiTest extends TestCase
         $secondItem->update(['condition_out' => 'good', 'custody_active' => true]);
     }
 
+    public function test_captured_loan_item_identity_and_evidence_are_database_protected(): void
+    {
+        [, $school] = $this->authenticateWithPermissions([
+            'loans.create', 'loans.approve', 'loans.checkout', 'loans.return',
+        ]);
+        $asset = $this->loanableAsset($school);
+        $created = $this->postJson('/api/v1/loans', $this->validPayload([$asset->id]))->assertCreated();
+        $id = (string) $created->json('data.id');
+
+        $this->postJson("/api/v1/loans/{$id}/approve", [], ['If-Match' => '"1"'])->assertOk();
+        $checked = $this->postJson("/api/v1/loans/{$id}/checkout", [], ['If-Match' => '"2"'])->assertOk();
+        $itemId = (string) $checked->json('data.items.0.id');
+
+        $item = LoanItem::query()->findOrFail($itemId);
+        try {
+            $item->update(['asset_code_snapshot' => 'TAMPERED']);
+            $this->fail('Expected captured LoanItem identity to be immutable.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->postJson("/api/v1/loans/{$id}/return", [
+            'items' => [[
+                'loanItemId' => $itemId,
+                'conditionReturn' => 'minor_damage',
+                'returnNotes' => 'Evidence final.',
+            ]],
+        ], ['If-Match' => '"3"'])->assertOk();
+
+        $item->refresh();
+        try {
+            $item->update(['condition_return' => 'good']);
+            $this->fail('Expected captured return evidence to be immutable.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->expectException(QueryException::class);
+        $item->delete();
+    }
+
     public function test_return_evidence_must_cover_every_item_exactly_once(): void
     {
         [, $school] = $this->authenticateWithPermissions(['loans.create', 'loans.approve', 'loans.checkout', 'loans.return']);

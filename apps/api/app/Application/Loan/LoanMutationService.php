@@ -399,7 +399,17 @@ class LoanMutationService
             return;
         }
 
+        $schoolIds = $assets->pluck('school_id')->map(fn ($id): string => (string) $id)->unique()->values();
+        if ($schoolIds->count() !== 1) {
+            throw new LoanDomainException(
+                'Loan Asset tenant evidence is inconsistent.',
+                'LOAN_ASSET_INELIGIBLE',
+                409,
+            );
+        }
+
         $devices = Device::query()
+            ->where('school_id', $schoolIds->first())
             ->whereIn('id', $deviceIds)
             ->orderBy('id')
             ->lockForUpdate()
