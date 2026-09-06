@@ -121,16 +121,13 @@ export function LoansPage() {
       ]);
       setLoans(nextLoans);
       setAssets(nextAssets);
-      if (detail) {
-        const refreshed = nextLoans.find((loan) => loan.id === detail.id) ?? null;
-        setDetail(refreshed);
-      }
+      setDetail((current) => current ? (nextLoans.find((loan) => loan.id === current.id) ?? null) : null);
     } catch (error) {
       setLoadError(errorMessage(error));
     } finally {
       setLoading(false);
     }
-  }, [canCreate, detail]);
+  }, [canCreate]);
 
   useEffect(() => {
     void load();
