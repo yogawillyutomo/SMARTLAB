@@ -39,7 +39,7 @@ class MaintenanceApiTest extends TestCase
 
     public function test_plan_creation_requires_asset_view_permission_for_exact_asset_selection(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['assets.view', 'maintenance.create-plan']);
+        [, $school] = $this->authenticateWithPermissions(['maintenance.create-plan']);
         $asset = $this->asset($school);
 
         $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id))
@@ -550,7 +550,9 @@ class MaintenanceApiTest extends TestCase
         ]);
 
         $this->assertContains('permission:maintenance.view', $map->first(fn ($mw, $key) => str_contains($key, 'GET,HEAD api/v1/maintenance-plans')));
-        $this->assertContains('permission:maintenance.create-plan', $map->first(fn ($mw, $key) => $key === 'POST api/v1/maintenance-plans'));
+        $createPlanMiddleware = $map->first(fn ($mw, $key) => $key === 'POST api/v1/maintenance-plans');
+        $this->assertContains('permission:maintenance.create-plan', $createPlanMiddleware);
+        $this->assertContains('permission:assets.view', $createPlanMiddleware);
         $this->assertContains('permission:maintenance.update-plan', $map->first(fn ($mw, $key) => str_contains($key, 'PATCH api/v1/maintenance-plans/{planId}')));
         $this->assertContains('permission:maintenance.schedule', $map->first(fn ($mw, $key) => str_contains($key, '/executions')));
         $this->assertContains('permission:maintenance.start', $map->first(fn ($mw, $key) => str_contains($key, '/start')));
