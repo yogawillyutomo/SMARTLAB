@@ -347,8 +347,7 @@ Planned slices:
 - **S4.3 — complete on merged main:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and `/stock` cutover; merged as PR #80 / `1a34dc23` with exact merged-head API/web CI green;
 - **S4.4 — complete on merged main:** exact-Asset Loan/LoanItem custody, action-specific versioned lifecycle, double-checkout exclusion, condition snapshots, append-oriented evidence, OpenAPI 0.27, and `/loans` cutover; merged as PR #81 / `f85f2edf` with exact merged-head API/web CI green;
 - **S4.5 — complete on merged main:** exact-Asset Preventive Maintenance plans/executions, active custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and `/maintenance` cutover; merged as PR #82 / `e3da257c` with exact merged-head API/web CI green;
-- **S4.6 — implementation tranche in PR #83:** read-only Asset operational-state projection with provenance, lifecycle/unlink active-custody reconciliation, real PostgreSQL contention gates, historical evidence reconstruction, aggregate source-of-truth scans, relative documentation-link validation, and a checked-in storage-cleared browser UAT matrix; S4 remains open until that manual UAT is executed and recorded;
-- **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
+- **S4.6 — complete on merged main:** read-only Asset operational-state projection with provenance, lifecycle/unlink active-custody reconciliation, versioned in-progress Maintenance checklist progress, real PostgreSQL contention gates, historical evidence reconstruction, aggregate source-of-truth scans, relative documentation-link validation, and recorded browser UAT evidence; merged as PR #83 / `3757e986` with exact merged-head workflow #313 green; S4 is closed.
 
 Delivered by S4.2 when this tranche is present on merged `main`:
 
@@ -400,7 +399,7 @@ Delivered by S4.5 on merged `main`:
 - `/maintenance` on merged PR #82 uses canonical Maintenance/Asset/Inventory APIs only; browser-local `db.maintenance`, local mutation, free-text Asset code execution, and hard-delete controls are removed;
 - Corrective repair remains S5 Work Order authority and is not fabricated by S4.5.
 
-Delivered by the S4.6 implementation tranche:
+Delivered by S4.6 on merged `main`:
 
 - Asset retirement/disposal and Device unlink revalidate active Loan/Maintenance custody and fail with `ASSET_ACTIVE_CUSTODY_CONFLICT`; this closes a contract gap discovered during reconciliation rather than creating a new authority;
 - `GET /assets/{assetId}/operational-state` is read-only and derives state from exact School-scoped Asset, LoanItem, MaintenanceExecution, and linked Device evidence; provenance is returned and integrity contradictions become `unknown` rather than being hidden;
@@ -408,8 +407,9 @@ Delivered by the S4.6 implementation tranche:
 - historical reconciliation verifies LoanItem, MaintenanceExecution, and InventoryTransaction snapshots survive later master metadata changes, while the Inventory ledger reconstructs current balance;
 - web regression contains an aggregate S4 source-of-truth scan across `/assets`, `/stock`, `/loans`, and `/maintenance`;
 - relative Markdown links are a repository CI gate;
+- in-progress Preventive Maintenance checklist progress is versioned, server-authoritative working state protected by `If-Match`; it remains distinct from immutable final `checklistResults` and does not release custody, mutate Asset condition, consume Inventory, or create Incident/Work Order;
 - no automatic browser-data import is approved. Classification is limited to `exact_safe_match`, `unmatched`, `ambiguous`, `invalid`, and `blocked_by_dependency`; local/browser IDs never become canonical IDs by inference;
-- storage-cleared browser UAT remains manual evidence and must be recorded before S4 can be declared complete.
+- storage-cleared core browser evidence plus exact implementation-head impacted retests were recorded as PASS; PR #83 merged to `main@3757e986cbc8a15bcde3cbe92a3ed71f73f64d04`, and post-merge workflow #313 passed `web-ci` and `api-ci`; S4 is closed.
 
 Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 
