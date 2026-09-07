@@ -18,6 +18,7 @@ use App\Models\School;
 use App\Models\SchoolMembership;
 use App\Models\User;
 use App\Models\WorkOrder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group;
@@ -364,6 +365,47 @@ class S4PostgresConcurrencyTest extends TestCase
         $maintenanceActive = MaintenanceExecution::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
         $workOrderActive = WorkOrder::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
         $this->assertSame(1, $maintenanceActive + $workOrderActive);
+    }
+
+    public function test_postgres_corrective_custody_requires_start_evidence_at_database_layer(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+        ]);
+        $lab = Laboratory::factory()->create([
+            'school_id' => $schoolId,
+            'status' => 'active',
+        ]);
+
+        $workOrder = app(WorkOrderMutationService::class)->create(
+            $this->context($membershipId, []),
+            User::query()->findOrFail($userId),
+            [
+                'assetId' => (string) $asset->id,
+                'laboratoryId' => (string) $lab->id,
+                'problemSummary' => 'PostgreSQL start evidence constraint proof',
+                'priority' => 'high',
+            ],
+        );
+
+        try {
+            WorkOrder::query()->whereKey($workOrder->id)->update([
+                'status' => 'in_progress',
+                'custody_active' => true,
+            ]);
+            $this->fail('Expected PostgreSQL to reject active corrective custody without start evidence.');
+        } catch (QueryException) {
+        }
+
+        $workOrder->refresh();
+        $this->assertSame('draft', $workOrder->status);
+        $this->assertFalse($workOrder->custody_active);
+        $this->assertNull($workOrder->started_at);
+        $this->assertNull($workOrder->condition_before);
+        $this->assertNull($workOrder->asset_version_at_start);
     }
 
     /**
