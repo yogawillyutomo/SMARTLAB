@@ -46,7 +46,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
 
 - monitoring telemetry;
-- work orders — S5.1 authority is locked on merged main; S5.2 backend/core is an implementation candidate in PR #86, while the current `/work-orders` frontend remains browser-local until S5.4;
+- work orders — S5.1 is locked and S5.2 backend/core is merged on `main@91000032`; S5.3 Inventory + verification is an implementation candidate in PR #87, while the current `/work-orders` frontend remains browser-local until S5.4;
 - notifications;
 - reports/analytics;
 - audit-log query UI;
@@ -61,8 +61,8 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 
 1. S4 is closed on merged PR #83 / `3757e986`; preserve the exact-Asset, immutable-ledger, custody, tenant, and source-of-truth boundaries proven by its automated and browser evidence.
 2. S5.1 is locked on merged PR #85 / `8c7f84ee`; preserve [ADR-003](./ADR-003-corrective-work-order-boundary.md) and the [Work Order contract](./work-order-domain-contract.md).
-3. Complete S5.2 PR #86: canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, OpenAPI 0.31, exact-head CI, then review/merge. Do not pull S5.3 stock consumption or verification into this tranche.
-4. S5.3: add least-privilege Work Order spare-part consumption through immutable InventoryTransaction and managerial verification that applies condition through Asset authority.
+3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
+4. Complete S5.3 PR #87: least-privilege `work-orders.consume-stock`, immutable WorkOrderPartUsage bound to sourced InventoryTransaction, idempotent part issue, Asset-authority verification, Asset-version drift guard, atomic custody release, PostgreSQL race proofs, and OpenAPI 0.32.
 5. S5.4: cut over `/work-orders` frontend from browser-local authority and execute storage-cleared browser UAT.
 6. Track Laboratory-scale Maintenance Campaign / Batch as a future Preventive Maintenance orchestration UX; it must not create ambiguous multi-Asset execution authority or implicitly block the Laboratory.
 7. Phase S6: PC monitoring telemetry.

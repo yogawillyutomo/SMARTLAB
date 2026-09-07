@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Corrective Work Order API module
-  version: 0.31.0
+  version: 0.32.0
 paths:
   /work-orders:
     get:
@@ -116,6 +116,32 @@ paths:
       responses:
         '200': { description: Work Order resumed to in-progress }
         '409': { description: Asset or lifecycle no longer eligible }
+  /work-orders/{workOrderId}/parts:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: useWorkOrderPart
+      summary: Issue one spare part through canonical Inventory authority for an in-progress Work Order
+      description: >
+        Requires work-orders.update and work-orders.consume-stock. The Work Order must be in_progress
+        with active corrective custody. InventoryTransaction is authoritative and is bound with
+        sourceType=work_order and sourceId=workOrderId. First application returns 201 and increments
+        Work Order version once. Exact clientMutationId replay returns 200 without a second stock
+        decrement, WorkOrderPartUsage row, event, or Work Order version increment.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UseWorkOrderPartInput' }
+      responses:
+        '201': { description: Spare part issued; immutable InventoryTransaction and WorkOrderPartUsage created }
+        '200': { description: Exact idempotent replay; no second mutation }
+        '403': { description: Missing Work Order stock-consumption or progress authority }
+        '404': { description: Unknown same-School Work Order or Inventory item }
+        '409': { description: Invalid Work Order state, insufficient stock, mutation reuse conflict, or evidence reconciliation conflict }
+        '412': { description: Work Order version conflict for a new mutation }
+        '428': { description: Missing or invalid If-Match }
+        '422': { description: Invalid part-use payload }
   /work-orders/{workOrderId}/complete:
     parameters: [*workOrderId, *ifMatch]
     post:
@@ -128,9 +154,30 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CompleteWorkOrderInput' }
       responses:
-        '200': { description: Completed Work Order; corrective custody remains active pending future S5.3 verification }
+        '200': { description: Completed Work Order; corrective custody remains active until explicit managerial verification }
         '409': { description: Invalid lifecycle or assignee eligibility }
         '422': { description: Invalid completion evidence }
+  /work-orders/{workOrderId}/verify:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: verifyWorkOrder
+      summary: Managerially verify completed corrective work, apply Asset condition through Asset authority, and release custody atomically
+      description: >
+        Requires work-orders.approve. The Work Order must be completed. Verification locks and
+        revalidates the exact Asset and requires its version to match assetVersionAtStart.
+        conditionAfter is applied only through Asset authority, which appends
+        asset.work_order_condition_updated evidence. The same transaction then marks the Work Order
+        verified, releases corrective custody, and appends work_order.verified. Asset version drift
+        fails closed with no partial Work Order verification or repair-condition application.
+        Incident and Device state are never changed implicitly.
+      security: *auth
+      responses:
+        '200': { description: Work Order verified; Asset condition evidence applied and corrective custody released }
+        '403': { description: Missing work-orders.approve authority }
+        '404': { description: Unknown or cross-School Work Order }
+        '409': { description: Invalid transition, Asset lifecycle conflict, or WORK_ORDER_ASSET_VERSION_DRIFT }
+        '412': { description: Work Order version conflict }
+        '428': { description: Missing or invalid If-Match }
   /work-orders/{workOrderId}/rework:
     parameters: [*workOrderId, *ifMatch]
     post:
@@ -196,6 +243,18 @@ components:
       required: [reason]
       properties:
         reason: { type: string, minLength: 3, maxLength: 1000 }
+    UseWorkOrderPartInput:
+      type: object
+      additionalProperties: false
+      required: [inventoryItemId, clientMutationId, quantity]
+      properties:
+        inventoryItemId: { type: string, format: ulid }
+        clientMutationId: { type: string, format: uuid }
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 999999999999.999
+          multipleOf: 0.001
     CompleteWorkOrderInput:
       type: object
       additionalProperties: false
