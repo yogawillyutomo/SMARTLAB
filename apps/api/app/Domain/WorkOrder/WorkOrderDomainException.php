@@ -62,4 +62,22 @@ class WorkOrderDomainException extends RuntimeException
     {
         return new self('Work Order number sequence is exhausted for this year.', 'WORK_ORDER_NUMBER_EXHAUSTED', 409);
     }
+
+    public static function assetVersionDrift(): self
+    {
+        return new self(
+            'Asset changed after corrective custody started; verification requires reconciliation.',
+            'WORK_ORDER_ASSET_VERSION_DRIFT',
+            409,
+        );
+    }
+
+    public static function partUsageReconciliationRequired(): self
+    {
+        return new self(
+            'Inventory movement exists without matching Work Order part-usage evidence.',
+            'WORK_ORDER_PART_USAGE_RECONCILIATION_REQUIRED',
+            409,
+        );
+    }
 }

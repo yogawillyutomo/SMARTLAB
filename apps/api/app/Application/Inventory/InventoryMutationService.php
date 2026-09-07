@@ -183,6 +183,30 @@ class InventoryMutationService
     }
 
     /**
+     * @param array{inventoryItemId:string,clientMutationId:string,quantity:mixed} $issue
+     * @return array{transaction:InventoryTransaction,replayed:bool}
+     */
+    public function issueForWorkOrder(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $workOrderId,
+        string $workOrderNumber,
+        array $issue,
+    ): array {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Work Order inventory consumption requires an active outer transaction.');
+        }
+
+        return $this->transactWithSource($context, $actor, [
+            'inventoryItemId' => (string) $issue['inventoryItemId'],
+            'clientMutationId' => (string) $issue['clientMutationId'],
+            'kind' => 'issue',
+            'quantity' => $issue['quantity'],
+            'reason' => 'Corrective Work Order '.$workOrderNumber,
+        ], 'work_order', $workOrderId);
+    }
+
+    /**
      * @param array<string, mixed> $data
      * @return array{transaction:InventoryTransaction,replayed:bool}
      */

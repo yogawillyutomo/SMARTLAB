@@ -1,6 +1,6 @@
 # S5 Corrective Work Order Domain Contract
 
-**Status:** Accepted / locked — merged in PR #85; S5.2 implementation must conform and S5.3/S5.4 remain separately gated  
+**Status:** Accepted / locked — S5.1 merged in PR #85; S5.2 core merged in PR #86; S5.3 Inventory + verification is implemented as candidate PR #87 and S5.4 frontend/UAT remains separately gated  
 **Date:** 2026-09-07  
 **Authority:** governed by [ADR-003](ADR-003-corrective-work-order-boundary.md)
 

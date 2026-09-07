@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Application\Asset\AssetMutationService;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Inventory\InventoryMutationService;
 use App\Application\Loan\LoanMutationService;
@@ -18,6 +19,7 @@ use App\Models\School;
 use App\Models\SchoolMembership;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderPartUsage;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -365,6 +367,141 @@ class S4PostgresConcurrencyTest extends TestCase
         $maintenanceActive = MaintenanceExecution::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
         $workOrderActive = WorkOrder::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
         $this->assertSame(1, $maintenanceActive + $workOrderActive);
+    }
+
+    public function test_concurrent_work_order_part_issues_never_make_stock_negative(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $firstAsset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+        ]);
+        $secondAsset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+        ]);
+        $item = InventoryItem::factory()->create([
+            'school_id' => $schoolId,
+            'on_hand_quantity' => '5.000',
+            'version' => 1,
+        ]);
+
+        $first = $this->assignedWorkOrder($userId, $membershipId, $schoolId, (string) $firstAsset->id, 'Part race repair A');
+        $second = $this->assignedWorkOrder($userId, $membershipId, $schoolId, (string) $secondAsset->id, 'Part race repair B');
+
+        $service = app(WorkOrderMutationService::class);
+        $actor = User::query()->findOrFail($userId);
+        $service->start($this->context($membershipId, ['work-orders.assign']), $actor, (string) $first->id, 1);
+        $service->start($this->context($membershipId, ['work-orders.assign']), $actor, (string) $second->id, 1);
+
+        $results = $this->race(
+            fn () => app(WorkOrderMutationService::class)->issuePart(
+                $this->context($membershipId, ['work-orders.assign', 'work-orders.consume-stock']),
+                User::query()->findOrFail($userId),
+                (string) $first->id,
+                2,
+                [
+                    'inventoryItemId' => (string) $item->id,
+                    'clientMutationId' => (string) Str::uuid(),
+                    'quantity' => '4.000',
+                ],
+            ),
+            fn () => app(WorkOrderMutationService::class)->issuePart(
+                $this->context($membershipId, ['work-orders.assign', 'work-orders.consume-stock']),
+                User::query()->findOrFail($userId),
+                (string) $second->id,
+                2,
+                [
+                    'inventoryItemId' => (string) $item->id,
+                    'clientMutationId' => (string) Str::uuid(),
+                    'quantity' => '4.000',
+                ],
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $this->assertSame(['STOCK_INSUFFICIENT'], $this->failureCodes($results));
+        $this->assertSame('1.000', InventoryItem::query()->findOrFail($item->id)->on_hand_quantity);
+        $this->assertSame(1, InventoryTransaction::query()->where('source_type', 'work_order')->count());
+        $this->assertSame(1, WorkOrderPartUsage::query()->count());
+    }
+
+    public function test_concurrent_work_order_verify_and_asset_mutation_fail_closed_without_partial_commit(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+            'version' => 1,
+        ]);
+
+        $workOrder = $this->assignedWorkOrder(
+            $userId,
+            $membershipId,
+            $schoolId,
+            (string) $asset->id,
+            'Verify vs Asset mutation race',
+        );
+
+        $service = app(WorkOrderMutationService::class);
+        $actor = User::query()->findOrFail($userId);
+        $service->start(
+            $this->context($membershipId, ['work-orders.assign']),
+            $actor,
+            (string) $workOrder->id,
+            1,
+        );
+        $service->complete(
+            $this->context($membershipId, ['work-orders.assign']),
+            $actor,
+            (string) $workOrder->id,
+            2,
+            [
+                'diagnosis' => 'Concurrent verification proof',
+                'actionTaken' => 'Corrective action complete',
+                'conditionAfter' => 'good',
+            ],
+        );
+
+        $results = $this->race(
+            fn () => app(WorkOrderMutationService::class)->verify(
+                $this->context($membershipId, ['work-orders.approve']),
+                User::query()->findOrFail($userId),
+                (string) $workOrder->id,
+                3,
+            ),
+            fn () => app(AssetMutationService::class)->update(
+                $this->context($membershipId, []),
+                (string) $asset->id,
+                1,
+                ['notes' => 'Concurrent Asset mutation won'],
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $failureCodes = $this->failureCodes($results);
+        $this->assertCount(1, $failureCodes);
+        $this->assertContains($failureCodes[0], ['WORK_ORDER_ASSET_VERSION_DRIFT', 'ASSET_VERSION_CONFLICT']);
+
+        $workOrder->refresh();
+        $asset->refresh();
+
+        if ($workOrder->status === 'verified') {
+            $this->assertFalse($workOrder->custody_active);
+            $this->assertSame('good', $asset->condition);
+            $this->assertSame(2, $asset->version);
+            $this->assertNotNull($workOrder->verified_at);
+        } else {
+            $this->assertSame('completed', $workOrder->status);
+            $this->assertTrue($workOrder->custody_active);
+            $this->assertSame('major_damage', $asset->condition);
+            $this->assertSame('Concurrent Asset mutation won', $asset->notes);
+            $this->assertSame(2, $asset->version);
+            $this->assertNull($workOrder->verified_at);
+        }
     }
 
     public function test_postgres_corrective_custody_requires_start_evidence_at_database_layer(): void

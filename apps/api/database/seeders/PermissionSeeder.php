@@ -89,6 +89,7 @@ class PermissionSeeder extends Seeder
             'update' => 'Ubah Perintah Kerja',
             'approve' => 'Setujui Perintah Kerja',
             'assign' => 'Tugaskan Perintah Kerja',
+            'consume-stock' => 'Gunakan Spare Part Inventory dalam Perintah Kerja',
             'export' => 'Ekspor Perintah Kerja',
         ],
         'users' => [
