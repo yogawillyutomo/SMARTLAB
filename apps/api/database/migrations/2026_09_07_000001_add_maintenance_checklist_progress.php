@@ -29,7 +29,8 @@ return new class extends Migration
                         RAISE EXCEPTION 'Scheduled Maintenance execution cannot carry checklist progress';
                     END IF;
 
-                    IF OLD.status IN ('completed', 'cancelled')
+                    IF TG_OP = 'UPDATE'
+                        AND OLD.status IN ('completed', 'cancelled')
                         AND NEW.checklist_progress IS DISTINCT FROM OLD.checklist_progress
                     THEN
                         RAISE EXCEPTION 'Terminal Maintenance checklist progress is immutable';
