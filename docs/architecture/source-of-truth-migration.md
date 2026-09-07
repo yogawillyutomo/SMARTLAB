@@ -411,11 +411,31 @@ Delivered by S4.6 on merged `main`:
 - no automatic browser-data import is approved. Classification is limited to `exact_safe_match`, `unmatched`, `ambiguous`, `invalid`, and `blocked_by_dependency`; local/browser IDs never become canonical IDs by inference;
 - storage-cleared core browser evidence plus exact implementation-head impacted retests were recorded as PASS; PR #83 merged to `main@3757e986cbc8a15bcde3cbe92a3ed71f73f64d04`, and post-merge workflow #313 passed `web-ci` and `api-ci`; S4 is closed.
 
-Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
+Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5 and must follow the S5.1 contract candidate before runtime implementation.
 
 ### Phase S5 - Corrective maintenance
 
-Build canonical Work Orders linked optionally to Incidents. Waiting for spare parts belongs to Work Order, not Incident status. Integrate spare-parts consumption through the inventory domain.
+S5 starts with proposed [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). No S5 runtime authority exists until the contract is reviewed and implementation slices are merged.
+
+Planned slices:
+
+- **S5.1 — contract lock:** exact-Asset Work Order authority, optional Incident link, corrective custody, assignment/lifecycle, Inventory-only spare-part consumption, Asset-authority verification, and no implicit Device/Incident/Laboratory mutation;
+- **S5.2 — Work Order core + custody:** PostgreSQL WorkOrder/Event persistence, numbering, ETag lifecycle, assignment, exact Asset subject, Loan/Maintenance/WorkOrder custody exclusion, Asset operational-state `in_repair`, contention tests, OpenAPI;
+- **S5.3 — Inventory + verification integration:** `work-orders.consume-stock`, immutable WorkOrderPartUsage linked to sourced InventoryTransaction, Asset condition application through Asset authority, explicit Incident-link evidence, atomic verification;
+- **S5.4 — frontend cutover + UAT:** canonical `/work-orders`, server permission guards, browser-local Work Order mutation removal, storage-cleared UAT, exact-head and merged-head verification.
+
+S5.1 candidate direction:
+
+- one Work Order targets one exact canonical Asset;
+- one Incident may have zero to many Work Orders; Work Order never auto-resolves/verifies/closes Incident;
+- `in_progress`, `on_hold`, `waiting_part`, and `completed` retain corrective custody;
+- corrective custody blocks Loan checkout, Preventive Maintenance start, another Work Order start, and unsafe Asset terminal/unlink actions;
+- `waiting_part` does not reserve or decrement Inventory;
+- part usage uses immutable InventoryTransaction with `sourceType=work_order`;
+- completion records proposed condition evidence; verification applies condition through Asset authority and releases custody;
+- Device state is never mutated implicitly;
+- whole-Laboratory downtime remains Unified Availability / Operational Calendar authority;
+- the prototype mutable `cost` is not promoted as canonical finance.
 
 ### Phase S6 - Monitoring telemetry
 
