@@ -28,6 +28,7 @@ class WorkOrder extends Model
     public function laboratory(): BelongsTo { return $this->belongsTo(Laboratory::class); }
     public function assigneeMembership(): BelongsTo { return $this->belongsTo(SchoolMembership::class, 'assignee_membership_id'); }
     public function events(): HasMany { return $this->hasMany(WorkOrderEvent::class); }
+    public function partUsages(): HasMany { return $this->hasMany(WorkOrderPartUsage::class); }
 
     protected function casts(): array
     {
