@@ -1,323 +1,623 @@
-import { useState } from 'react';
-import { Wrench, Plus, Play, Pause, Package, Check, Download, KanbanSquare, Table as TableIcon, Calendar } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { useAuthStore } from '@/stores/authStore';
-import { usePermission } from '@/components/common/PermissionGuard';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Calendar, Check, Download, KanbanSquare, Package, Pause, Play, Plus, Table as TableIcon, Wrench } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
+import { ActivityTimeline } from '@/components/common/ActivityTimeline';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input, Select, Textarea } from '@/components/ui/Input';
-import { Badge, StatusBadge, PriorityBadge } from '@/components/ui/Badge';
-import { FormDialog } from '@/components/forms/FormDialog';
-import { Drawer } from '@/components/ui/Drawer';
+import { Badge } from '@/components/ui/Badge';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { ActivityTimeline } from '@/components/common/ActivityTimeline';
+import { Drawer } from '@/components/ui/Drawer';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
+import { FormDialog } from '@/components/forms/FormDialog';
+import { Input, Select, Textarea } from '@/components/ui/Input';
+import { ApiClientError } from '@/lib/apiClient';
+import { hasServerPermission } from '@/lib/authIdentity';
+import { downloadCSV, relativeTime, cn } from '@/utils';
+import { assetGateway, ASSET_CONDITIONS, type AssetCondition, type AssetDto } from '@/services/assetApi';
+import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
+import { inventoryGateway, type InventoryItemDto } from '@/services/inventoryApi';
+import { identityAdminGateway, type IdentityMembershipDto } from '@/services/identityAdminApi';
+import {
+  WORK_ORDER_PRIORITIES,
+  WORK_ORDER_STATUSES,
+  workOrderGateway,
+  type WorkOrderDto,
+  type WorkOrderEventDto,
+  type WorkOrderPriority,
+  type WorkOrderStatus,
+} from '@/services/workOrderApi';
+import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';
-import { downloadCSV, formatCurrency, relativeTime, cn } from '@/utils';
-import { applyDeviceOperationalStatus } from '@/domain/managed-device';
-import type { WorkOrder, WorkOrderStatus, Priority, WorkOrderSparePart } from '@/types';
 
-const STATUSES: WorkOrderStatus[] = ['Draft', 'Assigned', 'In Progress', 'On Hold', 'Waiting Part', 'Completed', 'Verified', 'Cancelled'];
-const PRIORITIES: Priority[] = ['Rendah', 'Normal', 'Tinggi', 'Kritis'];
-type WorkOrderTransitionPermission = 'assign' | 'update' | 'approve';
-type WorkOrderPermissions = Record<WorkOrderTransitionPermission, boolean>;
-
-const WORK_ORDER_TRANSITIONS: Record<WorkOrderStatus, Partial<Record<WorkOrderStatus, WorkOrderTransitionPermission>>> = {
-  Draft: { Assigned: 'assign', Cancelled: 'update' },
-  Assigned: { 'In Progress': 'update', Cancelled: 'update' },
-  'In Progress': { 'On Hold': 'update', 'Waiting Part': 'update', Completed: 'update', Cancelled: 'update' },
-  'On Hold': { 'In Progress': 'update', 'Waiting Part': 'update', Cancelled: 'update' },
-  'Waiting Part': { 'In Progress': 'update', Completed: 'update', Cancelled: 'update' },
-  Completed: { Verified: 'approve' },
-  Verified: {},
-  Cancelled: {},
+const STATUS_LABELS: Record<WorkOrderStatus, string> = {
+  draft: 'Draft',
+  assigned: 'Ditugaskan',
+  in_progress: 'Berlangsung',
+  on_hold: 'Ditahan',
+  waiting_part: 'Menunggu Part',
+  completed: 'Selesai Teknis',
+  verified: 'Terverifikasi',
+  cancelled: 'Dibatalkan',
+};
+const PRIORITY_LABELS: Record<WorkOrderPriority, string> = {
+  low: 'Rendah',
+  normal: 'Normal',
+  high: 'Tinggi',
+  critical: 'Kritis',
+};
+const CONDITION_LABELS: Record<AssetCondition, string> = {
+  good: 'Baik',
+  minor_damage: 'Rusak Ringan',
+  moderate_damage: 'Rusak Sedang',
+  major_damage: 'Rusak Berat',
+  unknown: 'Tidak Diketahui',
 };
 
-function canTransitionToStatus(workOrder: WorkOrder, target: WorkOrderStatus, permissions: WorkOrderPermissions) {
-  const requiredPermission = WORK_ORDER_TRANSITIONS[workOrder.status][target];
-  return requiredPermission ? permissions[requiredPermission] : false;
+type CreateForm = {
+  assetId: string;
+  laboratoryId: string;
+  problemSummary: string;
+  priority: WorkOrderPriority;
+  scheduledFor: string;
+  notes: string;
+};
+type CompleteForm = { diagnosis: string; actionTaken: string; conditionAfter: AssetCondition; testResult: string };
+type ReasonAction = 'hold' | 'waiting' | 'rework' | 'cancel';
+type ViewMode = 'table' | 'board' | 'calendar';
+
+const EMPTY_CREATE: CreateForm = {
+  assetId: '',
+  laboratoryId: '',
+  problemSummary: '',
+  priority: 'normal',
+  scheduledFor: '',
+  notes: '',
+};
+const EMPTY_COMPLETE: CompleteForm = {
+  diagnosis: '',
+  actionTaken: '',
+  conditionAfter: 'good',
+  testResult: '',
+};
+
+function messageFrom(error: unknown): string {
+  if (error instanceof ApiClientError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Operasi Work Order gagal.';
+}
+function nullable(value: string): string | null {
+  const normalized = value.trim();
+  return normalized === '' ? null : normalized;
+}
+function statusTone(status: WorkOrderStatus): 'muted' | 'info' | 'warning' | 'success' | 'danger' {
+  if (status === 'verified') return 'success';
+  if (status === 'completed' || status === 'assigned') return 'info';
+  if (status === 'in_progress' || status === 'waiting_part' || status === 'on_hold') return 'warning';
+  if (status === 'cancelled') return 'danger';
+  return 'muted';
+}
+function priorityTone(priority: WorkOrderPriority): 'muted' | 'info' | 'warning' | 'danger' {
+  if (priority === 'critical') return 'danger';
+  if (priority === 'high') return 'warning';
+  if (priority === 'normal') return 'info';
+  return 'muted';
+}
+function eventLabel(event: WorkOrderEventDto): string {
+  const labels: Record<string, string> = {
+    'work_order.created': 'Work Order dibuat',
+    'work_order.updated': 'Work Order diperbarui',
+    'work_order.assigned': 'Teknisi ditugaskan',
+    'work_order.reassigned': 'Teknisi diganti',
+    'work_order.started': 'Perbaikan dimulai',
+    'work_order.held': 'Perbaikan ditahan',
+    'work_order.waiting_part': 'Menunggu spare part',
+    'work_order.resumed': 'Perbaikan dilanjutkan',
+    'work_order.part_issued': 'Spare part digunakan',
+    'work_order.completed': 'Pekerjaan teknis selesai',
+    'work_order.rework_requested': 'Dikembalikan untuk rework',
+    'work_order.verified': 'Perbaikan diverifikasi',
+    'work_order.cancelled': 'Work Order dibatalkan',
+  };
+  return labels[event.eventType] ?? event.eventType;
+}
+function partsFromHistory(history: WorkOrderEventDto[]) {
+  return history.flatMap((event) => {
+    if (event.eventType !== 'work_order.part_issued') return [];
+    const name = event.payload.itemNameSnapshot;
+    const quantity = event.payload.quantity;
+    const unit = event.payload.unitSnapshot;
+    const inventoryItemId = event.payload.inventoryItemId;
+    if (typeof name !== 'string' || (typeof quantity !== 'string' && typeof quantity !== 'number')) return [];
+    return [{
+      key: event.id,
+      name,
+      quantity: String(quantity),
+      unit: typeof unit === 'string' ? unit : '',
+      inventoryItemId: typeof inventoryItemId === 'string' ? inventoryItemId : '',
+    }];
+  });
 }
 
 export function WorkOrdersPage() {
-  const { db, mutate } = useAppData();
-  const user = useAuthStore((s) => s.user);
-  const canCreate = usePermission('work-orders', 'create');
-  const canUpdate = usePermission('work-orders', 'update');
-  const canAssignWorkOrder = usePermission('work-orders', 'assign');
-  const canApproveWorkOrder = usePermission('work-orders', 'approve');
-  const canExport = usePermission('work-orders', 'export');
-  // Spare parts mutate stock, so this intentionally requires stock.create in addition to work-orders.update.
-  const canUseSparePart = usePermission('stock', 'create');
-  const [view, setView] = useState<'table' | 'board' | 'calendar'>('table');
-  const [open, setOpen] = useState(false);
-  const [detail, setDetail] = useState<WorkOrder | null>(null);
-  const [partOpen, setPartOpen] = useState<WorkOrder | null>(null);
-  const [assignmentOpen, setAssignmentOpen] = useState<WorkOrder | null>(null);
-  const [assignmentTechnician, setAssignmentTechnician] = useState('');
-  const [partForm, setPartForm] = useState<{ stockItemId: string; name: string; quantity: number }>({ stockItemId: '', name: '', quantity: 1 });
-  const [form, setForm] = useState<Partial<WorkOrder>>({});
-  const workflowPermissions: WorkOrderPermissions = { assign: canAssignWorkOrder, update: canUpdate, approve: canApproveWorkOrder };
+  const { id: routeId } = useParams();
+  const user = useAuthStore((state) => state.user);
+  const canCreate = hasServerPermission(user, 'work-orders.create');
+  const canUpdate = hasServerPermission(user, 'work-orders.update');
+  const canAssign = hasServerPermission(user, 'work-orders.assign');
+  const canApprove = hasServerPermission(user, 'work-orders.approve');
+  const canConsumeStock = hasServerPermission(user, 'work-orders.consume-stock');
+  const canExport = hasServerPermission(user, 'work-orders.export');
+
+  const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
+  const [assets, setAssets] = useState<AssetDto[]>([]);
+  const [labs, setLabs] = useState<LaboratoryDto[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemDto[]>([]);
+  const [technicians, setTechnicians] = useState<IdentityMembershipDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [view, setView] = useState<ViewMode>('table');
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_CREATE);
+  const [detail, setDetail] = useState<WorkOrderDto | null>(null);
+  const [history, setHistory] = useState<WorkOrderEventDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [assigneeMembershipId, setAssigneeMembershipId] = useState('');
+  const [assignmentReason, setAssignmentReason] = useState('');
+  const [reasonAction, setReasonAction] = useState<ReasonAction | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [completeForm, setCompleteForm] = useState<CompleteForm>(EMPTY_COMPLETE);
+  const [partOpen, setPartOpen] = useState(false);
+  const [partItemId, setPartItemId] = useState('');
+  const [partQuantity, setPartQuantity] = useState('1');
+  const [partMutationId, setPartMutationId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const [nextWorkOrders, nextAssets, nextLabs] = await Promise.all([
+        workOrderGateway.listAll(),
+        assetGateway.listAll(),
+        laboratoryGateway.list(),
+      ]);
+      setWorkOrders(nextWorkOrders);
+      setAssets(nextAssets);
+      setLabs(nextLabs);
+
+      if (canConsumeStock) {
+        setInventoryItems(await inventoryGateway.listAllItems());
+      } else {
+        setInventoryItems([]);
+      }
+      if (canAssign) {
+        const page = await identityAdminGateway.listMemberships({ status: 'active', roleKey: 'teknisi', page: 1, perPage: 200 });
+        setTechnicians(page.data.filter((membership) => membership.user.status === 'active'));
+      } else {
+        setTechnicians([]);
+      }
+    } catch (error) {
+      setLoadError(messageFrom(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [canAssign, canConsumeStock]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const openDetail = useCallback(async (workOrder: WorkOrderDto) => {
+    setDetail(workOrder);
+    setHistory([]);
+    setHistoryLoading(true);
+    try {
+      const [fresh, events] = await Promise.all([
+        workOrderGateway.show(workOrder.id),
+        workOrderGateway.history(workOrder.id),
+      ]);
+      setDetail(fresh);
+      setHistory(events);
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!routeId || loading) return;
+    const candidate = workOrders.find((workOrder) => workOrder.id === routeId);
+    if (candidate) void openDetail(candidate);
+  }, [routeId, loading, workOrders, openDetail]);
+
+  const counts = useMemo(() => Object.fromEntries(
+    WORK_ORDER_STATUSES.map((status) => [status, workOrders.filter((item) => item.status === status).length]),
+  ) as Record<WorkOrderStatus, number>, [workOrders]);
+
+  const parts = useMemo(() => partsFromHistory(history), [history]);
+
+  async function refreshAfterMutation(workOrder?: WorkOrderDto) {
+    const next = await workOrderGateway.listAll();
+    setWorkOrders(next);
+    if (workOrder) {
+      const fresh = await workOrderGateway.show(workOrder.id);
+      setDetail(fresh);
+      setHistory(await workOrderGateway.history(workOrder.id));
+    }
+  }
 
   function openCreate() {
-    if (!canCreate) return;
-    setForm({ laboratoryId: db.labs[0]?.id, technician: '', priority: 'Normal', scheduledDate: new Date().toISOString().split('T')[0], cost: 0, status: 'Draft' });
-    setOpen(true);
+    const firstAsset = assets.find((asset) => asset.lifecycleStatus === 'active');
+    setCreateForm({
+      ...EMPTY_CREATE,
+      assetId: firstAsset?.id ?? '',
+      laboratoryId: firstAsset?.homeLaboratoryId ?? labs.find((lab) => lab.status === 'active')?.id ?? '',
+      scheduledFor: new Date().toISOString().slice(0, 10),
+    });
+    setCreateOpen(true);
   }
 
-  function save() {
-    if (!canCreate) return;
-    if (!form.laboratoryId) { toast('Pilih lab', 'error'); return; }
-    mutate((d) => {
-      const num = `WO-2026-${String(d.workOrders.length + 1).padStart(4, '0')}`;
-      d.workOrders.unshift({
-        id: `wo-${Date.now()}`, woNumber: num, laboratoryId: form.laboratoryId ?? '', technician: '',
-        priority: form.priority ?? 'Normal', diagnosis: form.diagnosis ?? '', action: form.action ?? '', scheduledDate: form.scheduledDate ?? '',
-        spareParts: [], cost: form.cost ?? 0, status: 'Draft', notes: form.notes, assetCode: form.assetCode,
-        timeline: [{ status: 'Draft', at: new Date().toISOString(), by: user?.name ?? 'Admin' }],
+  async function createWorkOrder() {
+    if (!createForm.assetId || !createForm.laboratoryId || createForm.problemSummary.trim().length < 3) {
+      toast('Asset, Laboratorium, dan ringkasan masalah wajib diisi.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await workOrderGateway.create({
+        assetId: createForm.assetId,
+        laboratoryId: createForm.laboratoryId,
+        problemSummary: createForm.problemSummary.trim(),
+        priority: createForm.priority,
+        scheduledFor: nullable(createForm.scheduledFor),
+        notes: nullable(createForm.notes),
       });
+      setCreateOpen(false);
+      await refreshAfterMutation();
+      toast('Work Order canonical dibuat sebagai Draft.', 'success');
+      await openDetail(created);
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectAsset(assetId: string) {
+    const asset = assets.find((candidate) => candidate.id === assetId);
+    setCreateForm((form) => ({
+      ...form,
+      assetId,
+      laboratoryId: asset?.homeLaboratoryId ?? form.laboratoryId,
+    }));
+  }
+
+  function openAssignment(workOrder: WorkOrderDto) {
+    setDetail(workOrder);
+    setAssigneeMembershipId(workOrder.assigneeMembershipId ?? technicians[0]?.id ?? '');
+    setAssignmentReason('');
+    setAssignmentOpen(true);
+  }
+
+  async function submitAssignment() {
+    if (!detail || !assigneeMembershipId) return;
+    const reassignment = detail.status !== 'draft';
+    if (reassignment && assignmentReason.trim().length < 3) {
+      toast('Alasan reassignment minimal 3 karakter.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await workOrderGateway.assign(detail.id, detail.version, {
+        assigneeMembershipId,
+        ...(reassignment ? { reason: assignmentReason.trim() } : {}),
+      });
+      setAssignmentOpen(false);
+      await refreshAfterMutation(updated);
+      toast(reassignment ? 'Teknisi Work Order diganti.' : 'Teknisi Work Order ditugaskan.', 'success');
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function directAction(action: 'start' | 'resume' | 'verify') {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      const updated = action === 'start'
+        ? await workOrderGateway.start(detail.id, detail.version)
+        : action === 'resume'
+          ? await workOrderGateway.resume(detail.id, detail.version)
+          : await workOrderGateway.verify(detail.id, detail.version);
+      await refreshAfterMutation(updated);
+      toast(action === 'verify'
+        ? 'Work Order terverifikasi; Asset condition diterapkan oleh Asset authority dan custody dilepas.'
+        : 'Status Work Order diperbarui pada server.', 'success');
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openReason(action: ReasonAction) {
+    setReasonAction(action);
+    setReasonText('');
+  }
+
+  async function submitReason() {
+    if (!detail || !reasonAction || reasonText.trim().length < 3) {
+      toast('Alasan minimal 3 karakter.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const reason = reasonText.trim();
+      const updated = reasonAction === 'hold'
+        ? await workOrderGateway.hold(detail.id, detail.version, reason)
+        : reasonAction === 'waiting'
+          ? await workOrderGateway.waitingPart(detail.id, detail.version, reason)
+          : reasonAction === 'rework'
+            ? await workOrderGateway.rework(detail.id, detail.version, reason)
+            : await workOrderGateway.cancel(detail.id, detail.version, reason);
+      setReasonAction(null);
+      await refreshAfterMutation(updated);
+      toast('Aksi Work Order tersimpan sebagai evidence server.', 'success');
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openComplete() {
+    if (!detail) return;
+    setCompleteForm({
+      diagnosis: detail.diagnosis ?? '',
+      actionTaken: detail.actionTaken ?? '',
+      conditionAfter: detail.conditionAfter ?? detail.conditionBefore ?? 'good',
+      testResult: detail.testResult ?? '',
     });
-    toast('Tugas perbaikan dibuat', 'success');
-    setOpen(false);
+    setCompleteOpen(true);
   }
 
-  function updateStatus(wo: WorkOrder, status: WorkOrderStatus) {
-    if (status === 'Assigned' || !canTransitionToStatus(wo, status, workflowPermissions)) return;
-    let changed = false;
-    mutate((d) => {
-      const idx = d.workOrders.findIndex((w) => w.id === wo.id);
-      if (idx >= 0 && canTransitionToStatus(d.workOrders[idx], status, workflowPermissions)) {
-        const updated = d.workOrders[idx];
-        const at = new Date().toISOString();
-        updated.status = status;
-        updated.timeline.push({ status, at, by: user?.name ?? 'Admin' });
-        if (status === 'In Progress' && !updated.startTime) updated.startTime = at;
-        if ((status === 'Completed' || status === 'Verified') && !updated.endTime) updated.endTime = at;
-        // Update asset condition when completed
-        if (status === 'Verified' && updated.assetCode) {
-          const aIdx = d.assets.findIndex((a) => a.assetCode === updated.assetCode);
-          if (aIdx >= 0) { d.assets[aIdx].condition = 'Baik'; d.assets[aIdx].status = 'Aktif'; }
-          const dvIdx = d.devices.findIndex((dv) => dv.assetCode === updated.assetCode);
-          if (dvIdx >= 0) d.devices[dvIdx] = applyDeviceOperationalStatus(d.devices[dvIdx], 'Online', new Date().toISOString());
-        }
-        changed = true;
-      }
-    });
-    if (!changed) return;
-    setDetail((d) => d && d.id === wo.id ? { ...d, status } : d);
-    toast(`Status diubah menjadi ${status}`, 'success');
+  async function submitComplete() {
+    if (!detail || completeForm.diagnosis.trim().length < 3 || completeForm.actionTaken.trim().length < 3) {
+      toast('Diagnosis dan tindakan minimal 3 karakter.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await workOrderGateway.complete(detail.id, detail.version, {
+        diagnosis: completeForm.diagnosis.trim(),
+        actionTaken: completeForm.actionTaken.trim(),
+        conditionAfter: completeForm.conditionAfter,
+        testResult: nullable(completeForm.testResult),
+      });
+      setCompleteOpen(false);
+      await refreshAfterMutation(updated);
+      toast('Completion evidence tersimpan; Asset belum berubah sebelum verifikasi.', 'success');
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function openAssignment(wo: WorkOrder) {
-    if (!canTransitionToStatus(wo, 'Assigned', workflowPermissions)) return;
-    setAssignmentOpen(wo);
-    setAssignmentTechnician('');
+  function openPart() {
+    setPartItemId(inventoryItems.find((item) => item.onHandQuantity > 0)?.id ?? '');
+    setPartQuantity('1');
+    setPartMutationId(crypto.randomUUID());
+    setPartOpen(true);
   }
 
-  function assignWorkOrder() {
-    if (!assignmentOpen || !assignmentTechnician.trim() || !canAssignWorkOrder) return;
-    let changed = false;
-    const assignedAt = new Date().toISOString();
-    mutate((d) => {
-      const idx = d.workOrders.findIndex((w) => w.id === assignmentOpen.id);
-      if (idx >= 0 && canTransitionToStatus(d.workOrders[idx], 'Assigned', workflowPermissions)) {
-        const updated = d.workOrders[idx];
-        updated.technician = assignmentTechnician;
-        updated.status = 'Assigned';
-        updated.timeline.push({ status: 'Assigned', at: assignedAt, by: user?.name ?? 'Admin' });
-        changed = true;
-      }
-    });
-    if (!changed) return;
-    setDetail((d) => d && d.id === assignmentOpen.id ? { ...d, technician: assignmentTechnician, status: 'Assigned', timeline: [...d.timeline, { status: 'Assigned', at: assignedAt, by: user?.name ?? 'Admin' }] } : d);
-    setAssignmentOpen(null);
-    setAssignmentTechnician('');
-    toast(`Tugas perbaikan ditugaskan ke ${assignmentTechnician}`, 'success');
+  async function submitPart() {
+    if (!detail || !partItemId || Number(partQuantity) <= 0 || !partMutationId) {
+      toast('Pilih spare part dan jumlah yang valid.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await workOrderGateway.usePart(detail.id, detail.version, {
+        inventoryItemId: partItemId,
+        clientMutationId: partMutationId,
+        quantity: Number(partQuantity),
+      });
+      setPartOpen(false);
+      setInventoryItems(await inventoryGateway.listAllItems());
+      await refreshAfterMutation(result.workOrder);
+      toast(result.replayed ? 'Retry idempotent: stok tidak dikurangi ulang.' : 'Spare part diterbitkan melalui Inventory ledger.', 'success');
+    } catch (error) {
+      toast(messageFrom(error), 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function useSparePart() {
-    if (!canUpdate || !canUseSparePart) return;
-    if (!partOpen || !partForm.stockItemId || partForm.quantity <= 0) { toast('Lengkapi data spare part', 'error'); return; }
-    const item = db.stock.items.find((s) => s.id === partForm.stockItemId);
-    if (!item) return;
-    if (partForm.quantity > item.quantity) { toast('Stok spare part tidak mencukupi', 'error'); return; }
-    mutate((d) => {
-      const idx = d.workOrders.findIndex((w) => w.id === partOpen.id);
-      if (idx >= 0) {
-        const part: WorkOrderSparePart = { stockItemId: partForm.stockItemId, name: item.name, quantity: partForm.quantity };
-        d.workOrders[idx].spareParts.push(part);
-        d.workOrders[idx].cost += part.quantity * item.price;
-        const sIdx = d.stock.items.findIndex((s) => s.id === partForm.stockItemId);
-        if (sIdx >= 0) {
-          d.stock.items[sIdx].quantity = Math.max(0, d.stock.items[sIdx].quantity - partForm.quantity);
-          d.stock.transactions.unshift({ id: `stx-${Date.now()}`, itemId: partForm.stockItemId, type: 'out', quantity: partForm.quantity, date: new Date().toISOString().split('T')[0], reason: `WO ${d.workOrders[idx].woNumber}`, by: d.workOrders[idx].technician });
-        }
-      }
-    });
-    toast('Spare part digunakan, stok berkurang', 'success');
-    setPartOpen(null);
-    setPartForm({ stockItemId: '', name: '', quantity: 1 });
+  function exportCsv() {
+    downloadCSV('work-orders.csv', workOrders.map((item) => ({
+      WorkOrder: item.workOrderNumber,
+      Asset: item.assetCodeSnapshot,
+      AssetName: item.assetNameSnapshot,
+      Laboratory: item.laboratoryNameSnapshot,
+      Technician: item.assigneeNameSnapshot ?? '',
+      Priority: PRIORITY_LABELS[item.priority],
+      Status: STATUS_LABELS[item.status],
+      ScheduledFor: item.scheduledFor ?? '',
+      Problem: item.problemSummary,
+    })));
   }
 
-  function exportCSV() {
-    if (!canExport) return;
-    downloadCSV('tugas-perbaikan.csv', db.workOrders.map((w) => ({ WO: w.woNumber, Lab: db.labs.find((l) => l.id === w.laboratoryId)?.name, Teknisi: w.technician, Prioritas: w.priority, Status: w.status, Biaya: w.cost })));
-  }
-
-  const columns: Column<WorkOrder>[] = [
-    { key: 'woNumber', header: 'WO', sortable: true, render: (w) => <button onClick={() => setDetail(w)} className="font-medium text-accent-content hover:underline">{w.woNumber}</button> },
-    { key: 'assetCode', header: 'Aset', render: (w) => w.assetCode ?? '-' },
-    { key: 'lab', header: 'Lab', render: (w) => db.labs.find((l) => l.id === w.laboratoryId)?.name },
-    { key: 'technician', header: 'Teknisi', sortable: true },
-    { key: 'priority', header: 'Prioritas', render: (w) => <PriorityBadge priority={w.priority} /> },
-    { key: 'status', header: 'Status', render: (w) => <StatusBadge status={w.status} /> },
-    { key: 'cost', header: 'Biaya', sortable: true, sortValue: (w) => w.cost, render: (w) => formatCurrency(w.cost) },
+  const columns: Column<WorkOrderDto>[] = [
+    { key: 'number', header: 'WO', sortable: true, sortValue: (item) => item.workOrderNumber, render: (item) => (
+      <button className="font-medium text-accent-content hover:underline" onClick={() => void openDetail(item)}>{item.workOrderNumber}</button>
+    ) },
+    { key: 'asset', header: 'Asset', render: (item) => <div><p className="text-sm text-ink-primary">{item.assetCodeSnapshot}</p><p className="text-xs text-ink-muted">{item.assetNameSnapshot}</p></div> },
+    { key: 'lab', header: 'Lab', render: (item) => item.laboratoryNameSnapshot },
+    { key: 'technician', header: 'Teknisi', render: (item) => item.assigneeNameSnapshot ?? '-' },
+    { key: 'priority', header: 'Prioritas', render: (item) => <Badge tone={priorityTone(item.priority)}>{PRIORITY_LABELS[item.priority]}</Badge> },
+    { key: 'status', header: 'Status', render: (item) => <Badge tone={statusTone(item.status)}>{STATUS_LABELS[item.status]}</Badge> },
   ];
 
-  const boardColumns = STATUSES.filter((s) => db.workOrders.some((w) => w.status === s));
-  const availableStatusOptions = detail
-    ? STATUSES.filter((status) => status !== detail.status && status !== 'Assigned' && canTransitionToStatus(detail, status, workflowPermissions)).map((status) => ({ value: status, label: `Ubah ke ${status}` }))
-    : [];
+  const boardStatuses = WORK_ORDER_STATUSES.filter((status) => counts[status] > 0);
+
+  if (loading) return <LoadingState label="Memuat Work Order canonical..." />;
+  if (loadError) return <ErrorState message={loadError} onRetry={() => void load()} />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tugas Perbaikan" description="Kelola penugasan teknisi, diagnosis, tindakan perbaikan, spare part, dan verifikasi." icon={<Wrench className="h-5 w-5" />}
+      <PageHeader
+        title="Tugas Perbaikan"
+        description="Corrective Work Order exact-Asset. Inventory, Asset condition, custody, dan audit tetap pada authority server masing-masing."
+        icon={<Wrench className="h-5 w-5" />}
         actions={<>
-          {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
-          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Tugas Baru</Button>}
+          {canExport && <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
+          {canCreate && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={openCreate}>Work Order Baru</Button>}
         </>}
       />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {['Assigned', 'In Progress', 'Completed', 'Verified'].map((st) => (
-          <Card key={st}><CardContent><p className="text-2xl font-bold text-ink-primary">{db.workOrders.filter((w) => w.status === st).length}</p><p className="text-xs text-ink-muted">{st}</p></CardContent></Card>
+        {(['assigned','in_progress','completed','verified'] as WorkOrderStatus[]).map((status) => (
+          <Card key={status}><CardContent><p className="text-2xl font-bold text-ink-primary">{counts[status]}</p><p className="text-xs text-ink-muted">{STATUS_LABELS[status]}</p></CardContent></Card>
         ))}
       </div>
 
-      <div className="print-hidden flex items-center gap-1 rounded-lg border border-base-700 p-1 w-fit">
-        <button onClick={() => setView('table')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'table' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}><TableIcon className="h-3.5 w-3.5" />Tabel</button>
-        <button onClick={() => setView('board')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'board' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}><KanbanSquare className="h-3.5 w-3.5" />Board</button>
-        <button onClick={() => setView('calendar')} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === 'calendar' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}><Calendar className="h-3.5 w-3.5" />Kalender</button>
+      <div className="print-hidden flex w-fit items-center gap-1 rounded-lg border border-base-700 p-1">
+        {([
+          ['table', TableIcon, 'Tabel'],
+          ['board', KanbanSquare, 'Board'],
+          ['calendar', Calendar, 'Kalender'],
+        ] as const).map(([mode, Icon, label]) => (
+          <button key={mode} onClick={() => setView(mode)} className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium', view === mode ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted')}>
+            <Icon className="h-3.5 w-3.5" />{label}
+          </button>
+        ))}
       </div>
 
-      {view === 'table' && (
-        <Card><DataTable columns={columns} data={db.workOrders} rowKey={(w) => w.id} searchable searchKeys={(w) => `${w.woNumber} ${w.technician} ${w.assetCode} ${w.diagnosis}`} /></Card>
-      )}
-
-      {view === 'board' && (
-        <div className="grid gap-4 lg:grid-cols-4 xl:grid-cols-6">
-          {boardColumns.map((status) => (
+      {workOrders.length === 0 ? (
+        <Card><EmptyState title="Belum ada Work Order" description="Buat Work Order dari exact Asset canonical ketika perbaikan corrective diperlukan." /></Card>
+      ) : view === 'table' ? (
+        <Card><DataTable columns={columns} data={workOrders} rowKey={(item) => item.id} searchable searchKeys={(item) => `${item.workOrderNumber} ${item.assetCodeSnapshot} ${item.assetNameSnapshot} ${item.problemSummary} ${item.assigneeNameSnapshot ?? ''}`} /></Card>
+      ) : view === 'board' ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {boardStatuses.map((status) => (
             <div key={status} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink-secondary">{status}</p>
-                <Badge tone="muted">{db.workOrders.filter((w) => w.status === status).length}</Badge>
-              </div>
-              <div className="space-y-2">
-                {db.workOrders.filter((w) => w.status === status).map((w) => (
-                  <button key={w.id} onClick={() => setDetail(w)} className="w-full rounded-xl border border-base-700/70 bg-base-800/60 p-3 text-left transition-all hover:border-base-600 hover:shadow-soft">
-                    <p className="font-medium text-ink-primary text-sm">{w.woNumber}</p>
-                    <p className="mt-1 text-xs text-ink-muted truncate">{db.labs.find((l) => l.id === w.laboratoryId)?.name}</p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <PriorityBadge priority={w.priority} />
-                      <span className="text-[10px] text-ink-muted">{w.technician}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <div className="flex items-center justify-between"><p className="text-sm font-semibold text-ink-secondary">{STATUS_LABELS[status]}</p><Badge tone="muted">{counts[status]}</Badge></div>
+              {workOrders.filter((item) => item.status === status).map((item) => (
+                <button key={item.id} onClick={() => void openDetail(item)} className="w-full rounded-xl border border-base-700/70 bg-base-800/60 p-3 text-left hover:border-base-600">
+                  <p className="text-sm font-medium text-ink-primary">{item.workOrderNumber}</p>
+                  <p className="mt-1 truncate text-xs text-ink-muted">{item.assetCodeSnapshot} · {item.assetNameSnapshot}</p>
+                  <div className="mt-2 flex items-center justify-between"><Badge tone={priorityTone(item.priority)}>{PRIORITY_LABELS[item.priority]}</Badge><span className="text-[10px] text-ink-muted">{item.assigneeNameSnapshot ?? 'Belum ditugaskan'}</span></div>
+                </button>
+              ))}
             </div>
           ))}
         </div>
-      )}
-
-      {view === 'calendar' && (
+      ) : (
         <Card><CardContent>
-          <div className="grid grid-cols-7 gap-1 text-center text-xs text-ink-muted">
-            {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((d) => <div key={d} className="py-2">{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 31 }).map((_, i) => {
-              const day = i + 1;
-              const dayWOs = db.workOrders.filter((w) => w.scheduledDate.endsWith(`-${String(day).padStart(2, '0')}`));
-              return (
-                <div key={i} className="min-h-[80px] rounded-lg border border-base-700/60 bg-base-800/40 p-1.5">
-                  <p className="text-xs text-ink-muted">{day}</p>
-                  {dayWOs.slice(0, 2).map((w) => (
-                    <button key={w.id} onClick={() => setDetail(w)} className="mt-1 block w-full truncate rounded bg-accent-primary/15 px-1.5 py-0.5 text-[10px] text-accent-content hover:bg-accent-primary/25">{w.woNumber}</button>
-                  ))}
-                </div>
-              );
-            })}
+          <div className="space-y-2">
+            {workOrders.filter((item) => item.scheduledFor !== null).sort((a,b) => (a.scheduledFor ?? '').localeCompare(b.scheduledFor ?? '')).map((item) => (
+              <button key={item.id} onClick={() => void openDetail(item)} className="flex w-full items-center justify-between rounded-lg border border-base-700/60 p-3 text-left hover:border-base-600">
+                <div><p className="text-sm font-medium text-ink-primary">{item.scheduledFor} · {item.workOrderNumber}</p><p className="text-xs text-ink-muted">{item.assetCodeSnapshot} · {item.laboratoryNameSnapshot}</p></div>
+                <Badge tone={statusTone(item.status)}>{STATUS_LABELS[item.status]}</Badge>
+              </button>
+            ))}
           </div>
         </CardContent></Card>
       )}
 
-      <FormDialog open={open} onClose={() => setOpen(false)} title="Tugas Perbaikan Baru" onSubmit={save} size="lg">
+      <div className="rounded-xl border border-accent-primary/20 bg-accent-primary/5 p-4 text-xs text-ink-muted">
+        Tidak ada lagi Work Order browser-local. Spare part hanya melalui InventoryTransaction sumber <code>work_order</code>; completion tidak mengubah Asset; verifikasi memakai Asset authority dan tidak mengubah Device atau Incident secara implisit.
+      </div>
+
+      <FormDialog open={createOpen} onClose={() => setCreateOpen(false)} title="Work Order Baru" description="Satu Work Order selalu menarget satu exact Asset canonical." onSubmit={() => void createWorkOrder()} submitLabel="Buat Draft" loading={busy} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label="Lab" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })} options={db.labs.map((l) => ({ value: l.id, label: l.name }))} />
-          <Input label="Aset (opsional)" value={form.assetCode ?? ''} onChange={(e) => setForm({ ...form, assetCode: e.target.value })} />
-          <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted">Teknisi ditentukan saat assignment.</div>
-          <Select label="Prioritas" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} options={PRIORITIES.map((p) => ({ value: p, label: p }))} />
-          <Input label="Jadwal" type="date" value={form.scheduledDate ?? ''} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
-          <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3 text-sm text-ink-muted"><span className="block text-xs text-ink-muted">Status awal</span><span className="font-medium text-ink-primary">Draft</span></div>
-          <div className="sm:col-span-2"><Textarea label="Diagnosis" value={form.diagnosis ?? ''} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} /></div>
-          <div className="sm:col-span-2"><Textarea label="Tindakan" value={form.action ?? ''} onChange={(e) => setForm({ ...form, action: e.target.value })} /></div>
+          <Select label="Asset" value={createForm.assetId} onChange={(e) => selectAsset(e.target.value)} options={assets.filter((asset) => asset.lifecycleStatus === 'active').map((asset) => ({ value: asset.id, label: `${asset.assetCode} · ${asset.name}` }))} placeholder="Pilih Asset" />
+          <Select label="Laboratorium" value={createForm.laboratoryId} onChange={(e) => setCreateForm({...createForm,laboratoryId:e.target.value})} options={labs.filter((lab) => lab.status === 'active').map((lab) => ({value:lab.id,label:`${lab.code} · ${lab.name}`}))} placeholder="Pilih Lab" />
+          <Select label="Prioritas" value={createForm.priority} onChange={(e) => setCreateForm({...createForm,priority:e.target.value as WorkOrderPriority})} options={WORK_ORDER_PRIORITIES.map((priority)=>({value:priority,label:PRIORITY_LABELS[priority]}))} />
+          <Input label="Jadwal" type="date" value={createForm.scheduledFor} onChange={(e)=>setCreateForm({...createForm,scheduledFor:e.target.value})} />
+          <div className="sm:col-span-2"><Textarea label="Ringkasan Masalah" required value={createForm.problemSummary} onChange={(e)=>setCreateForm({...createForm,problemSummary:e.target.value})} /></div>
+          <div className="sm:col-span-2"><Textarea label="Catatan" value={createForm.notes} onChange={(e)=>setCreateForm({...createForm,notes:e.target.value})} /></div>
         </div>
       </FormDialog>
 
-      <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} title={detail?.woNumber} description={detail ? `${db.labs.find((l) => l.id === detail.laboratoryId)?.name} · ${detail.technician}` : ''} width="max-w-xl">
-        {detail && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={detail.status} />
-              <PriorityBadge priority={detail.priority} />
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><p className="text-xs text-ink-muted">Aset</p><p className="text-ink-primary">{detail.assetCode || '-'}</p></div>
-              <div><p className="text-xs text-ink-muted">Jadwal</p><p className="text-ink-primary">{detail.scheduledDate}</p></div>
-              <div><p className="text-xs text-ink-muted">Mulai</p><p className="text-ink-primary">{detail.startTime ? relativeTime(detail.startTime) : '-'}</p></div>
-              <div><p className="text-xs text-ink-muted">Selesai</p><p className="text-ink-primary">{detail.endTime ? relativeTime(detail.endTime) : '-'}</p></div>
-              {detail.downtimeHours !== undefined && <div><p className="text-xs text-ink-muted">Downtime</p><p className="text-ink-primary">{detail.downtimeHours} jam</p></div>}
-              <div><p className="text-xs text-ink-muted">Biaya</p><p className="text-ink-primary">{formatCurrency(detail.cost)}</p></div>
-            </div>
-            {detail.diagnosis && <div><p className="text-xs text-ink-muted">Diagnosis</p><p className="text-sm text-ink-secondary">{detail.diagnosis}</p></div>}
-            {detail.action && <div><p className="text-xs text-ink-muted">Tindakan</p><p className="text-sm text-ink-secondary">{detail.action}</p></div>}
-            {detail.testResult && <div><p className="text-xs text-ink-muted">Hasil Pengujian</p><p className="text-sm text-success-foreground">{detail.testResult}</p></div>}
+      <Drawer open={detail !== null} onClose={() => setDetail(null)} title={detail?.workOrderNumber} description={detail ? `${detail.assetCodeSnapshot} · ${detail.assetNameSnapshot}` : ''} width="max-w-2xl">
+        {detail && <div className="space-y-5">
+          <div className="flex flex-wrap gap-2"><Badge tone={statusTone(detail.status)}>{STATUS_LABELS[detail.status]}</Badge><Badge tone={priorityTone(detail.priority)}>{PRIORITY_LABELS[detail.priority]}</Badge>{detail.custodyActive && <Badge tone="warning">Corrective Custody Aktif</Badge>}</div>
+          <div className="grid gap-3 text-sm sm:grid-cols-2">
+            <div><p className="text-xs text-ink-muted">Asset</p><p className="text-ink-primary">{detail.assetCodeSnapshot} · {detail.assetNameSnapshot}</p></div>
+            <div><p className="text-xs text-ink-muted">Laboratorium</p><p className="text-ink-primary">{detail.laboratoryCodeSnapshot} · {detail.laboratoryNameSnapshot}</p></div>
+            <div><p className="text-xs text-ink-muted">Teknisi</p><p className="text-ink-primary">{detail.assigneeNameSnapshot ?? '-'}</p></div>
+            <div><p className="text-xs text-ink-muted">Jadwal</p><p className="text-ink-primary">{detail.scheduledFor ?? '-'}</p></div>
+            <div><p className="text-xs text-ink-muted">Mulai</p><p className="text-ink-primary">{detail.startedAt ? relativeTime(detail.startedAt) : '-'}</p></div>
+            <div><p className="text-xs text-ink-muted">Versi</p><p className="text-ink-primary">{detail.version}</p></div>
+          </div>
+          <div><p className="text-xs text-ink-muted">Masalah</p><p className="text-sm text-ink-secondary">{detail.problemSummary}</p></div>
+          {detail.diagnosis && <div><p className="text-xs text-ink-muted">Diagnosis</p><p className="text-sm text-ink-secondary">{detail.diagnosis}</p></div>}
+          {detail.actionTaken && <div><p className="text-xs text-ink-muted">Tindakan</p><p className="text-sm text-ink-secondary">{detail.actionTaken}</p></div>}
+          {detail.testResult && <div><p className="text-xs text-ink-muted">Hasil Uji</p><p className="text-sm text-ink-secondary">{detail.testResult}</p></div>}
+          {(detail.conditionBefore || detail.conditionAfter) && <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><p className="text-xs text-ink-muted">Kondisi Awal</p><p className="text-ink-primary">{detail.conditionBefore ? CONDITION_LABELS[detail.conditionBefore] : '-'}</p></div>
+            <div><p className="text-xs text-ink-muted">Kondisi Usulan/Akhir</p><p className="text-ink-primary">{detail.conditionAfter ? CONDITION_LABELS[detail.conditionAfter] : '-'}</p></div>
+          </div>}
 
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Spare Parts ({detail.spareParts.length})</p>
-              {detail.spareParts.length === 0 ? <p className="text-xs text-ink-muted">Belum ada spare part</p> : (
-                <div className="space-y-1">{detail.spareParts.map((p, i) => <div key={i} className="flex justify-between rounded-lg border border-base-700/60 p-2 text-sm"><span className="text-ink-secondary">{p.name}</span><span className="text-ink-muted">{p.quantity} pcs</span></div>)}</div>
-              )}
-            </div>
+          <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Spare Part Evidence ({parts.length})</p>
+            {parts.length === 0 ? <p className="text-xs text-ink-muted">Belum ada part issue.</p> : <div className="space-y-1">{parts.map((part)=><div key={part.key} className="flex justify-between rounded-lg border border-base-700/60 p-2 text-sm"><span>{part.name}</span><span className="text-ink-muted">{part.quantity} {part.unit}</span></div>)}</div>}
+          </div>
 
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Timeline</p>
-              <ActivityTimeline items={detail.timeline.map((t) => ({ label: t.status, by: t.by, at: relativeTime(t.at), tone: 'accent' as const }))} />
-            </div>
+          <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Timeline</p>
+            {historyLoading ? <LoadingState label="Memuat history..." className="py-4" /> : <ActivityTimeline items={history.map((event)=>({label:eventLabel(event),by:event.actorNameSnapshot,at:relativeTime(event.createdAt),tone:'accent' as const}))} />}
+          </div>
 
-            <div className="space-y-2 border-t border-base-700 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi</p>
-              <div className="flex flex-wrap gap-2">
-                {canTransitionToStatus(detail, 'Assigned', workflowPermissions) && <Button size="sm" variant="secondary" onClick={() => openAssignment(detail)}>Assign Teknisi</Button>}
-                {canTransitionToStatus(detail, 'In Progress', workflowPermissions) && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} onClick={() => updateStatus(detail, 'In Progress')}>Mulai</Button>}
-                {canTransitionToStatus(detail, 'On Hold', workflowPermissions) && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={() => updateStatus(detail, 'On Hold')}>Pause</Button>}
-                {canUpdate && canUseSparePart && <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => { setPartOpen(detail); setPartForm({ stockItemId: '', name: '', quantity: 1 }); }}>Gunakan Spare Part</Button>}
-                {canTransitionToStatus(detail, 'Completed', workflowPermissions) && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => updateStatus(detail, 'Completed')}>Selesai</Button>}
-                {canTransitionToStatus(detail, 'Verified', workflowPermissions) && <Button size="sm" variant="success" onClick={() => updateStatus(detail, 'Verified')}>Verifikasi</Button>}
-                {availableStatusOptions.length > 0 && <Select value="" onChange={(e) => e.target.value && updateStatus(detail, e.target.value as WorkOrderStatus)} options={availableStatusOptions} placeholder="Ubah Status" />}
-              </div>
+          <div className="space-y-2 border-t border-base-700 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Aksi Server</p>
+            <div className="flex flex-wrap gap-2">
+              {canAssign && ['draft','assigned','in_progress','on_hold','waiting_part'].includes(detail.status) && <Button size="sm" variant="secondary" onClick={()=>openAssignment(detail)}>{detail.status === 'draft' ? 'Assign Teknisi' : 'Ganti Teknisi'}</Button>}
+              {canUpdate && detail.status === 'assigned' && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} loading={busy} onClick={()=>void directAction('start')}>Mulai</Button>}
+              {canUpdate && detail.status === 'in_progress' && <Button size="sm" variant="secondary" icon={<Pause className="h-4 w-4" />} onClick={()=>openReason('hold')}>Tahan</Button>}
+              {canUpdate && ['in_progress','on_hold'].includes(detail.status) && <Button size="sm" variant="secondary" onClick={()=>openReason('waiting')}>Menunggu Part</Button>}
+              {canUpdate && ['on_hold','waiting_part'].includes(detail.status) && <Button size="sm" variant="warning" icon={<Play className="h-4 w-4" />} loading={busy} onClick={()=>void directAction('resume')}>Lanjutkan</Button>}
+              {canUpdate && canConsumeStock && detail.status === 'in_progress' && <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={openPart}>Gunakan Spare Part</Button>}
+              {canUpdate && detail.status === 'in_progress' && <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={openComplete}>Selesaikan Teknis</Button>}
+              {canApprove && detail.status === 'completed' && <Button size="sm" variant="success" loading={busy} onClick={()=>void directAction('verify')}>Verifikasi</Button>}
+              {canApprove && detail.status === 'completed' && <Button size="sm" variant="secondary" onClick={()=>openReason('rework')}>Minta Rework</Button>}
+              {(canAssign || canApprove) && ['draft','assigned','in_progress','on_hold','waiting_part'].includes(detail.status) && <Button size="sm" variant="danger" onClick={()=>openReason('cancel')}>Batalkan</Button>}
             </div>
           </div>
-        )}
+        </div>}
       </Drawer>
 
-      <FormDialog open={Boolean(partOpen)} onClose={() => setPartOpen(null)} title="Gunakan Spare Part" onSubmit={useSparePart} size="md" submitLabel="Gunakan">
+      <FormDialog open={assignmentOpen} onClose={()=>setAssignmentOpen(false)} title={detail?.status === 'draft' ? 'Assign Teknisi' : 'Ganti Teknisi'} onSubmit={()=>void submitAssignment()} submitLabel="Simpan Assignment" loading={busy}>
         <div className="space-y-4">
-          <Select label="Spare Part" value={partForm.stockItemId} onChange={(e) => setPartForm({ ...partForm, stockItemId: e.target.value })} options={db.stock.items.map((s) => ({ value: s.id, label: `${s.name} (stok: ${s.quantity} ${s.unit})` }))} />
-          <Input label="Jumlah" type="number" value={partForm.quantity} onChange={(e) => setPartForm({ ...partForm, quantity: Number(e.target.value) })} />
+          <Select label="Teknisi" value={assigneeMembershipId} onChange={(e)=>setAssigneeMembershipId(e.target.value)} options={technicians.map((membership)=>({value:membership.id,label:`${membership.user.name} · ${membership.user.email}`}))} placeholder="Pilih teknisi" />
+          {detail?.status !== 'draft' && <Textarea label="Alasan Reassignment" required value={assignmentReason} onChange={(e)=>setAssignmentReason(e.target.value)} />}
         </div>
       </FormDialog>
 
-      <FormDialog open={Boolean(assignmentOpen)} onClose={() => setAssignmentOpen(null)} title="Assign Teknisi" onSubmit={assignWorkOrder} size="md" submitLabel="Assign">
-        <Select label="Teknisi" value={assignmentTechnician} onChange={(e) => setAssignmentTechnician(e.target.value)} options={['Andi Wijaya', 'Dedi Kurniawan'].map((technician) => ({ value: technician, label: technician }))} placeholder="Pilih Teknisi" />
+      <FormDialog open={reasonAction !== null} onClose={()=>setReasonAction(null)} title={reasonAction === 'hold' ? 'Tahan Perbaikan' : reasonAction === 'waiting' ? 'Menunggu Spare Part' : reasonAction === 'rework' ? 'Minta Rework' : 'Batalkan Work Order'} onSubmit={()=>void submitReason()} submitLabel="Simpan Evidence" loading={busy}>
+        <Textarea label="Alasan" required value={reasonText} onChange={(e)=>setReasonText(e.target.value)} />
+      </FormDialog>
+
+      <FormDialog open={completeOpen} onClose={()=>setCompleteOpen(false)} title="Selesaikan Pekerjaan Teknis" description="Completion hanya menyimpan evidence. Asset condition baru diterapkan saat verifikasi." onSubmit={()=>void submitComplete()} submitLabel="Simpan Completion" loading={busy} size="lg">
+        <div className="space-y-4">
+          <Textarea label="Diagnosis" required value={completeForm.diagnosis} onChange={(e)=>setCompleteForm({...completeForm,diagnosis:e.target.value})} />
+          <Textarea label="Tindakan" required value={completeForm.actionTaken} onChange={(e)=>setCompleteForm({...completeForm,actionTaken:e.target.value})} />
+          <Select label="Kondisi Setelah Perbaikan" value={completeForm.conditionAfter} onChange={(e)=>setCompleteForm({...completeForm,conditionAfter:e.target.value as AssetCondition})} options={ASSET_CONDITIONS.map((condition)=>({value:condition,label:CONDITION_LABELS[condition]}))} />
+          <Textarea label="Hasil Pengujian" value={completeForm.testResult} onChange={(e)=>setCompleteForm({...completeForm,testResult:e.target.value})} />
+        </div>
+      </FormDialog>
+
+      <FormDialog open={partOpen} onClose={()=>setPartOpen(false)} title="Gunakan Spare Part" description="Stok berkurang hanya melalui immutable InventoryTransaction sourceType=work_order." onSubmit={()=>void submitPart()} submitLabel="Issue Spare Part" loading={busy}>
+        <div className="space-y-4">
+          <Select label="Inventory Item" value={partItemId} onChange={(e)=>setPartItemId(e.target.value)} options={inventoryItems.map((item)=>({value:item.id,label:`${item.itemCode} · ${item.name} (stok ${item.onHandQuantity} ${item.unit})`}))} placeholder="Pilih spare part" />
+          <Input label="Jumlah" type="number" min="0.001" step="0.001" value={partQuantity} onChange={(e)=>setPartQuantity(e.target.value)} />
+          <Input label="Mutation ID" value={partMutationId} readOnly hint="Dipertahankan selama retry dialog yang sama untuk idempotensi." />
+        </div>
       </FormDialog>
     </div>
   );
