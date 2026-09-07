@@ -6,6 +6,7 @@ use App\Application\Asset\AssetMutationService;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Inventory\InventoryMutationService;
 use App\Application\Loan\LoanMutationService;
+use App\Application\Maintenance\MaintenanceCampaignService;
 use App\Application\Maintenance\MaintenanceMutationService;
 use App\Application\WorkOrder\WorkOrderMutationService;
 use App\Models\Asset;
@@ -13,6 +14,8 @@ use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\Loan;
 use App\Models\LoanItem;
+use App\Models\MaintenanceCampaign;
+use App\Models\MaintenanceCampaignEvent;
 use App\Models\MaintenanceExecution;
 use App\Models\Laboratory;
 use App\Models\School;
@@ -502,6 +505,71 @@ class S4PostgresConcurrencyTest extends TestCase
             $this->assertSame(2, $asset->version);
             $this->assertNull($workOrder->verified_at);
         }
+    }
+
+    public function test_concurrent_campaign_batch_schedule_allows_only_one_same_version_batch(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $lab = Laboratory::factory()->create([
+            'school_id' => $schoolId,
+            'status' => 'active',
+        ]);
+        $assets = collect(range(1, 3))->map(fn (int $index) => Asset::factory()->create([
+            'school_id' => $schoolId,
+            'asset_code' => 'RACE-CAMP-00'.$index,
+            'home_laboratory_id' => $lab->id,
+            'condition' => 'good',
+            'lifecycle_status' => 'active',
+        ]));
+
+        $service = app(MaintenanceCampaignService::class);
+        $campaign = $service->create(
+            $this->context($membershipId, []),
+            User::query()->findOrFail($userId),
+            [
+                'laboratoryId' => (string) $lab->id,
+                'name' => 'Race Campaign',
+                'frequencyKind' => 'monthly',
+                'checklistTemplate' => ['Race checklist'],
+                'assignedTechnicianName' => 'Race Technician',
+                'nextDueDate' => now()->addWeek()->toDateString(),
+                'assetIds' => $assets->pluck('id')->map(fn ($id): string => (string) $id)->all(),
+            ],
+        );
+
+        $scheduledFor = now()->addDays(2)->toDateString();
+        $results = $this->race(
+            fn () => app(MaintenanceCampaignService::class)->scheduleBatch(
+                $this->context($membershipId, []),
+                User::query()->findOrFail($userId),
+                (string) $campaign->id,
+                1,
+                [
+                    'scheduledFor' => $scheduledFor,
+                    'technicianName' => 'Race Technician A',
+                ],
+            ),
+            fn () => app(MaintenanceCampaignService::class)->scheduleBatch(
+                $this->context($membershipId, []),
+                User::query()->findOrFail($userId),
+                (string) $campaign->id,
+                1,
+                [
+                    'scheduledFor' => $scheduledFor,
+                    'technicianName' => 'Race Technician B',
+                ],
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $this->assertSame(['MAINTENANCE_CAMPAIGN_VERSION_CONFLICT'], $this->failureCodes($results));
+        $this->assertSame(3, MaintenanceExecution::query()->whereDate('scheduled_for', $scheduledFor)->count());
+        $this->assertSame(0, MaintenanceExecution::query()->where('custody_active', true)->count());
+        $this->assertSame(2, MaintenanceCampaign::query()->findOrFail($campaign->id)->version);
+        $this->assertSame(1, MaintenanceCampaignEvent::query()
+            ->where('maintenance_campaign_id', $campaign->id)
+            ->where('event_type', 'maintenance_campaign.batch_scheduled')
+            ->count());
     }
 
     public function test_postgres_corrective_custody_requires_start_evidence_at_database_layer(): void
