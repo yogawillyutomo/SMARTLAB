@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\LoanController;
 use App\Http\Controllers\Api\V1\MaintenanceController;
+use App\Http\Controllers\Api\V1\WorkOrderController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
 use App\Http\Controllers\Api\V1\LaboratoryController;
 use App\Http\Controllers\Api\V1\LayoutController;
@@ -36,6 +37,7 @@ use App\Http\Middleware\RequireInventoryItemVersionPrecondition;
 use App\Http\Middleware\RequireLoanVersionPrecondition;
 use App\Http\Middleware\RequireMaintenanceExecutionVersionPrecondition;
 use App\Http\Middleware\RequireMaintenancePlanVersionPrecondition;
+use App\Http\Middleware\RequireWorkOrderVersionPrecondition;
 use App\Http\Middleware\RequireLayoutVersionPrecondition;
 use App\Http\Middleware\RequireScheduleExceptionVersionPrecondition;
 use App\Http\Middleware\RequireReservationVersionPrecondition;
@@ -238,6 +240,30 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
         Route::post('maintenance-executions/{executionId}/cancel', [MaintenanceController::class, 'cancel'])
             ->middleware(['permission:maintenance.cancel', RequireMaintenanceExecutionVersionPrecondition::class]);
+
+        Route::get('work-orders', [WorkOrderController::class, 'index'])->middleware('permission:work-orders.view');
+        Route::post('work-orders', [WorkOrderController::class, 'store'])
+            ->middleware(['permission:work-orders.create', 'permission:assets.view', 'permission:laboratories.view']);
+        Route::get('work-orders/{workOrderId}', [WorkOrderController::class, 'show'])->middleware('permission:work-orders.view');
+        Route::patch('work-orders/{workOrderId}', [WorkOrderController::class, 'update'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::get('work-orders/{workOrderId}/history', [WorkOrderController::class, 'history'])->middleware('permission:work-orders.view');
+        Route::post('work-orders/{workOrderId}/assign', [WorkOrderController::class, 'assign'])
+            ->middleware(['permission:work-orders.assign', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/start', [WorkOrderController::class, 'start'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/hold', [WorkOrderController::class, 'hold'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/waiting-part', [WorkOrderController::class, 'waitingPart'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/resume', [WorkOrderController::class, 'resume'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/complete', [WorkOrderController::class, 'complete'])
+            ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/rework', [WorkOrderController::class, 'rework'])
+            ->middleware(['permission:work-orders.approve', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/cancel', [WorkOrderController::class, 'cancel'])
+            ->middleware(['permission:work-orders.view', RequireWorkOrderVersionPrecondition::class]);
 
         Route::get('stock-items', [InventoryController::class, 'index'])->middleware('permission:stock.view');
         Route::post('stock-items', [InventoryController::class, 'store'])->middleware('permission:stock.create');

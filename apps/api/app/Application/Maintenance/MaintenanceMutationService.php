@@ -12,6 +12,7 @@ use App\Models\LoanItem;
 use App\Models\MaintenanceEvent;
 use App\Models\MaintenanceExecution;
 use App\Models\MaintenancePlan;
+use App\Models\WorkOrder;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -300,6 +301,14 @@ class MaintenanceMutationService
                     ->exists();
                 if ($maintenanceConflict) {
                     throw MaintenanceDomainException::assetUnavailable('Asset is already under active Preventive Maintenance custody.');
+                }
+
+                $workOrderConflict = WorkOrder::query()
+                    ->where('asset_id', $asset->id)
+                    ->where('custody_active', true)
+                    ->exists();
+                if ($workOrderConflict) {
+                    throw MaintenanceDomainException::assetUnavailable('Asset is under active corrective Work Order custody.');
                 }
 
                 $before = $execution->status;

@@ -8,6 +8,7 @@ use App\Models\Asset;
 use App\Models\Device;
 use App\Models\LoanItem;
 use App\Models\MaintenanceExecution;
+use App\Models\WorkOrder;
 
 class AssetOperationalStateQueryService
 {
@@ -46,6 +47,13 @@ class AssetOperationalStateQueryService
             ->orderBy('id')
             ->get(['id', 'maintenance_plan_id', 'status']);
 
+        $workOrders = WorkOrder::query()
+            ->where('school_id', $schoolId)
+            ->where('asset_id', $asset->id)
+            ->where('custody_active', true)
+            ->orderBy('id')
+            ->get(['id', 'work_order_number', 'status']);
+
         $linkedDevice = null;
         $linkedDeviceScopeValid = true;
         if ($asset->linked_device_id !== null) {
@@ -76,11 +84,18 @@ class AssetOperationalStateQueryService
             'status' => (string) $execution->status,
         ])->values()->all();
 
+        $workOrderCustodies = $workOrders->map(fn (WorkOrder $workOrder): array => [
+            'workOrderId' => (string) $workOrder->id,
+            'workOrderNumber' => (string) $workOrder->work_order_number,
+            'status' => (string) $workOrder->status,
+        ])->values()->all();
+
         [$state, $integrityCode] = $this->derive(
             (string) $asset->lifecycle_status,
             (string) $asset->condition,
             $loanCustodies,
             $maintenanceCustodies,
+            $workOrderCustodies,
             $linkedDevice,
             $linkedDeviceScopeValid,
         );
@@ -97,6 +112,7 @@ class AssetOperationalStateQueryService
                 ],
                 'loanCustodies' => $loanCustodies,
                 'maintenanceCustodies' => $maintenanceCustodies,
+                'workOrderCustodies' => $workOrderCustodies,
                 'linkedDevice' => $linkedDevice,
             ],
         ];
@@ -105,6 +121,7 @@ class AssetOperationalStateQueryService
     /**
      * @param list<array<string,string>> $loanCustodies
      * @param list<array<string,string>> $maintenanceCustodies
+     * @param list<array<string,string>> $workOrderCustodies
      * @param array{deviceId:string,lifecycleStatus:string}|null $linkedDevice
      * @return array{string,?string}
      */
@@ -113,6 +130,7 @@ class AssetOperationalStateQueryService
         string $condition,
         array $loanCustodies,
         array $maintenanceCustodies,
+        array $workOrderCustodies,
         ?array $linkedDevice,
         bool $linkedDeviceScopeValid,
     ): array {
@@ -124,11 +142,20 @@ class AssetOperationalStateQueryService
             return ['unknown', 'MULTIPLE_ACTIVE_MAINTENANCE_CUSTODY'];
         }
 
-        if ($loanCustodies !== [] && $maintenanceCustodies !== []) {
+        if (count($workOrderCustodies) > 1) {
+            return ['unknown', 'MULTIPLE_ACTIVE_WORK_ORDER_CUSTODY'];
+        }
+
+        $activeKinds = (int) ($loanCustodies !== [])
+            + (int) ($maintenanceCustodies !== [])
+            + (int) ($workOrderCustodies !== []);
+
+        if ($activeKinds > 1) {
             return ['unknown', 'CONFLICTING_ACTIVE_CUSTODY'];
         }
 
-        if ($lifecycle !== 'active' && ($loanCustodies !== [] || $maintenanceCustodies !== [])) {
+        if ($lifecycle !== 'active'
+            && ($loanCustodies !== [] || $maintenanceCustodies !== [] || $workOrderCustodies !== [])) {
             return ['unknown', 'LIFECYCLE_CUSTODY_CONFLICT'];
         }
 
@@ -154,6 +181,10 @@ class AssetOperationalStateQueryService
 
         if ($maintenanceCustodies !== []) {
             return ['in_maintenance', null];
+        }
+
+        if ($workOrderCustodies !== []) {
+            return ['in_repair', null];
         }
 
         if (! in_array($condition, ['good', 'minor_damage'], true)) {
