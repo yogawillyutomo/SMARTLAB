@@ -384,6 +384,8 @@ MaintenanceExecution
   cancelledAt?
   status
   checklistSnapshot[]
+  checklistProgress[]?
+  checklistResults[]?
   findings
   actionTaken
   conditionBefore
@@ -403,6 +405,14 @@ in_progress -> cancelled   (reason required, if policy permits)
 ```
 
 Execution creation snapshots checklist content so later plan edits do not rewrite history.
+
+While an execution is `in_progress`, operators with `maintenance.complete` may save versioned checklist working progress without completing the execution. This working progress:
+
+- is server-authoritative and protected by the execution `If-Match` version;
+- writes append-only `maintenance_execution.checklist_progress_updated` audit events;
+- does not release Maintenance custody or set `completedAt`;
+- does not mutate Asset condition or Inventory;
+- remains distinct from immutable `checklistResults`, which are captured only by the final completion action.
 
 ### 7.4 Maintenance custody
 
@@ -582,6 +592,7 @@ POST  /api/v1/maintenance-plans/{plan}/executions
 GET   /api/v1/maintenance-executions
 GET   /api/v1/maintenance-executions/{execution}
 POST  /api/v1/maintenance-executions/{execution}/start
+PATCH /api/v1/maintenance-executions/{execution}/checklist-progress
 POST  /api/v1/maintenance-executions/{execution}/complete
 POST  /api/v1/maintenance-executions/{execution}/cancel
 ```

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.29.0
-  description: Canonical SmartLab API v1 contract. Version 0.29 adds S4.6 read-only Asset operational-state reconciliation with provenance and closes active-custody lifecycle/unlink gaps while preserving S4.2–S4.5 authorities.
+  version: 0.30.0
+  description: Canonical SmartLab API v1 contract. Version 0.30 adds versioned in-progress Preventive Maintenance checklist progress while preserving immutable completion evidence and S4.6 reconciliation guarantees.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -21,6 +21,7 @@ paths:
   /maintenance-executions: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions' }
   /maintenance-executions/{executionId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}' }
   /maintenance-executions/{executionId}/start: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1start' }
+  /maintenance-executions/{executionId}/checklist-progress: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1checklist-progress' }
   /maintenance-executions/{executionId}/complete: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1complete' }
   /maintenance-executions/{executionId}/cancel: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1cancel' }
   /loans: { $ref: './openapi-loans.yaml#/paths/~1loans' }

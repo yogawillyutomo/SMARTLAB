@@ -15,6 +15,7 @@ use App\Http\Requests\EmptyMaintenanceActionRequest;
 use App\Http\Requests\ListMaintenanceExecutionsRequest;
 use App\Http\Requests\ListMaintenancePlansRequest;
 use App\Http\Requests\ScheduleMaintenanceExecutionRequest;
+use App\Http\Requests\UpdateMaintenanceChecklistProgressRequest;
 use App\Http\Requests\UpdateMaintenancePlanRequest;
 use App\Http\Resources\MaintenanceExecutionResource;
 use App\Http\Resources\MaintenancePlanResource;
@@ -195,6 +196,23 @@ class MaintenanceController extends Controller
     ): JsonResponse {
         return $this->executionResponse(
             $service->startExecution($this->context($request), $this->actor($request), $executionId, $this->executionVersion($request)),
+            $request,
+        );
+    }
+
+    public function updateChecklistProgress(
+        UpdateMaintenanceChecklistProgressRequest $request,
+        string $executionId,
+        MaintenanceMutationService $service,
+    ): JsonResponse {
+        return $this->executionResponse(
+            $service->updateChecklistProgress(
+                $this->context($request),
+                $this->actor($request),
+                $executionId,
+                $this->executionVersion($request),
+                $request->validated('checklistResults'),
+            ),
             $request,
         );
     }

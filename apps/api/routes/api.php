@@ -232,6 +232,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('maintenance-executions/{executionId}', [MaintenanceController::class, 'showExecution'])->middleware('permission:maintenance.view');
         Route::post('maintenance-executions/{executionId}/start', [MaintenanceController::class, 'start'])
             ->middleware(['permission:maintenance.start', RequireMaintenanceExecutionVersionPrecondition::class]);
+        Route::patch('maintenance-executions/{executionId}/checklist-progress', [MaintenanceController::class, 'updateChecklistProgress'])
+            ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
         Route::post('maintenance-executions/{executionId}/complete', [MaintenanceController::class, 'complete'])
             ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
         Route::post('maintenance-executions/{executionId}/cancel', [MaintenanceController::class, 'cancel'])

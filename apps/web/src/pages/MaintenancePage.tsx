@@ -76,6 +76,7 @@ type PlanForm = {
 
 type ScheduleState = { plan: MaintenancePlanDto; scheduledFor: string; technicianReference: string; technicianName: string } | null;
 type CancelState = { execution: MaintenanceExecutionDto; reason: string } | null;
+type ChecklistProgressState = { execution: MaintenanceExecutionDto; checklistResults: boolean[] } | null;
 type CompleteState = {
   execution: MaintenanceExecutionDto;
   checklistResults: boolean[];
@@ -84,6 +85,12 @@ type CompleteState = {
   conditionAfter: AssetCondition;
   inventoryIssues: CompleteMaintenanceInventoryIssueInput[];
 } | null;
+
+function checklistBooleans(execution: MaintenanceExecutionDto): boolean[] {
+  const evidence = execution.checklistProgress ?? execution.checklistResults;
+  return execution.checklistSnapshot.map((item, index) =>
+    evidence?.[index]?.item === item ? evidence[index].done : false);
+}
 
 function defaultPlanForm(): PlanForm {
   return {
@@ -122,6 +129,7 @@ export function MaintenancePage() {
   const [planForm, setPlanForm] = useState<PlanForm>(defaultPlanForm());
   const [checklistInput, setChecklistInput] = useState('');
   const [scheduleState, setScheduleState] = useState<ScheduleState>(null);
+  const [checklistProgressState, setChecklistProgressState] = useState<ChecklistProgressState>(null);
   const [completeState, setCompleteState] = useState<CompleteState>(null);
   const [cancelState, setCancelState] = useState<CancelState>(null);
 
@@ -281,10 +289,34 @@ export function MaintenancePage() {
     }
   }
 
+  function openChecklistProgress(execution: MaintenanceExecutionDto) {
+    setChecklistProgressState({
+      execution,
+      checklistResults: checklistBooleans(execution),
+    });
+  }
+
+  async function saveChecklistProgress() {
+    if (!checklistProgressState) return;
+
+    try {
+      await maintenanceGateway.updateChecklistProgress(
+        checklistProgressState.execution.id,
+        checklistProgressState.execution.version,
+        { checklistResults: checklistProgressState.checklistResults },
+      );
+      toast('Progress checklist tersimpan tanpa menyelesaikan Maintenance.', 'success');
+      setChecklistProgressState(null);
+      await load();
+    } catch (error) {
+      toast(errorMessage(error), 'error');
+    }
+  }
+
   function openComplete(execution: MaintenanceExecutionDto) {
     setCompleteState({
       execution,
-      checklistResults: execution.checklistSnapshot.map(() => false),
+      checklistResults: checklistBooleans(execution),
       findings: '',
       actionTaken: '',
       conditionAfter: execution.conditionBefore ?? 'good',
@@ -454,6 +486,7 @@ export function MaintenancePage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {canStart && execution.status === 'scheduled' && <Button size="sm" icon={<Play className="h-3.5 w-3.5" />} onClick={() => void startExecution(execution)}>Mulai</Button>}
+                          {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="secondary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => openChecklistProgress(execution)}>Checklist</Button>}
                           {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="success" icon={<Wrench className="h-3.5 w-3.5" />} onClick={() => openComplete(execution)}>Selesaikan</Button>}
                           {canCancel && (execution.status === 'scheduled' || execution.status === 'in_progress') && <Button size="sm" variant="ghost" icon={<StopCircle className="h-3.5 w-3.5" />} onClick={() => setCancelState({ execution, reason: '' })}>Batalkan</Button>}
                         </div>
@@ -517,6 +550,39 @@ export function MaintenancePage() {
           <Input label="Tanggal" type="date" required value={scheduleState.scheduledFor} onChange={(event) => setScheduleState({ ...scheduleState, scheduledFor: event.target.value })} />
           <Input label="Teknisi" required value={scheduleState.technicianName} onChange={(event) => setScheduleState({ ...scheduleState, technicianName: event.target.value })} />
           <Input label="Referensi Teknisi" value={scheduleState.technicianReference} onChange={(event) => setScheduleState({ ...scheduleState, technicianReference: event.target.value })} />
+        </div>}
+      </Modal>
+
+      <Modal
+        open={Boolean(checklistProgressState)}
+        onClose={() => setChecklistProgressState(null)}
+        title="Progress Checklist Maintenance"
+        description="Centang pekerjaan yang sudah dilakukan lalu simpan. Execution tetap Berlangsung dan custody tetap aktif sampai aksi Selesaikan dijalankan."
+        footer={<>
+          <Button variant="ghost" onClick={() => setChecklistProgressState(null)}>Batal</Button>
+          <Button onClick={() => void saveChecklistProgress()}>Simpan Progress</Button>
+        </>}
+      >
+        {checklistProgressState && <div className="space-y-3">
+          <div className="rounded-lg border border-base-700 p-3 text-sm">
+            <p className="font-medium text-ink-primary">{checklistProgressState.execution.assetCodeSnapshot} · {checklistProgressState.execution.assetNameSnapshot}</p>
+            <p className="mt-1 text-xs text-ink-muted">Progress ini versioned dan diaudit di server; completion evidence tetap dikunci hanya saat Maintenance diselesaikan.</p>
+          </div>
+          {checklistProgressState.execution.checklistSnapshot.map((item, index) => (
+            <label key={item} className="flex items-center gap-3 rounded-lg border border-base-700 bg-base-800/40 px-3 py-2.5 text-sm text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={checklistProgressState.checklistResults[index]}
+                onChange={(event) => {
+                  const next = [...checklistProgressState.checklistResults];
+                  next[index] = event.target.checked;
+                  setChecklistProgressState({ ...checklistProgressState, checklistResults: next });
+                }}
+                className="rounded border-base-600 text-accent-content"
+              />
+              <span>{item}</span>
+            </label>
+          ))}
         </div>}
       </Modal>
 

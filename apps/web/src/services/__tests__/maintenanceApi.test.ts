@@ -53,6 +53,7 @@ function execution(overrides: Partial<MaintenanceExecutionDto> = {}): Maintenanc
     status: 'scheduled',
     checklistSnapshot: ['Bersihkan fan'],
     checklistResults: null,
+    checklistProgress: null,
     findings: null,
     actionTaken: null,
     conditionBefore: null,
@@ -108,7 +109,9 @@ describe('Preventive Maintenance API contract', () => {
         ? execution()
         : plan(),
     }));
-    const patch = vi.fn(async () => ({ data: plan() }));
+    const patch = vi.fn(async (path: string) => ({
+      data: path.includes('maintenance-executions') ? execution({ status: 'in_progress', checklistProgress: [{ item: 'Bersihkan fan', done: true }] }) : plan(),
+    }));
     const gateway = createMaintenanceGateway(clientWith({
       get: get as ApiClient['get'],
       post: post as ApiClient['post'],
@@ -122,6 +125,7 @@ describe('Preventive Maintenance API contract', () => {
     await gateway.deactivatePlan(PLAN_ID, 2);
     await gateway.scheduleExecution(PLAN_ID, 2, { scheduledFor: '2026-09-07', technicianName: 'Andi' });
     await gateway.startExecution(EXECUTION_ID, 1);
+    await gateway.updateChecklistProgress(EXECUTION_ID, 2, { checklistResults: [true] });
     await gateway.completeExecution(EXECUTION_ID, 2, {
       checklistResults: [true],
       actionTaken: 'Cleaning',
@@ -130,6 +134,7 @@ describe('Preventive Maintenance API contract', () => {
     await gateway.cancelExecution(EXECUTION_ID, 2, 'Jadwal berubah');
 
     expect(patch).toHaveBeenCalledWith(`/maintenance-plans/${PLAN_ID}`, { name: 'Updated' }, { ifMatch: '"2"' });
+    expect(patch).toHaveBeenCalledWith(`/maintenance-executions/${EXECUTION_ID}/checklist-progress`, { checklistResults: [true] }, { ifMatch: '"2"' });
     expect(post).toHaveBeenCalledWith(`/maintenance-executions/${EXECUTION_ID}/start`, {}, { ifMatch: '"1"' });
     expect('deletePlan' in gateway).toBe(false);
     expect('deleteExecution' in gateway).toBe(false);
