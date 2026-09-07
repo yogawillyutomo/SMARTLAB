@@ -6,6 +6,7 @@ use App\Models\Asset;
 use App\Models\AssetChangeEvent;
 use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
+use App\Models\WorkOrderPartUsage;
 use App\Models\Laboratory;
 use App\Models\Permission;
 use App\Models\Role;
@@ -480,6 +481,65 @@ class WorkOrderApiTest extends TestCase
 
         $this->expectException(QueryException::class);
         $usage->delete();
+    }
+
+    public function test_database_rejects_part_usage_that_does_not_match_inventory_source_evidence(): void
+    {
+        [, $school, $membership] = $this->authenticateWithPermissions([
+            'work-orders.create', 'work-orders.view', 'work-orders.update',
+            'work-orders.assign', 'work-orders.consume-stock',
+            'assets.view', 'laboratories.view',
+        ]);
+
+        $lab = Laboratory::factory()->for($school)->create();
+        $asset = Asset::factory()->for($school)->create(['condition' => 'major_damage']);
+        $item = InventoryItem::factory()->for($school)->create([
+            'on_hand_quantity' => '2.000',
+            'version' => 1,
+        ]);
+
+        $id = (string) $this->postJson('/api/v1/work-orders', $this->payload($asset, $lab))
+            ->assertCreated()
+            ->json('data.id');
+        $this->postJson("/api/v1/work-orders/{$id}/assign", [
+            'assigneeMembershipId' => $membership->id,
+        ], ['If-Match' => '"1"'])->assertOk();
+        $this->postJson("/api/v1/work-orders/{$id}/start", [], ['If-Match' => '"2"'])->assertOk();
+
+        $response = $this->postJson("/api/v1/work-orders/{$id}/parts", [
+            'inventoryItemId' => $item->id,
+            'clientMutationId' => (string) Str::uuid(),
+            'quantity' => '1.000',
+        ], ['If-Match' => '"3"'])->assertCreated();
+
+        $usage = WorkOrderPartUsage::query()->findOrFail((string) $response->json('partUsage.id'));
+        $transaction = InventoryTransaction::query()->findOrFail($usage->inventory_transaction_id);
+
+        try {
+            WorkOrderPartUsage::query()->create([
+                'school_id' => $school->id,
+                'work_order_id' => $id,
+                'inventory_transaction_id' => $transaction->id,
+                'inventory_item_id' => $transaction->inventory_item_id,
+                'client_mutation_id' => (string) Str::uuid(),
+                'item_code_snapshot' => $transaction->item_code_snapshot,
+                'item_name_snapshot' => $transaction->item_name_snapshot,
+                'unit_snapshot' => $transaction->unit_snapshot,
+                'quantity' => $transaction->quantity,
+                'actor_user_id' => $membership->user_id,
+                'actor_membership_id' => $membership->id,
+                'actor_user_id_snapshot' => $transaction->actor_user_id_snapshot,
+                'actor_membership_id_snapshot' => $transaction->actor_membership_id_snapshot,
+                'actor_name_snapshot' => $transaction->actor_name_snapshot,
+                'used_at' => now(),
+                'created_at' => now(),
+            ]);
+            $this->fail('Expected DB source-evidence validation to reject mismatched clientMutationId.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertDatabaseCount('work_order_part_usages', 1);
     }
 
     public function test_verification_applies_asset_condition_through_asset_authority_and_releases_custody(): void
