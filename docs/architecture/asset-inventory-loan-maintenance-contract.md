@@ -384,6 +384,8 @@ MaintenanceExecution
   cancelledAt?
   status
   checklistSnapshot[]
+  checklistProgress[]?
+  checklistResults[]?
   findings
   actionTaken
   conditionBefore
@@ -403,6 +405,14 @@ in_progress -> cancelled   (reason required, if policy permits)
 ```
 
 Execution creation snapshots checklist content so later plan edits do not rewrite history.
+
+While an execution is `in_progress`, operators with `maintenance.complete` may save versioned checklist working progress without completing the execution. This working progress:
+
+- is server-authoritative and protected by the execution `If-Match` version;
+- writes append-only `maintenance_execution.checklist_progress_updated` audit events;
+- does not release Maintenance custody or set `completedAt`;
+- does not mutate Asset condition or Inventory;
+- remains distinct from immutable `checklistResults`, which are captured only by the final completion action.
 
 ### 7.4 Maintenance custody
 
@@ -446,7 +456,24 @@ unknown
 
 This is a read-model decision, not a writable Asset field.
 
-Precedence must be deterministic and include provenance.
+S4.6 implements the projection as:
+
+```http
+GET /api/v1/assets/{assetId}/operational-state
+```
+
+The endpoint requires `assets.view`, is exact-School scoped, and returns provenance from Asset lifecycle/condition, active Loan custody, active Maintenance custody, and the same-School linked Device when present.
+
+Deterministic precedence is:
+
+1. integrity contradictions (multiple active custody rows, simultaneous Loan + Maintenance custody, lifecycle + active custody, or linked-Device School mismatch) => `unknown` with an integrity code;
+2. `disposed`;
+3. `retired`;
+4. `on_loan`;
+5. `in_maintenance`;
+6. non-loanable condition => `blocked_condition`;
+7. incompatible linked Device lifecycle => `unknown` with provenance;
+8. otherwise => `available`.
 
 A linked Device may add lifecycle-based blocking but telemetry health remains S6 and must not be fabricated.
 
@@ -519,6 +546,7 @@ These paths are architectural candidates for implementation slicing. They must *
 GET    /api/v1/assets
 POST   /api/v1/assets
 GET    /api/v1/assets/{asset}
+GET    /api/v1/assets/{asset}/operational-state
 PATCH  /api/v1/assets/{asset}
 POST   /api/v1/assets/{asset}/device-link
 DELETE /api/v1/assets/{asset}/device-link
@@ -564,6 +592,7 @@ POST  /api/v1/maintenance-plans/{plan}/executions
 GET   /api/v1/maintenance-executions
 GET   /api/v1/maintenance-executions/{execution}
 POST  /api/v1/maintenance-executions/{execution}/start
+PATCH /api/v1/maintenance-executions/{execution}/checklist-progress
 POST  /api/v1/maintenance-executions/{execution}/complete
 POST  /api/v1/maintenance-executions/{execution}/cancel
 ```
@@ -765,11 +794,13 @@ Maintenance historical imports must preserve execution evidence and must not fab
 ### S4.6 — S4 reconciliation/UAT
 
 - cross-domain custody projection;
-- migration/import policy implementation if approved;
-- negative-stock race tests;
+- migration/import policy classification only unless an explicit import approval exists;
+- negative-stock race tests on PostgreSQL with independent concurrent workers;
 - double-loan race tests;
 - maintenance/loan exclusion tests;
-- browser UAT with storage-cleared route cutovers;
+- browser UAT with storage-cleared route cutovers and recorded operator evidence;
+- aggregate source-of-truth regression for all four S4 routes;
+- relative documentation-link CI validation;
 - source-of-truth docs update;
 - exact merged-head regression.
 
@@ -788,4 +819,6 @@ S4 is complete only when:
 - permissions and tenant isolation are tested server-side;
 - historical evidence is append-oriented;
 - OpenAPI describes only implemented endpoints;
-- full API/web regression is green.
+- full API/web regression is green;
+- dedicated PostgreSQL S4 contention proof is green;
+- storage-cleared browser UAT for `/assets`, `/stock`, `/loans`, and `/maintenance` has been executed and recorded.

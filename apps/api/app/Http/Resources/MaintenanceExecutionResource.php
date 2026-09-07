@@ -23,6 +23,7 @@ class MaintenanceExecutionResource extends JsonResource
             'status' => $this->status,
             'checklistSnapshot' => $this->checklist_snapshot,
             'checklistResults' => $this->checklist_results,
+            'checklistProgress' => $this->checklist_progress,
             'findings' => $this->findings,
             'actionTaken' => $this->action_taken,
             'conditionBefore' => $this->condition_before,

@@ -63,6 +63,7 @@ export interface MaintenanceExecutionDto {
   status: MaintenanceExecutionStatus;
   checklistSnapshot: string[];
   checklistResults: MaintenanceChecklistResult[] | null;
+  checklistProgress: MaintenanceChecklistResult[] | null;
   findings: string | null;
   actionTaken: string | null;
   conditionBefore: AssetCondition | null;
@@ -119,6 +120,10 @@ export interface CompleteMaintenanceInventoryIssueInput {
   quantity: number;
 }
 
+export interface UpdateMaintenanceChecklistProgressInput {
+  checklistResults: boolean[];
+}
+
 export interface CompleteMaintenanceExecutionInput {
   checklistResults: boolean[];
   findings?: string | null;
@@ -140,6 +145,7 @@ export interface MaintenanceGateway {
   listAllExecutions: () => Promise<MaintenanceExecutionDto[]>;
   showExecution: (executionId: string) => Promise<MaintenanceExecutionDto>;
   startExecution: (executionId: string, expectedVersion: number) => Promise<MaintenanceExecutionDto>;
+  updateChecklistProgress: (executionId: string, expectedVersion: number, input: UpdateMaintenanceChecklistProgressInput) => Promise<MaintenanceExecutionDto>;
   completeExecution: (executionId: string, expectedVersion: number, input: CompleteMaintenanceExecutionInput) => Promise<MaintenanceExecutionDto>;
   cancelExecution: (executionId: string, expectedVersion: number, reason: string) => Promise<MaintenanceExecutionDto>;
 }
@@ -282,7 +288,7 @@ function parseInventoryEvidence(value: unknown): MaintenanceInventoryTransaction
 const EXECUTION_FIELDS = [
   'id', 'schoolId', 'executionNumber', 'maintenancePlanId', 'planCodeSnapshot',
   'assetId', 'assetCodeSnapshot', 'assetNameSnapshot', 'scheduledFor', 'status',
-  'checklistSnapshot', 'checklistResults', 'findings', 'actionTaken',
+  'checklistSnapshot', 'checklistResults', 'checklistProgress', 'findings', 'actionTaken',
   'conditionBefore', 'conditionAfter', 'technicianReference', 'technicianNameSnapshot',
   'assetVersionAtStart', 'custodyActive', 'startedAt', 'completedAt', 'cancelledAt',
   'cancelReason', 'version', 'inventoryTransactions', 'createdAt', 'updatedAt',
@@ -294,9 +300,11 @@ export function parseMaintenanceExecution(value: unknown): MaintenanceExecutionD
   if (!(MAINTENANCE_EXECUTION_STATUSES as readonly unknown[]).includes(value.status)) throw new MaintenanceContractError();
   if (!Array.isArray(value.checklistSnapshot) || value.checklistSnapshot.length < 1
       || value.checklistSnapshot.some((item) => typeof item !== 'string' || item.trim() === '')) throw new MaintenanceContractError();
-  if (value.checklistResults !== null) {
-    if (!Array.isArray(value.checklistResults) || value.checklistResults.length !== value.checklistSnapshot.length) throw new MaintenanceContractError();
-    for (const result of value.checklistResults) {
+  for (const field of ['checklistResults', 'checklistProgress'] as const) {
+    const evidence = value[field];
+    if (evidence === null) continue;
+    if (!Array.isArray(evidence) || evidence.length !== value.checklistSnapshot.length) throw new MaintenanceContractError();
+    for (const result of evidence) {
       if (!isRecord(result)) throw new MaintenanceContractError();
       exactKeys(result, ['item', 'done']);
       if (typeof result.item !== 'string' || typeof result.done !== 'boolean') throw new MaintenanceContractError();
@@ -323,6 +331,9 @@ export function parseMaintenanceExecution(value: unknown): MaintenanceExecutionD
     checklistResults: value.checklistResults === null
       ? null
       : (value.checklistResults as Array<Record<string, unknown>>).map((item) => ({ item: item.item as string, done: item.done as boolean })),
+    checklistProgress: value.checklistProgress === null
+      ? null
+      : (value.checklistProgress as Array<Record<string, unknown>>).map((item) => ({ item: item.item as string, done: item.done as boolean })),
     findings: nullableString(value, 'findings'),
     actionTaken: nullableString(value, 'actionTaken'),
     conditionBefore: value.conditionBefore as AssetCondition | null,
@@ -432,6 +443,13 @@ export function createMaintenanceGateway(client: ApiClient): MaintenanceGateway 
       return parseExecutionResponse(await client.post<unknown>(
         `${executionPath(executionId)}/start`,
         {},
+        { ifMatch: maintenanceIfMatch(expectedVersion) },
+      ));
+    },
+    async updateChecklistProgress(executionId, expectedVersion, input) {
+      return parseExecutionResponse(await client.patch<unknown>(
+        `${executionPath(executionId)}/checklist-progress`,
+        input,
         { ifMatch: maintenanceIfMatch(expectedVersion) },
       ));
     },

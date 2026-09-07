@@ -459,7 +459,7 @@ export function LoansPage() {
         onClose={() => setReturnLoan(null)}
         title="Pengembalian Asset"
         description="Catat kondisi setiap Asset. Kerusakan tidak membuat Incident atau mengubah Asset condition secara otomatis."
-        size="lg"
+        size="xl"
         footer={<>
           <Button variant="ghost" onClick={() => setReturnLoan(null)}>Batal</Button>
           <Button onClick={() => void submitReturn()}>Catat Pengembalian</Button>
@@ -469,22 +469,31 @@ export function LoansPage() {
           {returnLoan?.items.map((loanItem) => {
             const evidence = returnItems.find((item) => item.loanItemId === loanItem.id);
             return (
-              <div key={loanItem.id} className="rounded-xl border border-base-700 bg-base-800/60 p-4">
-                <p className="font-medium text-ink-primary">{loanItem.assetCodeSnapshot} · {loanItem.assetNameSnapshot}</p>
-                <p className="mb-3 text-xs text-ink-muted">Kondisi keluar: {loanItem.conditionOut ? CONDITION_LABELS[loanItem.conditionOut] : '-'}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
+              <div key={loanItem.id} className="rounded-xl border border-base-700 bg-base-800/55 p-5">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-ink-primary">{loanItem.assetCodeSnapshot} · {loanItem.assetNameSnapshot}</p>
+                    <p className="mt-1 text-xs text-ink-muted">Catat evidence pengembalian untuk Asset exact ini.</p>
+                  </div>
+                  <Badge tone={conditionTone(loanItem.conditionOut ?? 'unknown')}>
+                    Keluar: {loanItem.conditionOut ? CONDITION_LABELS[loanItem.conditionOut] : '-'}
+                  </Badge>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
                   <div className="space-y-1.5">
                     <label className="block text-sm font-medium text-ink-secondary">Kondisi Kembali</label>
                     <select
                       value={evidence?.conditionReturn ?? 'good'}
                       onChange={(event) => updateReturnItem(loanItem.id, { conditionReturn: event.target.value as AssetCondition })}
-                      className="h-10 w-full rounded-lg border border-base-600 bg-base-800 px-3 text-sm text-ink-primary"
+                      className="h-11 w-full rounded-lg border border-base-600 bg-base-800 px-3 text-sm text-ink-primary outline-none focus:ring-2 focus:ring-accent-content/50"
                     >
                       {ASSET_CONDITIONS.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition]}</option>)}
                     </select>
+                    <p className="text-xs text-ink-muted">Kondisi ini disimpan sebagai return evidence, bukan direct Asset mutation.</p>
                   </div>
                   <Textarea
-                    label="Catatan"
+                    label="Catatan Pengembalian"
+                    rows={3}
                     value={evidence?.returnNotes ?? ''}
                     onChange={(event) => updateReturnItem(loanItem.id, { returnNotes: event.target.value || null })}
                   />
@@ -492,7 +501,9 @@ export function LoansPage() {
               </div>
             );
           })}
-          <p className="text-xs text-ink-muted">Return hanya melepas custody Loan dan menyimpan evidence. Tindak lanjut Incident harus melalui aksi/domain Incident yang eksplisit.</p>
+          <div className="rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-xs text-ink-secondary">
+            Return hanya melepas custody Loan dan menyimpan evidence. Jika ditemukan kerusakan yang perlu ditindaklanjuti, Incident tetap harus dibuat melalui domain Incident secara eksplisit.
+          </div>
         </div>
       </Modal>
     </div>

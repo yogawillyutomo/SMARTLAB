@@ -346,7 +346,8 @@ Planned slices:
 - **S4.2 — complete on merged main:** fixed Asset backend, exact Asset↔Device link, ETag/audit lifecycle actions, OpenAPI 0.25, and `/assets` server-authoritative cutover; merged as PR #79 / `69cf3305`;
 - **S4.3 — complete on merged main:** stock/spare-part InventoryItem + immutable InventoryTransaction ledger and `/stock` cutover; merged as PR #80 / `1a34dc23` with exact merged-head API/web CI green;
 - **S4.4 — complete on merged main:** exact-Asset Loan/LoanItem custody, action-specific versioned lifecycle, double-checkout exclusion, condition snapshots, append-oriented evidence, OpenAPI 0.27, and `/loans` cutover; merged as PR #81 / `f85f2edf` with exact merged-head API/web CI green;
-- **S4.5 — implementation tranche in PR #82:** exact-Asset Preventive Maintenance plans/executions, active custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and `/maintenance` cutover; becomes merged authority only after explicit merge and exact merged-head verification;
+- **S4.5 — complete on merged main:** exact-Asset Preventive Maintenance plans/executions, active custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, and `/maintenance` cutover; merged as PR #82 / `e3da257c` with exact merged-head API/web CI green;
+- **S4.6 — implementation tranche in PR #83:** read-only Asset operational-state projection with provenance, lifecycle/unlink active-custody reconciliation, real PostgreSQL contention gates, historical evidence reconstruction, aggregate source-of-truth scans, relative documentation-link validation, and a checked-in storage-cleared browser UAT matrix; S4 remains open until that manual UAT is executed and recorded;
 - **S4.6:** cross-domain custody/availability reconciliation, migration/UAT, and S4 closure.
 
 Delivered by S4.2 when this tranche is present on merged `main`:
@@ -384,7 +385,7 @@ Delivered by S4.4 on merged `main`:
 - Loan events are append-only with actor snapshots, while LoanItem exact identity and already-captured condition evidence are protected from later rewrite/delete at the database layer;
 - `/loans` reads/writes only canonical Loan and Asset APIs on merged PR #81; browser-local `db.loans`, free-text item/quantity mutations, manual overdue mutation, and local return→Incident creation are removed.
 
-Delivered by the S4.5 implementation tranche:
+Delivered by S4.5 on merged `main`:
 
 - one MaintenancePlan targets one exact School-scoped Asset and retains immutable Asset code/name identity snapshots; Asset target changes require a new plan rather than historical rewrite;
 - scheduling snapshots the plan code, exact Asset, checklist, technician context, and date into a MaintenanceExecution so later plan edits do not rewrite execution evidence;
@@ -396,8 +397,19 @@ Delivered by the S4.5 implementation tranche:
 - spare-part consumption uses canonical immutable InventoryTransaction `issue` movements with `sourceType=maintenance_execution` and `sourceId=executionId`; deterministic InventoryItem locking and the existing non-negative balance rules remain authoritative;
 - execution completion, Inventory issues, Asset condition audit/update, custody release, Maintenance event, and plan next-due advance share one outer database transaction, so insufficient stock or Asset drift rolls the coupled action back;
 - plan/execution identities and captured evidence are protected from hard delete/rewrite at the database layer; Maintenance events remain append-only;
-- `/maintenance` on PR #82 uses canonical Maintenance/Asset/Inventory APIs only; browser-local `db.maintenance`, local mutation, free-text Asset code execution, and hard-delete controls are removed;
+- `/maintenance` on merged PR #82 uses canonical Maintenance/Asset/Inventory APIs only; browser-local `db.maintenance`, local mutation, free-text Asset code execution, and hard-delete controls are removed;
 - Corrective repair remains S5 Work Order authority and is not fabricated by S4.5.
+
+Delivered by the S4.6 implementation tranche:
+
+- Asset retirement/disposal and Device unlink revalidate active Loan/Maintenance custody and fail with `ASSET_ACTIVE_CUSTODY_CONFLICT`; this closes a contract gap discovered during reconciliation rather than creating a new authority;
+- `GET /assets/{assetId}/operational-state` is read-only and derives state from exact School-scoped Asset, LoanItem, MaintenanceExecution, and linked Device evidence; provenance is returned and integrity contradictions become `unknown` rather than being hidden;
+- PostgreSQL CI now runs real two-worker contention proof for stock issue 4+4 from balance 5, two Loan checkouts for one Asset, and Loan checkout versus Maintenance start; the portable SQLite full regression remains in addition to this gate;
+- historical reconciliation verifies LoanItem, MaintenanceExecution, and InventoryTransaction snapshots survive later master metadata changes, while the Inventory ledger reconstructs current balance;
+- web regression contains an aggregate S4 source-of-truth scan across `/assets`, `/stock`, `/loans`, and `/maintenance`;
+- relative Markdown links are a repository CI gate;
+- no automatic browser-data import is approved. Classification is limited to `exact_safe_match`, `unmatched`, `ambiguous`, `invalid`, and `blocked_by_dependency`; local/browser IDs never become canonical IDs by inference;
+- storage-cleared browser UAT remains manual evidence and must be recorded before S4 can be declared complete.
 
 Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders remain S5.
 

@@ -279,6 +279,71 @@ class MaintenanceApiTest extends TestCase
         ]);
     }
 
+    public function test_in_progress_checklist_progress_is_versioned_audited_and_does_not_complete_execution(): void
+    {
+        [, $school] = $this->authenticateWithPermissions([
+            'assets.view', 'maintenance.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete',
+        ]);
+        $asset = $this->asset($school);
+
+        $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id, [
+            'checklistTemplate' => ['Bersihkan fan', 'Cek kabel'],
+        ]))->assertCreated();
+        $execution = $this->schedule((string) $plan->json('data.id'), 1)->assertCreated();
+        $executionId = (string) $execution->json('data.id');
+
+        $started = $this->postJson("/api/v1/maintenance-executions/{$executionId}/start", [], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"2"')
+            ->assertJsonPath('data.status', 'in_progress')
+            ->assertJsonPath('data.checklistResults', null)
+            ->assertJsonPath('data.checklistProgress.0.done', false)
+            ->assertJsonPath('data.checklistProgress.1.done', false);
+
+        $saved = $this->patchJson("/api/v1/maintenance-executions/{$executionId}/checklist-progress", [
+            'checklistResults' => [true, false],
+        ], ['If-Match' => '"'.$started->json('data.version').'"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"3"')
+            ->assertJsonPath('data.status', 'in_progress')
+            ->assertJsonPath('data.custodyActive', true)
+            ->assertJsonPath('data.completedAt', null)
+            ->assertJsonPath('data.checklistResults', null)
+            ->assertJsonPath('data.checklistProgress.0.item', 'Bersihkan fan')
+            ->assertJsonPath('data.checklistProgress.0.done', true)
+            ->assertJsonPath('data.checklistProgress.1.done', false);
+
+        $this->getJson("/api/v1/maintenance-executions/{$executionId}")
+            ->assertOk()
+            ->assertJsonPath('data.checklistProgress.0.done', true)
+            ->assertJsonPath('data.checklistProgress.1.done', false);
+
+        $this->patchJson("/api/v1/maintenance-executions/{$executionId}/checklist-progress", [
+            'checklistResults' => [true, true],
+        ], ['If-Match' => '"2"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'MAINTENANCE_EXECUTION_VERSION_CONFLICT');
+
+        $this->patchJson("/api/v1/maintenance-executions/{$executionId}/checklist-progress", [
+            'checklistResults' => [true],
+        ], ['If-Match' => '"'.$saved->json('data.version').'"'])
+            ->assertUnprocessable();
+
+        $this->patchJson("/api/v1/maintenance-executions/{$executionId}/checklist-progress", [
+            'checklistResults' => [true, true],
+        ], ['If-Match' => '"'.$saved->json('data.version').'"'])
+            ->assertOk()
+            ->assertHeader('ETag', '"4"')
+            ->assertJsonPath('data.checklistProgress.0.done', true)
+            ->assertJsonPath('data.checklistProgress.1.done', true);
+
+        $this->assertDatabaseHas('maintenance_events', [
+            'maintenance_execution_id' => $executionId,
+            'event_type' => 'maintenance_execution.checklist_progress_updated',
+        ]);
+        $this->assertSame('in_progress', MaintenanceExecution::query()->findOrFail($executionId)->status);
+    }
+
     public function test_completion_atomically_updates_asset_condition_consumes_inventory_and_advances_plan(): void
     {
         [, $school] = $this->authenticateWithPermissions([
@@ -544,7 +609,7 @@ class MaintenanceApiTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-'))
             ->values();
 
-        $this->assertCount(12, $routes);
+        $this->assertCount(13, $routes);
         $map = $routes->mapWithKeys(fn ($route): array => [
             implode(',', $route->methods()).' '.$route->uri() => $route->gatherMiddleware(),
         ]);
@@ -556,6 +621,7 @@ class MaintenanceApiTest extends TestCase
         $this->assertContains('permission:maintenance.update-plan', $map->first(fn ($mw, $key) => str_contains($key, 'PATCH api/v1/maintenance-plans/{planId}')));
         $this->assertContains('permission:maintenance.schedule', $map->first(fn ($mw, $key) => str_contains($key, '/executions')));
         $this->assertContains('permission:maintenance.start', $map->first(fn ($mw, $key) => str_contains($key, '/start')));
+        $this->assertContains('permission:maintenance.complete', $map->first(fn ($mw, $key) => str_contains($key, '/checklist-progress')));
         $this->assertContains('permission:maintenance.complete', $map->first(fn ($mw, $key) => str_contains($key, '/complete')));
         $this->assertContains('permission:maintenance.cancel', $map->first(fn ($mw, $key) => str_contains($key, '/cancel')));
     }

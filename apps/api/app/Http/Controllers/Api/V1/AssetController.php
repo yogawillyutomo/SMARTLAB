@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Asset\AssetMutationService;
+use App\Application\Asset\AssetOperationalStateQueryService;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Domain\Asset\AssetDomainException;
 use App\Http\Controllers\Controller;
@@ -87,6 +88,16 @@ class AssetController extends Controller
         }
 
         return $this->assetResponse($asset, $request);
+    }
+
+    public function operationalState(
+        Request $request,
+        string $assetId,
+        AssetOperationalStateQueryService $service,
+    ): JsonResponse {
+        return response()->json([
+            'data' => $service->forAsset($this->context($request), $assetId),
+        ]);
     }
 
     public function update(UpdateAssetRequest $request, string $assetId, AssetMutationService $service): JsonResponse

@@ -230,6 +230,7 @@ class MaintenanceMutationService
                     'status' => 'scheduled',
                     'checklist_snapshot' => $plan->checklist_template,
                     'checklist_results' => null,
+                    'checklist_progress' => null,
                     'findings' => null,
                     'action_taken' => null,
                     'condition_before' => null,
@@ -305,6 +306,10 @@ class MaintenanceMutationService
                 $execution->status = 'in_progress';
                 $execution->condition_before = $asset->condition;
                 $execution->asset_version_at_start = $asset->version;
+                $execution->checklist_progress = $this->checklistEvidence(
+                    $execution,
+                    array_fill(0, count($execution->checklist_snapshot), false),
+                );
                 $execution->custody_active = true;
                 $execution->started_at = now();
                 $execution->version++;
@@ -321,6 +326,52 @@ class MaintenanceMutationService
         } catch (UniqueConstraintViolationException) {
             throw MaintenanceDomainException::assetUnavailable();
         }
+    }
+
+    /**
+     * @param array<mixed> $checks
+     */
+    public function updateChecklistProgress(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $executionId,
+        int $expectedVersion,
+        array $checks,
+    ): MaintenanceExecution {
+        return DB::transaction(function () use ($context, $actor, $executionId, $expectedVersion, $checks): MaintenanceExecution {
+            $execution = $this->lockExecution($context, $executionId);
+            $this->assertExecutionVersion($execution, $expectedVersion);
+            $this->assertExecutionState(
+                $execution,
+                ['in_progress'],
+                'Checklist progress may only be updated while MaintenanceExecution is in progress.',
+            );
+
+            $progress = $this->checklistEvidence($execution, $checks);
+            if ($execution->checklist_progress === $progress) {
+                return $this->reloadExecution($execution);
+            }
+
+            $execution->checklist_progress = $progress;
+            $execution->version++;
+            $execution->save();
+
+            $this->writeExecutionEvent(
+                $context,
+                $actor,
+                $execution,
+                'maintenance_execution.checklist_progress_updated',
+                'in_progress',
+                'in_progress',
+                [
+                    'completedCount' => count(array_filter($progress, fn (array $item): bool => $item['done'])),
+                    'totalCount' => count($progress),
+                    'checklistProgress' => $progress,
+                ],
+            );
+
+            return $this->reloadExecution($execution);
+        });
     }
 
     /**
@@ -350,12 +401,7 @@ class MaintenanceMutationService
             }
             $this->assertAssetEligible($context, $asset);
 
-            $checks = $data['checklistResults'];
-            if (! is_array($checks) || count($checks) !== count($execution->checklist_snapshot)) {
-                throw ValidationException::withMessages([
-                    'checklistResults' => ['Checklist results must cover the frozen execution checklist exactly once.'],
-                ]);
-            }
+            $checklistResults = $this->checklistEvidence($execution, $data['checklistResults']);
 
             $issues = $data['inventoryIssues'] ?? [];
             if ($issues !== [] && ! $context->permissions->contains('maintenance.consume-stock')) {
@@ -384,14 +430,10 @@ class MaintenanceMutationService
                 (string) $execution->id,
             );
 
-            $checklistResults = [];
-            foreach ($execution->checklist_snapshot as $index => $item) {
-                $checklistResults[] = ['item' => $item, 'done' => (bool) $checks[$index]];
-            }
-
             $before = $execution->status;
             $execution->status = 'completed';
             $execution->checklist_results = $checklistResults;
+            $execution->checklist_progress = $checklistResults;
             $execution->findings = $this->nullableTrim($data['findings'] ?? null);
             $execution->action_taken = trim((string) $data['actionTaken']);
             $execution->condition_after = (string) $data['conditionAfter'];
@@ -582,6 +624,26 @@ class MaintenanceMutationService
         }
 
         return array_values($normalized);
+    }
+
+    /**
+     * @param array<mixed> $checks
+     * @return list<array{item:string,done:bool}>
+     */
+    private function checklistEvidence(MaintenanceExecution $execution, array $checks): array
+    {
+        if (! array_is_list($checks) || count($checks) !== count($execution->checklist_snapshot)) {
+            throw ValidationException::withMessages([
+                'checklistResults' => ['Checklist results must cover the frozen execution checklist exactly once.'],
+            ]);
+        }
+
+        $evidence = [];
+        foreach ($execution->checklist_snapshot as $index => $item) {
+            $evidence[] = ['item' => $item, 'done' => (bool) $checks[$index]];
+        }
+
+        return $evidence;
     }
 
     private function nextDueDate(MaintenancePlan $plan, CarbonImmutable $completedAt): string

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.28.0
-  description: Canonical SmartLab API v1 contract. Version 0.28 adds S4.5 exact-Asset Preventive Maintenance plans/executions, symmetric Loan↔Maintenance custody exclusion, audited Asset-condition completion, atomic Inventory issue consumption, and server-authoritative maintenance workflows while preserving prior S4.4 Loan authority.
+  version: 0.30.0
+  description: Canonical SmartLab API v1 contract. Version 0.30 adds versioned in-progress Preventive Maintenance checklist progress while preserving immutable completion evidence and S4.6 reconciliation guarantees.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -21,6 +21,7 @@ paths:
   /maintenance-executions: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions' }
   /maintenance-executions/{executionId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}' }
   /maintenance-executions/{executionId}/start: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1start' }
+  /maintenance-executions/{executionId}/checklist-progress: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1checklist-progress' }
   /maintenance-executions/{executionId}/complete: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1complete' }
   /maintenance-executions/{executionId}/cancel: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-executions~1{executionId}~1cancel' }
   /loans: { $ref: './openapi-loans.yaml#/paths/~1loans' }
@@ -36,6 +37,7 @@ paths:
   /stock-transactions: { $ref: './openapi-stock.yaml#/paths/~1stock-transactions' }
   /assets: { $ref: './openapi-assets.yaml#/paths/~1assets' }
   /assets/{assetId}: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}' }
+  /assets/{assetId}/operational-state: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1operational-state' }
   /assets/{assetId}/device-link: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-link' }
   /assets/{assetId}/device-unlink: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-unlink' }
   /assets/{assetId}/retire: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1retire' }

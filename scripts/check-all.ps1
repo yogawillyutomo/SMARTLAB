@@ -5,6 +5,7 @@ if (Test-Path "$Root/apps/web/package.json") {
     Push-Location "$Root/apps/web"
     npm ci
     npm run lint
+    node "$Root/scripts/check-relative-doc-links.mjs"
     npm run typecheck
     npm run test
     npm run build

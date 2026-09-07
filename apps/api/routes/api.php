@@ -166,6 +166,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('assets', [AssetController::class, 'index'])->middleware('permission:assets.view');
         Route::post('assets', [AssetController::class, 'store'])->middleware('permission:assets.create');
         Route::get('assets/{assetId}', [AssetController::class, 'show'])->middleware('permission:assets.view');
+        Route::get('assets/{assetId}/operational-state', [AssetController::class, 'operationalState'])->middleware('permission:assets.view');
         Route::patch('assets/{assetId}', [AssetController::class, 'update'])->middleware(['permission:assets.update', RequireAssetVersionPrecondition::class]);
         Route::post('assets/{assetId}/device-link', [AssetController::class, 'linkDevice'])
             ->middleware(['permission:assets.link-device', 'permission:devices.view', RequireAssetVersionPrecondition::class]);
@@ -231,6 +232,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('maintenance-executions/{executionId}', [MaintenanceController::class, 'showExecution'])->middleware('permission:maintenance.view');
         Route::post('maintenance-executions/{executionId}/start', [MaintenanceController::class, 'start'])
             ->middleware(['permission:maintenance.start', RequireMaintenanceExecutionVersionPrecondition::class]);
+        Route::patch('maintenance-executions/{executionId}/checklist-progress', [MaintenanceController::class, 'updateChecklistProgress'])
+            ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
         Route::post('maintenance-executions/{executionId}/complete', [MaintenanceController::class, 'complete'])
             ->middleware(['permission:maintenance.complete', RequireMaintenanceExecutionVersionPrecondition::class]);
         Route::post('maintenance-executions/{executionId}/cancel', [MaintenanceController::class, 'cancel'])
