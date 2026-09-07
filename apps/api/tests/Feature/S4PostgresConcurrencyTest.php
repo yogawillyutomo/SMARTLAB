@@ -392,6 +392,12 @@ class S4PostgresConcurrencyTest extends TestCase
         );
 
         try {
+            WorkOrder::query()->whereKey($workOrder->id)->update(['status' => 'assigned']);
+            $this->fail('Expected PostgreSQL to reject assigned Work Order without assignee snapshots.');
+        } catch (QueryException) {
+        }
+
+        try {
             WorkOrder::query()->whereKey($workOrder->id)->update([
                 'status' => 'in_progress',
                 'custody_active' => true,
@@ -406,6 +412,20 @@ class S4PostgresConcurrencyTest extends TestCase
         $this->assertNull($workOrder->started_at);
         $this->assertNull($workOrder->condition_before);
         $this->assertNull($workOrder->asset_version_at_start);
+
+        try {
+            WorkOrder::query()->whereKey($workOrder->id)->update([
+                'status' => 'cancelled',
+                'cancel_reason' => 'Invalid partial evidence',
+                'cancelled_at' => now(),
+                'started_at' => now(),
+            ]);
+            $this->fail('Expected PostgreSQL to reject cancelled Work Order with partial start evidence.');
+        } catch (QueryException) {
+        }
+
+        $workOrder->refresh();
+        $this->assertSame('draft', $workOrder->status);
     }
 
     /**

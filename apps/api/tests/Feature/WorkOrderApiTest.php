@@ -320,6 +320,12 @@ class WorkOrderApiTest extends TestCase
         $created = $this->postJson('/api/v1/work-orders', $this->payload($asset, $lab))->assertCreated();
         $id = (string) $created->json('data.id');
 
+        try {
+            WorkOrder::query()->whereKey($id)->update(['status' => 'assigned']);
+            $this->fail('Expected DB assignment-evidence guard to reject assigned Work Order without assignee snapshots.');
+        } catch (QueryException) {
+        }
+
         $this->postJson("/api/v1/work-orders/{$id}/assign", [
             'assigneeMembershipId' => $membership->id,
         ], ['If-Match' => '"1"'])->assertOk();
@@ -357,6 +363,23 @@ class WorkOrderApiTest extends TestCase
         $this->assertSame($userSnapshot, $event->actor_user_id_snapshot);
         $this->assertSame($membershipSnapshot, $event->actor_membership_id_snapshot);
         $this->assertSame($nameSnapshot, $event->actor_name_snapshot);
+
+        $partialAsset = Asset::factory()->for($school)->create(['condition' => 'minor_damage']);
+        $partial = $this->postJson('/api/v1/work-orders', $this->payload($partialAsset, $lab, [
+            'problemSummary' => 'Cancelled evidence consistency proof',
+        ]))->assertCreated();
+        $partialId = (string) $partial->json('data.id');
+
+        try {
+            WorkOrder::query()->whereKey($partialId)->update([
+                'status' => 'cancelled',
+                'cancel_reason' => 'Invalid partial start evidence',
+                'cancelled_at' => now(),
+                'started_at' => now(),
+            ]);
+            $this->fail('Expected DB cancelled start-evidence guard to reject partial evidence.');
+        } catch (QueryException) {
+        }
 
         try {
             $event->update(['event_type' => 'work_order.tampered']);
