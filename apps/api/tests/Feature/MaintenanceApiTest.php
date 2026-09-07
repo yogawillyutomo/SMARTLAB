@@ -282,7 +282,7 @@ class MaintenanceApiTest extends TestCase
     public function test_in_progress_checklist_progress_is_versioned_audited_and_does_not_complete_execution(): void
     {
         [, $school] = $this->authenticateWithPermissions([
-            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete',
+            'assets.view', 'maintenance.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete',
         ]);
         $asset = $this->asset($school);
 
