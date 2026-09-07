@@ -263,7 +263,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('work-orders/{workOrderId}/rework', [WorkOrderController::class, 'rework'])
             ->middleware(['permission:work-orders.approve', RequireWorkOrderVersionPrecondition::class]);
         Route::post('work-orders/{workOrderId}/cancel', [WorkOrderController::class, 'cancel'])
-            ->middleware(['permission:work-orders.view', RequireWorkOrderVersionPrecondition::class]);
+            ->middleware(['permission-any:work-orders.assign,work-orders.approve', RequireWorkOrderVersionPrecondition::class]);
 
         Route::get('stock-items', [InventoryController::class, 'index'])->middleware('permission:stock.view');
         Route::post('stock-items', [InventoryController::class, 'store'])->middleware('permission:stock.create');

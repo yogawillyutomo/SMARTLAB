@@ -93,6 +93,11 @@ return new class extends Migration
                 ADD CONSTRAINT work_orders_custody_status CHECK (
                     custody_active = (status IN ('in_progress', 'on_hold', 'waiting_part', 'completed'))
                 ),
+                ADD CONSTRAINT work_orders_start_evidence CHECK (
+                    (status IN ('draft', 'assigned') AND started_at IS NULL AND condition_before IS NULL AND asset_version_at_start IS NULL)
+                    OR (status IN ('in_progress', 'on_hold', 'waiting_part', 'completed', 'verified') AND started_at IS NOT NULL AND condition_before IS NOT NULL AND asset_version_at_start IS NOT NULL)
+                    OR (status = 'cancelled')
+                ),
                 ADD CONSTRAINT work_orders_completion_evidence CHECK (
                     (status IN ('completed', 'verified') AND completed_at IS NOT NULL AND diagnosis IS NOT NULL AND action_taken IS NOT NULL AND condition_after IS NOT NULL)
                     OR (status NOT IN ('completed', 'verified') AND completed_at IS NULL AND condition_after IS NULL)
@@ -142,7 +147,7 @@ return new class extends Migration
                 END;
                 $smartlab$ LANGUAGE plpgsql
             SQL);
-            DB::statement('CREATE TRIGGER work_order_events_immutable_update BEFORE UPDATE ON work_order_events FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_work_order_event_mutation()');
+            DB::statement('CREATE TRIGGER work_order_events_immutable_update BEFORE UPDATE OF school_id, work_order_id, actor_user_id_snapshot, actor_membership_id_snapshot, actor_name_snapshot, event_type, before_status, after_status, payload, created_at ON work_order_events FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_work_order_event_mutation()');
             DB::statement('CREATE TRIGGER work_order_events_immutable_delete BEFORE DELETE ON work_order_events FOR EACH ROW EXECUTE FUNCTION smartlab_prevent_work_order_event_mutation()');
         }
 
@@ -152,6 +157,8 @@ return new class extends Migration
                 OR ((NEW.assignee_membership_id_snapshot IS NULL) <> (NEW.assignee_user_id_snapshot IS NULL))
                 OR ((NEW.assignee_user_id_snapshot IS NULL) <> (NEW.assignee_name_snapshot IS NULL))
                 OR (NEW.custody_active <> CASE WHEN NEW.status IN ('in_progress','on_hold','waiting_part','completed') THEN 1 ELSE 0 END)
+                OR (NEW.status IN ('draft','assigned') AND (NEW.started_at IS NOT NULL OR NEW.condition_before IS NOT NULL OR NEW.asset_version_at_start IS NOT NULL))
+                OR (NEW.status IN ('in_progress','on_hold','waiting_part','completed','verified') AND (NEW.started_at IS NULL OR NEW.condition_before IS NULL OR NEW.asset_version_at_start IS NULL))
                 OR (NEW.status IN ('completed','verified') AND (NEW.completed_at IS NULL OR NEW.diagnosis IS NULL OR NEW.action_taken IS NULL OR NEW.condition_after IS NULL))
                 OR (NEW.status NOT IN ('completed','verified') AND (NEW.completed_at IS NOT NULL OR NEW.condition_after IS NOT NULL))
                 OR (NEW.status = 'verified' AND (NEW.verified_at IS NULL OR NEW.custody_active <> 0))
@@ -177,7 +184,7 @@ return new class extends Migration
                 BEGIN SELECT RAISE(ABORT, 'WorkOrder identity is immutable'); END");
             DB::unprepared("CREATE TRIGGER work_orders_identity_delete BEFORE DELETE ON work_orders
                 BEGIN SELECT RAISE(ABORT, 'WorkOrder evidence cannot be deleted'); END");
-            DB::unprepared("CREATE TRIGGER work_order_events_immutable_update BEFORE UPDATE ON work_order_events
+            DB::unprepared("CREATE TRIGGER work_order_events_immutable_update BEFORE UPDATE OF school_id, work_order_id, actor_user_id_snapshot, actor_membership_id_snapshot, actor_name_snapshot, event_type, before_status, after_status, payload, created_at ON work_order_events
                 BEGIN SELECT RAISE(ABORT, 'WorkOrder events are immutable'); END");
             DB::unprepared("CREATE TRIGGER work_order_events_immutable_delete BEFORE DELETE ON work_order_events
                 BEGIN SELECT RAISE(ABORT, 'WorkOrder events are immutable'); END");

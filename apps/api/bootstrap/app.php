@@ -21,6 +21,7 @@ use App\Domain\ScheduleException\ScheduleExceptionDomainException;
 use App\Domain\PriorityEvent\PriorityEventDomainException;
 use App\Domain\Session\LaboratorySessionDomainException;
 use App\Domain\Session\SessionIssueObservationDomainException;
+use App\Http\Middleware\RequireAnyPermission;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $middleware->alias([
             'permission' => RequirePermission::class,
+            'permission-any' => RequireAnyPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

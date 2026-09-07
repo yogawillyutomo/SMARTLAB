@@ -11,6 +11,7 @@ use App\Models\SchoolMembership;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderEvent;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -276,6 +277,92 @@ class WorkOrderApiTest extends TestCase
         $this->getJson('/api/v1/assets/'.$asset->id.'/operational-state')
             ->assertOk()
             ->assertJsonPath('data.state', 'blocked_condition');
+    }
+
+    public function test_cancel_accepts_assign_or_approve_authority_without_requiring_view(): void
+    {
+        [, $school] = $this->authenticateWithPermissions([
+            'work-orders.create', 'assets.view', 'laboratories.view',
+        ]);
+        $lab = Laboratory::factory()->for($school)->create();
+        $asset = Asset::factory()->for($school)->create();
+
+        $id = (string) $this->postJson('/api/v1/work-orders', $this->payload($asset, $lab))
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->authenticateWithPermissions(['work-orders.view'], $school);
+        $this->postJson("/api/v1/work-orders/{$id}/cancel", [
+            'reason' => 'View-only actor must not cancel',
+        ], ['If-Match' => '"1"'])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'FORBIDDEN');
+
+        $this->authenticateWithPermissions(['work-orders.approve'], $school);
+        $this->postJson("/api/v1/work-orders/{$id}/cancel", [
+            'reason' => 'Managerial cancellation',
+        ], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'cancelled')
+            ->assertJsonPath('data.custodyActive', false)
+            ->assertJsonPath('data.version', 2);
+    }
+
+    public function test_database_guards_start_evidence_and_allows_only_live_event_fk_cleanup(): void
+    {
+        [, $school, $membership] = $this->authenticateWithPermissions([
+            'work-orders.create', 'work-orders.view', 'work-orders.update', 'work-orders.assign',
+            'assets.view', 'laboratories.view',
+        ]);
+        $lab = Laboratory::factory()->for($school)->create();
+        $asset = Asset::factory()->for($school)->create(['condition' => 'major_damage']);
+
+        $created = $this->postJson('/api/v1/work-orders', $this->payload($asset, $lab))->assertCreated();
+        $id = (string) $created->json('data.id');
+
+        $this->postJson("/api/v1/work-orders/{$id}/assign", [
+            'assigneeMembershipId' => $membership->id,
+        ], ['If-Match' => '"1"'])->assertOk();
+
+        try {
+            WorkOrder::query()->whereKey($id)->update([
+                'status' => 'in_progress',
+                'custody_active' => true,
+            ]);
+            $this->fail('Expected DB start-evidence guard to reject impossible active Work Order custody.');
+        } catch (QueryException) {
+        }
+
+        $workOrder = WorkOrder::query()->findOrFail($id);
+        $this->assertSame('assigned', $workOrder->status);
+        $this->assertFalse($workOrder->custody_active);
+
+        $event = WorkOrderEvent::query()
+            ->where('work_order_id', $id)
+            ->where('event_type', 'work_order.created')
+            ->firstOrFail();
+
+        $userSnapshot = $event->actor_user_id_snapshot;
+        $membershipSnapshot = $event->actor_membership_id_snapshot;
+        $nameSnapshot = $event->actor_name_snapshot;
+
+        $event->update([
+            'actor_user_id' => null,
+            'actor_membership_id' => null,
+        ]);
+        $event->refresh();
+
+        $this->assertNull($event->actor_user_id);
+        $this->assertNull($event->actor_membership_id);
+        $this->assertSame($userSnapshot, $event->actor_user_id_snapshot);
+        $this->assertSame($membershipSnapshot, $event->actor_membership_id_snapshot);
+        $this->assertSame($nameSnapshot, $event->actor_name_snapshot);
+
+        try {
+            $event->update(['event_type' => 'work_order.tampered']);
+            $this->fail('Expected immutable Work Order event evidence to reject mutation.');
+        } catch (QueryException) {
+        }
     }
 
     /** @param list<string> $permissions @return array{User,School,SchoolMembership} */
