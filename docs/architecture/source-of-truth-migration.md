@@ -415,16 +415,16 @@ Inventory must reject negative stock transactionally. Direct quantity edits are 
 
 ### Phase S5 - Corrective maintenance
 
-S5 starts with proposed [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). No S5 runtime authority exists until the contract is reviewed and implementation slices are merged.
+S5.1 is accepted/locked on merged PR #85 / `main@8c7f84ee5ff64787c8df01a70ea5cf23877eee95` through [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). S5.2 runtime is an implementation candidate in PR #86 and must preserve that lock.
 
 Planned slices:
 
-- **S5.1 — contract lock:** exact-Asset Work Order authority, optional Incident link, corrective custody, assignment/lifecycle, Inventory-only spare-part consumption, Asset-authority verification, and no implicit Device/Incident/Laboratory mutation;
-- **S5.2 — Work Order core + custody:** PostgreSQL WorkOrder/Event persistence, numbering, ETag lifecycle, assignment, exact Asset subject, Loan/Maintenance/WorkOrder custody exclusion, Asset operational-state `in_repair`, contention tests, OpenAPI;
-- **S5.3 — Inventory + verification integration:** `work-orders.consume-stock`, immutable WorkOrderPartUsage linked to sourced InventoryTransaction, Asset condition application through Asset authority, explicit Incident-link evidence, atomic verification;
-- **S5.4 — frontend cutover + UAT:** canonical `/work-orders`, server permission guards, browser-local Work Order mutation removal, storage-cleared UAT, exact-head and merged-head verification.
+- **S5.1 — complete/locked on merged main:** exact-Asset Work Order authority, optional Incident link, corrective custody, assignment/lifecycle, Inventory-only spare-part consumption boundary, Asset-authority verification boundary, and no implicit Device/Incident/Laboratory mutation; merged as PR #85 / `8c7f84ee`;
+- **S5.2 — implementation candidate / PR #86:** PostgreSQL WorkOrder/Event persistence, School/year numbering, ETag lifecycle through completed/rework/cancel, assignment, exact Asset subject, Loan/Maintenance/WorkOrder custody exclusion, Asset terminal/unlink guard integration, Asset operational-state `in_repair`, real contention tests, OpenAPI 0.31;
+- **S5.3 — planned:** `work-orders.consume-stock`, immutable WorkOrderPartUsage linked to sourced InventoryTransaction, Asset condition application through Asset authority, explicit Incident-link evidence, atomic verification;
+- **S5.4 — planned:** canonical `/work-orders` frontend, server permission guards, browser-local Work Order mutation removal, storage-cleared UAT, exact-head and merged-head verification.
 
-S5.1 candidate direction:
+Locked S5 direction:
 
 - one Work Order targets one exact canonical Asset;
 - one Incident may have zero to many Work Orders; Work Order never auto-resolves/verifies/closes Incident;

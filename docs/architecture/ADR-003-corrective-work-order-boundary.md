@@ -1,6 +1,6 @@
 # ADR-003 — Corrective Work Order Boundary
 
-**Status:** Proposed — S5.1 contract candidate; no runtime authority until reviewed and merged  
+**Status:** Accepted — S5.1 authority lock merged in PR #85; S5.2+ runtime must preserve this boundary  
 **Date:** 2026-09-07  
 **Decision scope:** SMARTLAB Corrective Work Order authority and its boundaries with Incident, Asset, Device, Inventory, Loan, Preventive Maintenance, and Laboratory availability.
 
