@@ -521,18 +521,48 @@ export function MaintenancePage() {
           <Input label="Referensi Teknisi (opsional)" value={planForm.assignedTechnicianReference} onChange={(event) => setPlanForm({ ...planForm, assignedTechnicianReference: event.target.value })} />
           <Input label="Next Due Date" required type="date" value={planForm.nextDueDate} onChange={(event) => setPlanForm({ ...planForm, nextDueDate: event.target.value })} />
           <div className="sm:col-span-2">
-            <p className="mb-2 text-sm font-medium text-ink-secondary">Checklist Template</p>
-            <div className="mb-2 flex gap-2">
-              <Input value={checklistInput} placeholder="Tambah checklist..." onChange={(event) => setChecklistInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklist(); } }} />
-              <Button size="sm" onClick={addChecklist}>Tambah</Button>
+            <div className="mb-2 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink-secondary">Checklist Template</p>
+                <p className="mt-0.5 text-xs text-ink-muted">Item di sini akan dibekukan menjadi checklist execution saat dijadwalkan.</p>
+              </div>
+              <Badge tone={planForm.checklistTemplate.length > 0 ? 'success' : 'muted'}>
+                {planForm.checklistTemplate.length} item
+              </Badge>
             </div>
-            <div className="space-y-1">
-              {planForm.checklistTemplate.map((item) => (
-                <div key={item} className="flex items-center justify-between rounded-lg border border-base-700 px-3 py-2 text-sm">
-                  <span className="text-ink-secondary">{item}</span>
-                  <button type="button" className="text-xs text-danger" onClick={() => setPlanForm({ ...planForm, checklistTemplate: planForm.checklistTemplate.filter((value) => value !== item) })}>Hapus</button>
+            <div className="rounded-xl border border-base-700 bg-base-800/35 p-3">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Input
+                  value={checklistInput}
+                  placeholder="Contoh: Periksa kondisi fisik"
+                  onChange={(event) => setChecklistInput(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklist(); } }}
+                />
+                <Button className="w-full sm:w-auto" onClick={addChecklist}>Tambah Checklist</Button>
+              </div>
+              {planForm.checklistTemplate.length === 0 ? (
+                <p className="mt-3 rounded-lg border border-dashed border-base-700 px-3 py-3 text-xs text-ink-muted">
+                  Belum ada item. Tambahkan minimal satu checklist sebelum menyimpan rencana.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {planForm.checklistTemplate.map((item, index) => (
+                    <div key={item} className="flex items-center gap-3 rounded-lg border border-base-700 bg-base-900/35 px-3 py-2.5 text-sm">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-base-700 text-xs font-semibold text-ink-secondary">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 text-ink-secondary">{item}</span>
+                      <button
+                        type="button"
+                        className="rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10"
+                        onClick={() => setPlanForm({ ...planForm, checklistTemplate: planForm.checklistTemplate.filter((value) => value !== item) })}
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
