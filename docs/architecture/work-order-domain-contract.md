@@ -150,9 +150,17 @@ Unknown, cross-School, or invisible Work Order IDs return the same not-found con
 
 Platform Super Admin has no implicit SMARTLAB row access. Active SMARTLAB SchoolMembership and product-local permissions remain mandatory.
 
+### Row visibility
+
+`work-orders.view` grants visibility to Work Orders in the actor's active School. S5 v1 does not introduce a second `work-orders.view-all` concept because Work Orders are an internal operational board rather than reporter-owned records.
+
+Every list/detail/history query still starts with exact `school_id = currentSchoolId`; no action permission expands tenant scope.
+
 ## 5. Exact Asset subject
 
 The Asset must exist in current School, be active at create, and be selected by canonical ULID.
+
+Create requires `work-orders.create` plus `assets.view` for exact Asset discovery. The selected handling Laboratory requires `laboratories.view`. If `incidentId` is provided, `incidents.view` and normal Incident row visibility are additionally required.
 
 Asset target is immutable after create. Wrong-subject recovery is cancel + create a correct Work Order.
 
@@ -227,6 +235,28 @@ Verification:
 
 No partial mutation is allowed.
 
+### Rework
+
+`completed -> in_progress` requires `work-orders.approve` and an explicit reason.
+
+Rework:
+
+- keeps corrective custody active;
+- does not mutate Asset or Incident;
+- clears the current root `completedAt`, `conditionAfter`, and `testResult` completion-finalization fields;
+- may retain diagnosis/action text as editable working context;
+- preserves the prior completed evidence permanently in `WorkOrderEvent`.
+
+A later completion produces a new completion event and fresh proposed condition evidence.
+
+### Cancellation
+
+Cancellation always requires a reason and never erases prior repair/part evidence.
+
+If cancellation occurs while corrective custody is active, custody is released atomically. Any previously issued InventoryTransaction remains immutable; cancellation does not automatically return, delete, or compensate used parts. A stock correction, if genuinely required, must be an explicit compensating Inventory operation with its own reason/evidence.
+
+Cancellation never mutates Incident, Device state, or Asset condition.
+
 ## 7. Assignment
 
 Assignment targets one active same-School membership whose active User has effective `work-orders.update`.
@@ -234,6 +264,8 @@ Assignment targets one active same-School membership whose active User has effec
 Current assignment keeps nullable live FKs plus immutable assignee snapshots.
 
 Technician progress requires `work-orders.update` and current-assignee ownership, unless the actor also has `work-orders.assign`.
+
+If the live assignee membership/User becomes inactive or loses effective `work-orders.update`, assignee-owned progress fails closed until an authorized actor reassigns the Work Order. Snapshot identity remains historical evidence.
 
 Reassignment requires `work-orders.assign`; prior assignment evidence remains immutable.
 
@@ -317,6 +349,8 @@ Insufficient stock rolls everything back. Exact replay must not double-decrement
 
 Resume to `in_progress` before using the arrived part.
 
+Cancellation after one or more part issues does not reverse those immutable issues automatically.
+
 ## 11. Asset and Device authority
 
 Work Order may store condition evidence but never becomes Asset authority.
@@ -380,6 +414,8 @@ Candidate role intent:
 - Kepala Lab: view/approve/export;
 - Teknisi: view/update/consume-stock;
 - Super Admin: explicit grants only and still requires active SMARTLAB SchoolMembership.
+
+`work-orders.approve` authorizes the Work Order-specific verified-condition application through internal Asset authority; callers do not also need broad `assets.update` merely to verify a repair. This mirrors the rule that domain-specific actions may invoke another aggregate's guarded internal service without granting arbitrary mutation permission.
 
 No role-name checks or wildcard fallback.
 
