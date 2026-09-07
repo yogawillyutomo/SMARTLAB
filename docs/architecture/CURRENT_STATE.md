@@ -60,11 +60,12 @@ These routes/domains still rely wholly or materially on browser-local repositori
 The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-001-master-data-tessela-smartlab-scheduling-boundary.md), and the S2.1 semantic model is locked by [Published Timetable and Schedule Occurrence Contract](./published-timetable-contract.md).
 
 1. S4 is closed on merged PR #83 / `3757e986`; preserve the exact-Asset, immutable-ledger, custody, tenant, and source-of-truth boundaries proven by its automated and browser evidence.
-2. Perform a contract-first S5 Corrective Work Order review before runtime implementation; corrective repair must remain separate from Preventive Maintenance.
-3. Track Laboratory-scale Maintenance Campaign / Batch as a future orchestration UX that resolves one Laboratory to many exact-Asset MaintenanceExecutions; it must not create ambiguous multi-Asset execution authority or implicitly block the Laboratory.
-4. Phase S6: PC monitoring telemetry.
-5. Phase S7: Notifications, Reporting, final Dashboard/global search.
-6. Phase S8: remove remaining browser-local business persistence and compatibility layers after all consumers migrate.
+2. Review the S5.1 candidate in [ADR-003 — Corrective Work Order Boundary](./ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](./work-order-domain-contract.md). Runtime `/work-orders` remains transitional until S5.2+ is implemented and merged.
+3. Preserve S5 boundaries: one Work Order = one exact Asset; optional Incident link is 0..N from Incident; corrective custody excludes Loan/Preventive Maintenance/other repair custody; parts stay Inventory-authoritative; Asset condition changes only through Asset authority at verification; no automatic Device/Incident mutation.
+4. Track Laboratory-scale Maintenance Campaign / Batch as a future Preventive Maintenance orchestration UX; it must not create ambiguous multi-Asset execution authority or implicitly block the Laboratory.
+5. Phase S6: PC monitoring telemetry.
+6. Phase S7: Notifications, Reporting, final Dashboard/global search.
+7. Phase S8: remove remaining browser-local business persistence and compatibility layers after all consumers migrate.
 
 ## Reserved / placeholder
 

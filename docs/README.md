@@ -57,12 +57,14 @@ The detailed evidence record is preserved in [Documentation Convergence Audit](a
 - [Priority Event](architecture/priority-event-contract.md)
 - [Laboratory Session + Activity Report](architecture/laboratory-session-activity-report-contract.md)
 - [S4 Asset, Inventory, Loan, and Preventive Maintenance](architecture/asset-inventory-loan-maintenance-contract.md)
+- [S5 Corrective Work Order](architecture/work-order-domain-contract.md)
 - [S4 Prototype Reconciliation Audit](architecture/S4_PROTOTYPE_RECONCILIATION.md)
 
 ### ADR
 
 - [ADR-001 — Master Data, TESSELA, and SMARTLAB Scheduling Boundary](architecture/ADR-001-master-data-tessela-smartlab-scheduling-boundary.md)
 - [ADR-002 — Asset, Inventory, Loan, and Preventive Maintenance Boundary](architecture/ADR-002-asset-inventory-loan-maintenance-boundary.md)
+- [ADR-003 — Corrective Work Order Boundary](architecture/ADR-003-corrective-work-order-boundary.md)
 
 ADRs currently live under `docs/architecture/`. A future `docs/adr/` directory is a taxonomy target only; existing ADRs are not moved merely for symmetry.
 
@@ -169,7 +171,7 @@ Status reflects **merged `main`** unless the row explicitly says an open PR is i
 | S4.4 — Loan / LoanItem custody | **Complete / merged** | exact Asset LoanItems, requester/view-all scope, ETag lifecycle, deterministic Asset locks, DB active-custody uniqueness, condition-out/return evidence, append-only Loan events, OpenAPI 0.27, canonical `/loans` cutover | S4.5 adds symmetric Maintenance exclusion without weakening Loan authority | S4.3 | S4 contract + current state + migration doc | PR #81 / `f85f2edf` | exact merged-head API/web CI passed |
 | S4.5 — Preventive Maintenance | **Complete / merged** | exact Asset MaintenancePlan/Execution, immutable snapshots, ETag lifecycle, active Maintenance custody, symmetric Loan↔Maintenance exclusion, audited Asset condition completion, atomic Inventory issue consumption, OpenAPI 0.28, canonical `/maintenance` cutover | none inside S4.5; S4.6 proves cross-domain closure | S4.4 | S4 contract + current state + migration doc | PR #82 / `e3da257c` | exact merged-head API/web CI passed |
 | S4.6 — S4 reconciliation/UAT | **Complete / merged; S4 closed** | read-only Asset operational-state projection + provenance, active-custody lifecycle/unlink guard, versioned in-progress Maintenance checklist progress, PostgreSQL negative-stock/double-loan/Loan↔Maintenance contention gate, historical reconstruction tests, aggregate S4 source-of-truth scan, relative-doc-link CI, and recorded browser UAT | none inside S4.6; Laboratory-scale Maintenance Campaign/Batch remains a separate future orchestration UX | S4.5 merged | S4 contract + `reviews/s4.6-reconciliation-uat.md` + source-of-truth migration | PR #83 / `3757e986` | exact merged-head workflow #313 passed; proceed contract-first to S5 without weakening S4 authority |
-| S5 — Corrective Work Orders | Planned | Incident already canonical as upstream evidence | Work Orders, assignment/repair lifecycle, spare-part consumption, Incident linkage | S4 inventory | future contract | none | keep waiting-for-parts in Work Order, not Incident status |
+| S5.1 — Corrective Work Order contract | **Contract candidate; runtime not implemented** | proposed ADR-003 + exact-Asset Work Order contract: 0..N Incident linkage, corrective custody, assignment/lifecycle, Inventory-only part use, Asset-authority verification, no Device/Incident implicit mutation | review and lock contract; then implement S5.2–S5.4 | S4 closed | ADR-003 + `work-order-domain-contract.md` | S5.1 contract branch | keep `/work-orders` transitional until canonical backend + UAT |
 | S6 — PC Monitoring Telemetry | Planned | privacy direction documented only | agent enrollment/revocation, telemetry ingestion/read models, buffering/update policy | device authority + production security | AGENTS/current state; future telemetry contract | none | implement revocable machine auth and approved telemetry only |
 | S7 — Notifications / Reporting / Final Reads | Planned | partial canonical source domains exist | notifications, analytics/reporting, final dashboard/global search, audit reads | S4–S6 source maturity | future reporting/read-model docs | none | no metrics from browser seed/local prototype |
 | S8 — Browser-local Removal | Planned | migrated routes already prohibit local authority | remove remaining AppData/browser business persistence, legacy seed/business DTOs and compatibility layers after final consumers move | S4–S7 | source-of-truth migration | none | full regression + browser UAT with storage cleared |
