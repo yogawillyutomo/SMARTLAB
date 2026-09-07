@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.30.0
-  description: Canonical SmartLab API v1 contract. Version 0.30 adds versioned in-progress Preventive Maintenance checklist progress while preserving immutable completion evidence and S4.6 reconciliation guarantees.
+  version: 0.31.0
+  description: Canonical SmartLab API v1 contract. Version 0.31 adds S5.2 corrective Work Order core, exact-Asset corrective custody, and derived in_repair Asset operational state without adding S5.3 stock-consumption or verification authority.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -13,6 +13,17 @@ paths:
   /auth/logout: { $ref: './openapi-0.11.yaml#/paths/~1auth~1logout' }
   /laboratories: { $ref: './openapi-0.11.yaml#/paths/~1laboratories' }
   /laboratories/{laboratoryId}: { $ref: './openapi-0.11.yaml#/paths/~1laboratories~1{laboratoryId}' }
+  /work-orders: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders' }
+  /work-orders/{workOrderId}: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}' }
+  /work-orders/{workOrderId}/history: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1history' }
+  /work-orders/{workOrderId}/assign: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1assign' }
+  /work-orders/{workOrderId}/start: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1start' }
+  /work-orders/{workOrderId}/hold: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1hold' }
+  /work-orders/{workOrderId}/waiting-part: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1waiting-part' }
+  /work-orders/{workOrderId}/resume: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1resume' }
+  /work-orders/{workOrderId}/complete: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1complete' }
+  /work-orders/{workOrderId}/rework: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1rework' }
+  /work-orders/{workOrderId}/cancel: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1cancel' }
   /maintenance-plans: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans' }
   /maintenance-plans/{planId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}' }
   /maintenance-plans/{planId}/activate: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}~1activate' }

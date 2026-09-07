@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SmartLab Asset API module
-  version: 0.29.0
+  version: 0.31.0
 paths:
   /assets:
     get:
@@ -157,14 +157,14 @@ components:
         assetId: { type: string, format: ulid }
         state:
           type: string
-          enum: [available, on_loan, in_maintenance, retired, disposed, blocked_condition, unknown]
+          enum: [available, on_loan, in_maintenance, in_repair, retired, disposed, blocked_condition, unknown]
         integrityCode:
           type: [string, 'null']
-          enum: [MULTIPLE_ACTIVE_LOAN_CUSTODY, MULTIPLE_ACTIVE_MAINTENANCE_CUSTODY, CONFLICTING_ACTIVE_CUSTODY, LIFECYCLE_CUSTODY_CONFLICT, LINKED_DEVICE_SCOPE_MISMATCH, LINKED_DEVICE_LIFECYCLE_BLOCKED, UNKNOWN_ASSET_LIFECYCLE, null]
+          enum: [MULTIPLE_ACTIVE_LOAN_CUSTODY, MULTIPLE_ACTIVE_MAINTENANCE_CUSTODY, MULTIPLE_ACTIVE_WORK_ORDER_CUSTODY, CONFLICTING_ACTIVE_CUSTODY, LIFECYCLE_CUSTODY_CONFLICT, LINKED_DEVICE_SCOPE_MISMATCH, LINKED_DEVICE_LIFECYCLE_BLOCKED, UNKNOWN_ASSET_LIFECYCLE, null]
         provenance:
           type: object
           additionalProperties: false
-          required: [asset, loanCustodies, maintenanceCustodies, linkedDevice]
+          required: [asset, loanCustodies, maintenanceCustodies, workOrderCustodies, linkedDevice]
           properties:
             asset:
               type: object
@@ -194,6 +194,16 @@ components:
                   executionId: { type: string, format: ulid }
                   maintenancePlanId: { type: string, format: ulid }
                   status: { type: string }
+            workOrderCustodies:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [workOrderId, workOrderNumber, status]
+                properties:
+                  workOrderId: { type: string, format: ulid }
+                  workOrderNumber: { type: string }
+                  status: { type: string, enum: [in_progress, on_hold, waiting_part, completed] }
             linkedDevice:
               oneOf:
                 - type: 'null'

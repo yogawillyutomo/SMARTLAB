@@ -6,15 +6,19 @@ use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Inventory\InventoryMutationService;
 use App\Application\Loan\LoanMutationService;
 use App\Application\Maintenance\MaintenanceMutationService;
+use App\Application\WorkOrder\WorkOrderMutationService;
 use App\Models\Asset;
 use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\Loan;
 use App\Models\LoanItem;
 use App\Models\MaintenanceExecution;
+use App\Models\Laboratory;
 use App\Models\School;
 use App\Models\SchoolMembership;
 use App\Models\User;
+use App\Models\WorkOrder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group;
@@ -225,6 +229,205 @@ class S4PostgresConcurrencyTest extends TestCase
         }
     }
 
+    public function test_two_work_orders_cannot_start_corrective_custody_for_the_same_asset_concurrently(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+        ]);
+
+        $first = $this->assignedWorkOrder($userId, $membershipId, $schoolId, (string) $asset->id, 'Race repair A');
+        $second = $this->assignedWorkOrder($userId, $membershipId, $schoolId, (string) $asset->id, 'Race repair B');
+
+        $results = $this->race(
+            fn () => app(WorkOrderMutationService::class)->start(
+                $this->context($membershipId, ['work-orders.assign']),
+                User::query()->findOrFail($userId),
+                (string) $first->id,
+                1,
+            ),
+            fn () => app(WorkOrderMutationService::class)->start(
+                $this->context($membershipId, ['work-orders.assign']),
+                User::query()->findOrFail($userId),
+                (string) $second->id,
+                1,
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $this->assertSame(['WORK_ORDER_ACTIVE_CUSTODY_CONFLICT'], $this->failureCodes($results));
+        $this->assertSame(1, WorkOrder::query()->where('asset_id', $asset->id)->where('custody_active', true)->count());
+    }
+
+    public function test_concurrent_loan_checkout_and_work_order_start_never_create_dual_custody(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'good',
+            'lifecycle_status' => 'active',
+        ]);
+        $actor = User::query()->findOrFail($userId);
+        $context = $this->context($membershipId, []);
+
+        $loanService = app(LoanMutationService::class);
+        $loan = $loanService->create($context, $actor, $this->loanPayload((string) $asset->id, 'Loan vs Work Order'));
+        $loanService->approve($context, $actor, (string) $loan->id, 1);
+
+        $workOrder = $this->assignedWorkOrder(
+            $userId,
+            $membershipId,
+            $schoolId,
+            (string) $asset->id,
+            'Loan vs corrective repair',
+        );
+
+        $results = $this->race(
+            fn () => app(LoanMutationService::class)->checkout(
+                $this->context($membershipId, []),
+                User::query()->findOrFail($userId),
+                (string) $loan->id,
+                2,
+            ),
+            fn () => app(WorkOrderMutationService::class)->start(
+                $this->context($membershipId, ['work-orders.assign']),
+                User::query()->findOrFail($userId),
+                (string) $workOrder->id,
+                1,
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $failureCodes = $this->failureCodes($results);
+        $this->assertCount(1, $failureCodes);
+        $this->assertContains($failureCodes[0], ['LOAN_ASSET_UNAVAILABLE', 'WORK_ORDER_ACTIVE_CUSTODY_CONFLICT']);
+
+        $loanActive = LoanItem::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
+        $workOrderActive = WorkOrder::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
+        $this->assertSame(1, $loanActive + $workOrderActive);
+    }
+
+    public function test_concurrent_maintenance_and_work_order_start_never_create_dual_custody(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'good',
+            'lifecycle_status' => 'active',
+        ]);
+        $actor = User::query()->findOrFail($userId);
+        $context = $this->context($membershipId, []);
+
+        $maintenance = app(MaintenanceMutationService::class);
+        $plan = $maintenance->createPlan($context, $actor, [
+            'assetId' => (string) $asset->id,
+            'name' => 'S5 race maintenance plan',
+            'frequencyKind' => 'monthly',
+            'checklistTemplate' => ['Check custody'],
+            'assignedTechnicianName' => 'Race Technician',
+            'nextDueDate' => now()->addWeek()->toDateString(),
+        ]);
+        $execution = $maintenance->scheduleExecution($context, $actor, (string) $plan->id, 1, [
+            'scheduledFor' => now()->toDateString(),
+            'technicianName' => 'Race Technician',
+        ]);
+
+        $workOrder = $this->assignedWorkOrder(
+            $userId,
+            $membershipId,
+            $schoolId,
+            (string) $asset->id,
+            'Maintenance vs corrective repair',
+        );
+
+        $results = $this->race(
+            fn () => app(MaintenanceMutationService::class)->startExecution(
+                $this->context($membershipId, []),
+                User::query()->findOrFail($userId),
+                (string) $execution->id,
+                1,
+            ),
+            fn () => app(WorkOrderMutationService::class)->start(
+                $this->context($membershipId, ['work-orders.assign']),
+                User::query()->findOrFail($userId),
+                (string) $workOrder->id,
+                1,
+            ),
+        );
+
+        $this->assertSame(1, $this->successCount($results), json_encode($results));
+        $failureCodes = $this->failureCodes($results);
+        $this->assertCount(1, $failureCodes);
+        $this->assertContains($failureCodes[0], ['MAINTENANCE_ASSET_UNAVAILABLE', 'WORK_ORDER_ACTIVE_CUSTODY_CONFLICT']);
+
+        $maintenanceActive = MaintenanceExecution::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
+        $workOrderActive = WorkOrder::query()->where('asset_id', $asset->id)->where('custody_active', true)->count();
+        $this->assertSame(1, $maintenanceActive + $workOrderActive);
+    }
+
+    public function test_postgres_corrective_custody_requires_start_evidence_at_database_layer(): void
+    {
+        [$userId, $membershipId, $schoolId] = $this->actorContext();
+        $asset = Asset::factory()->create([
+            'school_id' => $schoolId,
+            'condition' => 'major_damage',
+            'lifecycle_status' => 'active',
+        ]);
+        $lab = Laboratory::factory()->create([
+            'school_id' => $schoolId,
+            'status' => 'active',
+        ]);
+
+        $workOrder = app(WorkOrderMutationService::class)->create(
+            $this->context($membershipId, []),
+            User::query()->findOrFail($userId),
+            [
+                'assetId' => (string) $asset->id,
+                'laboratoryId' => (string) $lab->id,
+                'problemSummary' => 'PostgreSQL start evidence constraint proof',
+                'priority' => 'high',
+            ],
+        );
+
+        try {
+            WorkOrder::query()->whereKey($workOrder->id)->update(['status' => 'assigned']);
+            $this->fail('Expected PostgreSQL to reject assigned Work Order without assignee snapshots.');
+        } catch (QueryException) {
+        }
+
+        try {
+            WorkOrder::query()->whereKey($workOrder->id)->update([
+                'status' => 'in_progress',
+                'custody_active' => true,
+            ]);
+            $this->fail('Expected PostgreSQL to reject active corrective custody without start evidence.');
+        } catch (QueryException) {
+        }
+
+        $workOrder->refresh();
+        $this->assertSame('draft', $workOrder->status);
+        $this->assertFalse($workOrder->custody_active);
+        $this->assertNull($workOrder->started_at);
+        $this->assertNull($workOrder->condition_before);
+        $this->assertNull($workOrder->asset_version_at_start);
+
+        try {
+            WorkOrder::query()->whereKey($workOrder->id)->update([
+                'status' => 'cancelled',
+                'cancel_reason' => 'Invalid partial evidence',
+                'cancelled_at' => now(),
+                'started_at' => now(),
+            ]);
+            $this->fail('Expected PostgreSQL to reject cancelled Work Order with partial start evidence.');
+        } catch (QueryException) {
+        }
+
+        $workOrder->refresh();
+        $this->assertSame('draft', $workOrder->status);
+    }
+
     /**
      * @return array{string,string,string}
      */
@@ -263,6 +466,39 @@ class S4PostgresConcurrencyTest extends TestCase
             'requestedReturnAt' => now()->addDay()->toISOString(),
             'assetIds' => [$assetId],
         ];
+    }
+
+    private function assignedWorkOrder(
+        string $userId,
+        string $membershipId,
+        string $schoolId,
+        string $assetId,
+        string $summary,
+    ): WorkOrder {
+        $lab = Laboratory::factory()->create([
+            'school_id' => $schoolId,
+            'status' => 'active',
+        ]);
+        $workOrder = app(WorkOrderMutationService::class)->create(
+            $this->context($membershipId, []),
+            User::query()->findOrFail($userId),
+            [
+                'assetId' => $assetId,
+                'laboratoryId' => (string) $lab->id,
+                'problemSummary' => $summary,
+                'priority' => 'high',
+            ],
+        );
+
+        $actor = User::query()->findOrFail($userId);
+        $workOrder->status = 'assigned';
+        $workOrder->assignee_membership_id = $membershipId;
+        $workOrder->assignee_membership_id_snapshot = $membershipId;
+        $workOrder->assignee_user_id_snapshot = $userId;
+        $workOrder->assignee_name_snapshot = $actor->name;
+        $workOrder->save();
+
+        return $workOrder->refresh();
     }
 
     /**

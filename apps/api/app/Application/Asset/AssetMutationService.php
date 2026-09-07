@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\Laboratory;
 use App\Models\LoanItem;
 use App\Models\MaintenanceExecution;
+use App\Models\WorkOrder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -445,9 +446,15 @@ class AssetMutationService
             ->where('custody_active', true)
             ->exists();
 
-        if ($loanCustody || $maintenanceCustody) {
+        $workOrderCustody = WorkOrder::query()
+            ->where('school_id', $asset->school_id)
+            ->where('asset_id', $asset->id)
+            ->where('custody_active', true)
+            ->exists();
+
+        if ($loanCustody || $maintenanceCustody || $workOrderCustody) {
             throw new AssetDomainException(
-                'Asset has active Loan or Preventive Maintenance custody.',
+                'Asset has active Loan, Preventive Maintenance, or corrective Work Order custody.',
                 'ASSET_ACTIVE_CUSTODY_CONFLICT',
                 409,
             );

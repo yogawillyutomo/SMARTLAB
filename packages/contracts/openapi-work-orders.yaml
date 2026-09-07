@@ -1,0 +1,210 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Corrective Work Order API module
+  version: 0.31.0
+paths:
+  /work-orders:
+    get:
+      operationId: listWorkOrders
+      summary: List same-School corrective Work Orders visible to the active SMARTLAB membership
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/WorkOrderStatus' } }
+        - { name: assetId, in: query, schema: { type: string, format: ulid } }
+        - { name: incidentId, in: query, schema: { type: string, format: ulid } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: assigneeMembershipId, in: query, schema: { type: string, format: ulid } }
+        - { name: search, in: query, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 25 } }
+      responses:
+        '200': { description: Paginated Work Order collection }
+    post:
+      operationId: createWorkOrder
+      summary: Create a draft corrective Work Order for one exact canonical Asset
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWorkOrderInput' }
+      responses:
+        '201': { description: Created draft Work Order with ETag }
+        '403': { description: Missing Work Order, Asset, Laboratory, or optional Incident visibility authority }
+        '409': { description: Asset, Incident, or subject eligibility conflict }
+        '422': { description: Validation failure }
+  /work-orders/{workOrderId}:
+    parameters:
+      - &workOrderId { name: workOrderId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getWorkOrder
+      security: *auth
+      responses:
+        '200': { description: Work Order detail with ETag }
+        '404': { description: Unknown or cross-School Work Order }
+    patch:
+      operationId: updateWorkOrder
+      summary: Update draft non-identity Work Order metadata
+      security: *auth
+      parameters:
+        - &ifMatch { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateWorkOrderInput' }
+      responses:
+        '200': { description: Updated draft Work Order }
+        '409': { description: Work Order is not mutable in its current state }
+        '412': { description: Version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /work-orders/{workOrderId}/history:
+    parameters: [*workOrderId]
+    get:
+      operationId: getWorkOrderHistory
+      summary: Read append-oriented Work Order history
+      security: *auth
+      responses:
+        '200': { description: Work Order event history }
+        '404': { description: Unknown or cross-School Work Order }
+  /work-orders/{workOrderId}/assign:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: assignWorkOrder
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignWorkOrderInput' }
+      responses:
+        '200': { description: Assigned or reassigned Work Order }
+        '409': { description: Invalid lifecycle or assignee eligibility }
+        '412': { description: Version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /work-orders/{workOrderId}/start:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: startWorkOrder
+      summary: Acquire corrective custody for the exact Work Order Asset
+      security: *auth
+      responses:
+        '200': { description: Work Order in progress with corrective custody }
+        '409': { description: Invalid transition, ineligible Asset, or active Loan/Preventive-Maintenance/Work-Order custody }
+  /work-orders/{workOrderId}/hold:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: holdWorkOrder
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Work Order on hold; corrective custody remains active }
+  /work-orders/{workOrderId}/waiting-part:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: markWorkOrderWaitingPart
+      summary: Record waiting-part state without reserving or consuming Inventory
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Waiting-part Work Order with corrective custody still active }
+  /work-orders/{workOrderId}/resume:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: resumeWorkOrder
+      security: *auth
+      responses:
+        '200': { description: Work Order resumed to in-progress }
+        '409': { description: Asset or lifecycle no longer eligible }
+  /work-orders/{workOrderId}/complete:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: completeWorkOrder
+      summary: Record corrective completion evidence without mutating Asset condition or releasing custody
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteWorkOrderInput' }
+      responses:
+        '200': { description: Completed Work Order; corrective custody remains active pending future S5.3 verification }
+        '409': { description: Invalid lifecycle or assignee eligibility }
+        '422': { description: Invalid completion evidence }
+  /work-orders/{workOrderId}/rework:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: reworkWorkOrder
+      summary: Return a completed Work Order to in-progress while preserving prior completion in history
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Work Order returned to in-progress; custody remains active }
+  /work-orders/{workOrderId}/cancel:
+    parameters: [*workOrderId, *ifMatch]
+    post:
+      operationId: cancelWorkOrder
+      summary: Cancel an eligible non-completed Work Order and release corrective custody when active
+      security: *auth
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReasonInput' } } } }
+      responses:
+        '200': { description: Cancelled terminal Work Order }
+        '403': { description: Caller lacks assign or approve authority }
+        '409': { description: Work Order cannot be cancelled from its current state }
+components:
+  schemas:
+    WorkOrderStatus:
+      type: string
+      enum: [draft, assigned, in_progress, on_hold, waiting_part, completed, verified, cancelled]
+    WorkOrderPriority:
+      type: string
+      enum: [low, normal, high, critical]
+    AssetCondition:
+      type: string
+      enum: [good, minor_damage, moderate_damage, major_damage, unknown]
+    CreateWorkOrderInput:
+      type: object
+      additionalProperties: false
+      required: [assetId, laboratoryId, problemSummary]
+      properties:
+        assetId: { type: string, format: ulid }
+        laboratoryId: { type: string, format: ulid }
+        incidentId: { type: [string, 'null'], format: ulid }
+        problemSummary: { type: string, minLength: 3, maxLength: 2000 }
+        priority: { $ref: '#/components/schemas/WorkOrderPriority' }
+        scheduledFor: { type: [string, 'null'], format: date }
+        notes: { type: [string, 'null'], maxLength: 2000 }
+    UpdateWorkOrderInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        problemSummary: { type: string, minLength: 3, maxLength: 2000 }
+        priority: { $ref: '#/components/schemas/WorkOrderPriority' }
+        scheduledFor: { type: [string, 'null'], format: date }
+        notes: { type: [string, 'null'], maxLength: 2000 }
+    AssignWorkOrderInput:
+      type: object
+      additionalProperties: false
+      required: [assigneeMembershipId]
+      properties:
+        assigneeMembershipId: { type: string, format: ulid }
+        reason: { type: [string, 'null'], maxLength: 1000 }
+    ReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+    CompleteWorkOrderInput:
+      type: object
+      additionalProperties: false
+      required: [diagnosis, actionTaken, conditionAfter]
+      properties:
+        diagnosis: { type: string, minLength: 3, maxLength: 2000 }
+        actionTaken: { type: string, minLength: 3, maxLength: 2000 }
+        conditionAfter: { $ref: '#/components/schemas/AssetCondition' }
+        testResult: { type: [string, 'null'], maxLength: 2000 }
+  securitySchemes:
+    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
+    sanctumBearer: { type: http, scheme: bearer }

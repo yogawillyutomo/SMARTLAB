@@ -1,6 +1,6 @@
 # S5 Corrective Work Order Domain Contract
 
-**Status:** Proposed — S5.1 contract candidate; runtime implementation is not authorized by this document alone  
+**Status:** Accepted / locked — merged in PR #85; S5.2 implementation must conform and S5.3/S5.4 remain separately gated  
 **Date:** 2026-09-07  
 **Authority:** governed by [ADR-003](ADR-003-corrective-work-order-boundary.md)
 

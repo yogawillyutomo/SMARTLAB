@@ -11,6 +11,7 @@ use App\Models\Loan;
 use App\Models\LoanEvent;
 use App\Models\LoanItem;
 use App\Models\MaintenanceExecution;
+use App\Models\WorkOrder;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -458,6 +459,19 @@ class LoanMutationService
         if ($maintenanceConflict) {
             throw new LoanDomainException(
                 'One or more Assets are under active Preventive Maintenance custody.',
+                'LOAN_ASSET_UNAVAILABLE',
+                409,
+            );
+        }
+
+        $workOrderConflict = WorkOrder::query()
+            ->whereIn('asset_id', $assetIds)
+            ->where('custody_active', true)
+            ->exists();
+
+        if ($workOrderConflict) {
+            throw new LoanDomainException(
+                'One or more Assets are under active corrective Work Order custody.',
                 'LOAN_ASSET_UNAVAILABLE',
                 409,
             );

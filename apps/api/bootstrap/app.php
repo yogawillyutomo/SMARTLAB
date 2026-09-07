@@ -11,6 +11,7 @@ use App\Domain\Incident\IncidentDomainException;
 use App\Domain\Inventory\InventoryDomainException;
 use App\Domain\Loan\LoanDomainException;
 use App\Domain\Maintenance\MaintenanceDomainException;
+use App\Domain\WorkOrder\WorkOrderDomainException;
 use App\Domain\Layout\LayoutDomainException;
 use App\Domain\Schedule\PublishedTimetableException;
 use App\Domain\Calendar\OperationalCalendarException;
@@ -20,6 +21,7 @@ use App\Domain\ScheduleException\ScheduleExceptionDomainException;
 use App\Domain\PriorityEvent\PriorityEventDomainException;
 use App\Domain\Session\LaboratorySessionDomainException;
 use App\Domain\Session\SessionIssueObservationDomainException;
+use App\Http\Middleware\RequireAnyPermission;
 use App\Http\Middleware\RequirePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -39,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $middleware->alias([
             'permission' => RequirePermission::class,
+            'permission-any' => RequireAnyPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -154,6 +157,17 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (MaintenanceDomainException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], $exception->status);
+        });
+
+        $exceptions->render(function (WorkOrderDomainException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
