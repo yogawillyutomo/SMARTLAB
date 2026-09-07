@@ -17,6 +17,7 @@ import { downloadCSV, relativeTime, cn } from '@/utils';
 import { assetGateway, ASSET_CONDITIONS, type AssetCondition, type AssetDto } from '@/services/assetApi';
 import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
 import { inventoryGateway, type InventoryItemDto } from '@/services/inventoryApi';
+import { incidentGateway, type IncidentListItem } from '@/services/incidentApi';
 import { identityAdminGateway, type IdentityMembershipDto } from '@/services/identityAdminApi';
 import {
   WORK_ORDER_PRIORITIES,
@@ -57,6 +58,7 @@ const CONDITION_LABELS: Record<AssetCondition, string> = {
 type CreateForm = {
   assetId: string;
   laboratoryId: string;
+  incidentId: string;
   problemSummary: string;
   priority: WorkOrderPriority;
   scheduledFor: string;
@@ -69,6 +71,7 @@ type ViewMode = 'table' | 'board' | 'calendar';
 const EMPTY_CREATE: CreateForm = {
   assetId: '',
   laboratoryId: '',
+  incidentId: '',
   problemSummary: '',
   priority: 'normal',
   scheduledFor: '',
@@ -121,6 +124,16 @@ function eventLabel(event: WorkOrderEventDto): string {
   };
   return labels[event.eventType] ?? event.eventType;
 }
+async function listVisibleIncidents(): Promise<IncidentListItem[]> {
+  const first = await incidentGateway.list({ page: 1, perPage: 100 });
+  const remaining = first.meta.lastPage > 1
+    ? await Promise.all(Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
+      incidentGateway.list({ page: index + 2, perPage: 100 })))
+    : [];
+  return [...first.data, ...remaining.flatMap((page) => page.data)]
+    .filter((incident) => !['closed', 'rejected'].includes(incident.status));
+}
+
 async function listEligibleAssignees(): Promise<IdentityMembershipDto[]> {
   const [roles, first] = await Promise.all([
     identityAdminGateway.listRoles(),
@@ -165,11 +178,13 @@ export function WorkOrdersPage() {
   const canApprove = hasServerPermission(user, 'work-orders.approve');
   const canConsumeStock = hasServerPermission(user, 'work-orders.consume-stock');
   const canExport = hasServerPermission(user, 'work-orders.export');
+  const canViewIncidents = hasServerPermission(user, 'incidents.view');
 
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
   const [assets, setAssets] = useState<AssetDto[]>([]);
   const [labs, setLabs] = useState<LaboratoryDto[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItemDto[]>([]);
+  const [incidents, setIncidents] = useState<IncidentListItem[]>([]);
   const [technicians, setTechnicians] = useState<IdentityMembershipDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -211,6 +226,11 @@ export function WorkOrdersPage() {
       } else {
         setInventoryItems([]);
       }
+      if (canViewIncidents) {
+        setIncidents(await listVisibleIncidents());
+      } else {
+        setIncidents([]);
+      }
       if (canAssign) {
         setTechnicians(await listEligibleAssignees());
       } else {
@@ -221,7 +241,7 @@ export function WorkOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [canAssign, canConsumeStock]);
+  }, [canAssign, canConsumeStock, canViewIncidents]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -271,6 +291,7 @@ export function WorkOrdersPage() {
       ...EMPTY_CREATE,
       assetId: firstAsset?.id ?? '',
       laboratoryId: firstAsset?.homeLaboratoryId ?? labs.find((lab) => lab.status === 'active')?.id ?? '',
+      incidentId: '',
       scheduledFor: new Date().toISOString().slice(0, 10),
     });
     setCreateOpen(true);
@@ -286,6 +307,7 @@ export function WorkOrdersPage() {
       const created = await workOrderGateway.create({
         assetId: createForm.assetId,
         laboratoryId: createForm.laboratoryId,
+        incidentId: nullable(createForm.incidentId),
         problemSummary: createForm.problemSummary.trim(),
         priority: createForm.priority,
         scheduledFor: nullable(createForm.scheduledFor),
@@ -304,10 +326,24 @@ export function WorkOrdersPage() {
 
   function selectAsset(assetId: string) {
     const asset = assets.find((candidate) => candidate.id === assetId);
+    setCreateForm((form) => {
+      const selectedIncident = incidents.find((incident) => incident.id === form.incidentId);
+      const incidentStillCompatible = !selectedIncident?.device || selectedIncident.device.id === asset?.linkedDeviceId;
+      return {
+        ...form,
+        assetId,
+        incidentId: incidentStillCompatible ? form.incidentId : '',
+        laboratoryId: asset?.homeLaboratoryId ?? form.laboratoryId,
+      };
+    });
+  }
+
+  function selectIncident(incidentId: string) {
+    const incident = incidents.find((candidate) => candidate.id === incidentId);
     setCreateForm((form) => ({
       ...form,
-      assetId,
-      laboratoryId: asset?.homeLaboratoryId ?? form.laboratoryId,
+      incidentId,
+      laboratoryId: incident?.laboratory.id ?? form.laboratoryId,
     }));
   }
 
@@ -481,6 +517,9 @@ export function WorkOrdersPage() {
   ];
 
   const boardStatuses = WORK_ORDER_STATUSES.filter((status) => counts[status] > 0);
+  const selectedAsset = assets.find((asset) => asset.id === createForm.assetId);
+  const compatibleIncidents = incidents.filter((incident) =>
+    !incident.device || incident.device.id === selectedAsset?.linkedDeviceId);
 
   if (loading) return <LoadingState label="Memuat Work Order canonical..." />;
   if (loadError) return <ErrorState message={loadError} onRetry={() => void load()} />;
@@ -555,6 +594,7 @@ export function WorkOrdersPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Asset" value={createForm.assetId} onChange={(e) => selectAsset(e.target.value)} options={assets.filter((asset) => asset.lifecycleStatus === 'active').map((asset) => ({ value: asset.id, label: `${asset.assetCode} · ${asset.name}` }))} placeholder="Pilih Asset" />
           <Select label="Laboratorium" value={createForm.laboratoryId} onChange={(e) => setCreateForm({...createForm,laboratoryId:e.target.value})} options={labs.filter((lab) => lab.status === 'active').map((lab) => ({value:lab.id,label:`${lab.code} · ${lab.name}`}))} placeholder="Pilih Lab" />
+          {canViewIncidents && <Select label="Incident (opsional)" value={createForm.incidentId} onChange={(e) => selectIncident(e.target.value)} options={compatibleIncidents.map((incident) => ({value:incident.id,label:`${incident.ticketNumber} · ${incident.title}`}))} placeholder="Tanpa Incident" />}
           <Select label="Prioritas" value={createForm.priority} onChange={(e) => setCreateForm({...createForm,priority:e.target.value as WorkOrderPriority})} options={WORK_ORDER_PRIORITIES.map((priority)=>({value:priority,label:PRIORITY_LABELS[priority]}))} />
           <Input label="Jadwal" type="date" value={createForm.scheduledFor} onChange={(e)=>setCreateForm({...createForm,scheduledFor:e.target.value})} />
           <div className="sm:col-span-2"><Textarea label="Ringkasan Masalah" required value={createForm.problemSummary} onChange={(e)=>setCreateForm({...createForm,problemSummary:e.target.value})} /></div>
