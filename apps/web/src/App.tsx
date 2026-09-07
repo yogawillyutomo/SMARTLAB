@@ -67,8 +67,8 @@ function AppRoutes() {
         <Route path="/stock" element={<RequireServerPermission permission="stock.view"><StockPage /></RequireServerPermission>} />
         <Route path="/incidents" element={<RequireServerPermission permission="incidents.view"><IncidentsPage /></RequireServerPermission>} />
         <Route path="/incidents/:incidentId" element={<RequireServerPermission permission="incidents.view"><IncidentDetailPage /></RequireServerPermission>} />
-        <Route path="/work-orders" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
-        <Route path="/work-orders/:id" element={<RequirePermission module="work-orders"><WorkOrdersPage /></RequirePermission>} />
+        <Route path="/work-orders" element={<RequireServerPermission permission="work-orders.view"><WorkOrdersPage /></RequireServerPermission>} />
+        <Route path="/work-orders/:id" element={<RequireServerPermission permission="work-orders.view"><WorkOrdersPage /></RequireServerPermission>} />
         <Route path="/maintenance" element={<RequireServerPermission permission="maintenance.view"><MaintenancePage /></RequireServerPermission>} />
         <Route path="/loans" element={<RequireServerPermission permission="loans.view"><LoansPage /></RequireServerPermission>} />
         <Route path="/calendar" element={<RequireServerPermission permission="calendar.view"><CalendarPage /></RequireServerPermission>} />
