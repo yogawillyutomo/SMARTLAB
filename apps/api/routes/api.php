@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\IdentityAdministrationController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\LoanController;
+use App\Http\Controllers\Api\V1\MaintenanceCampaignController;
 use App\Http\Controllers\Api\V1\MaintenanceController;
 use App\Http\Controllers\Api\V1\WorkOrderController;
 use App\Http\Controllers\Api\V1\IncidentEventController;
@@ -35,6 +36,7 @@ use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
 use App\Http\Middleware\RequireInventoryItemVersionPrecondition;
 use App\Http\Middleware\RequireLoanVersionPrecondition;
+use App\Http\Middleware\RequireMaintenanceCampaignVersionPrecondition;
 use App\Http\Middleware\RequireMaintenanceExecutionVersionPrecondition;
 use App\Http\Middleware\RequireMaintenancePlanVersionPrecondition;
 use App\Http\Middleware\RequireWorkOrderVersionPrecondition;
@@ -218,6 +220,18 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:loans.return', RequireLoanVersionPrecondition::class]);
         Route::post('loans/{loanId}/close', [LoanController::class, 'close'])
             ->middleware(['permission:loans.close', RequireLoanVersionPrecondition::class]);
+
+        Route::get('maintenance-campaigns', [MaintenanceCampaignController::class, 'index'])->middleware('permission:maintenance.view');
+        Route::post('maintenance-campaigns', [MaintenanceCampaignController::class, 'store'])
+            ->middleware(['permission:maintenance.create-plan', 'permission:assets.view', 'permission:laboratories.view']);
+        Route::get('maintenance-campaigns/{campaignId}', [MaintenanceCampaignController::class, 'show'])->middleware('permission:maintenance.view');
+        Route::get('maintenance-campaigns/{campaignId}/history', [MaintenanceCampaignController::class, 'history'])->middleware('permission:maintenance.view');
+        Route::post('maintenance-campaigns/{campaignId}/activate', [MaintenanceCampaignController::class, 'activate'])
+            ->middleware(['permission:maintenance.update-plan', RequireMaintenanceCampaignVersionPrecondition::class]);
+        Route::post('maintenance-campaigns/{campaignId}/deactivate', [MaintenanceCampaignController::class, 'deactivate'])
+            ->middleware(['permission:maintenance.update-plan', RequireMaintenanceCampaignVersionPrecondition::class]);
+        Route::post('maintenance-campaigns/{campaignId}/executions', [MaintenanceCampaignController::class, 'scheduleBatch'])
+            ->middleware(['permission:maintenance.schedule', RequireMaintenanceCampaignVersionPrecondition::class]);
 
         Route::get('maintenance-plans', [MaintenanceController::class, 'plans'])->middleware('permission:maintenance.view');
         Route::post('maintenance-plans', [MaintenanceController::class, 'storePlan'])->middleware(['permission:maintenance.create-plan', 'permission:assets.view']);
