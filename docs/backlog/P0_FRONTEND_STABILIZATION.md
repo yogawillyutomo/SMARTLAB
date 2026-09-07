@@ -65,7 +65,7 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 - `/maintenance` sudah server-authoritative pada merged PR #82 / `e3da257c` dan tidak memakai `db.maintenance`, AppData browser mutation, free-text Asset code, atau hard delete.
 - Corrective repair tetap S5 Work Order; S4.5 tidak membuat Work Order/Incident secara implisit.
 
-## P0-05D S4 reconciliation / UAT — PR #83
+## P0-05D S4 reconciliation / UAT — Selesai / merged PR #83
 
 - Asset operational state adalah read-only projection dengan provenance; tidak ada writable `availability_status` kedua.
 - Asset retire/dispose/device-unlink sekarang menolak active Loan/Maintenance custody.
@@ -74,7 +74,7 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 - `/assets`, `/stock`, `/loans`, dan `/maintenance` mempunyai aggregate source-of-truth regression scan.
 - Relative Markdown links sekarang divalidasi sebagai CI gate.
 - Automatic browser-data migration belum diapprove; hanya klasifikasi reconciliation yang didokumentasikan.
-- Storage-cleared browser UAT masih **manual/pending** dan menjadi blocker untuk menyebut S4 complete.
+- Storage-cleared core browser evidence dan exact-head impacted retest sudah dicatat **PASS**; PR #83 merged ke `main@3757e986` dan post-merge workflow #313 (`web-ci` + `api-ci`) hijau. S4 complete.
 
 ## P0-06 Penomoran dokumen — Sebagian selesai
 
@@ -121,4 +121,4 @@ Backlog ini mencatat stabilisasi frontend dan transisi menuju sumber data Larave
 | OV-01 Override kegiatan prioritas | canonical baseline | Schedule Exception cancel/relocate + Priority Event request/approval sudah canonical; tidak ada force override. | S2.7 + S2.8 delivered. |
 | EX-01 Pelaksanaan Lab/laporan terpadu | implementation-complete melalui S3.6 | LaboratorySession + ActivityReport + `/sessions` server-authoritative; `/journals` compatibility redirect; S3.5 execution evidence; S3.6 controlled offline draft sync dengan account-scoped cache, idempotent receipts, dan fail-closed conflict/rebase. | Operator/browser offline UX matrix tetap menjadi production-rollout UAT; tidak menghalangi perencanaan S4. |
 
-Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. S4.2 Fixed Assets, S4.3 Inventory, S4.4 Loan custody, dan S4.5 Preventive Maintenance sudah merged; S4.5 berada di `e3da257c` dengan exact merged-head CI hijau. S4.6 reconciliation/UAT berjalan pada PR #83. Setelah automated proof hijau, storage-cleared browser UAT harus benar-benar dijalankan dan dicatat sebelum S4 dinyatakan complete. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
+Urutan produk berikutnya tidak lagi mengikuti urutan baseline frontend lama secara literal. Ownership + kontrak S2.1 terkunci; seluruh S2.2–S2.8 delivered; S3.1–S3.6 implementation-complete dengan server authority tetap fail-closed. S4.2 Fixed Assets, S4.3 Inventory, S4.4 Loan custody, S4.5 Preventive Maintenance, dan S4.6 reconciliation/UAT sudah merged; S4 ditutup pada PR #83 / `main@3757e986` dengan browser evidence tercatat dan exact merged-head CI hijau. Berikutnya lakukan contract-first S5 Corrective Work Order review. Maintenance Campaign/Batch tetap backlog orchestration UX untuk mengoordinasikan banyak exact-Asset MaintenanceExecution tanpa mengubah authority per-Asset. Roadmap current dirangkum di [SMARTLAB Documentation](../README.md).
