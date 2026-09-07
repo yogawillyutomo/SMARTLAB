@@ -258,8 +258,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
         Route::post('work-orders/{workOrderId}/resume', [WorkOrderController::class, 'resume'])
             ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/parts', [WorkOrderController::class, 'usePart'])
+            ->middleware(['permission:work-orders.update', 'permission:work-orders.consume-stock', RequireWorkOrderVersionPrecondition::class]);
         Route::post('work-orders/{workOrderId}/complete', [WorkOrderController::class, 'complete'])
             ->middleware(['permission:work-orders.update', RequireWorkOrderVersionPrecondition::class]);
+        Route::post('work-orders/{workOrderId}/verify', [WorkOrderController::class, 'verify'])
+            ->middleware(['permission:work-orders.approve', RequireWorkOrderVersionPrecondition::class]);
         Route::post('work-orders/{workOrderId}/rework', [WorkOrderController::class, 'rework'])
             ->middleware(['permission:work-orders.approve', RequireWorkOrderVersionPrecondition::class]);
         Route::post('work-orders/{workOrderId}/cancel', [WorkOrderController::class, 'cancel'])

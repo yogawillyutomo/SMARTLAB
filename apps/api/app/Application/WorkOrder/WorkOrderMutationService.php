@@ -2,8 +2,10 @@
 
 namespace App\Application\WorkOrder;
 
+use App\Application\Asset\AssetMutationService;
 use App\Application\Identity\CurrentMembershipContext;
 use App\Application\Incident\IncidentVisibility;
+use App\Application\Inventory\InventoryMutationService;
 use App\Domain\Incident\IncidentStatus;
 use App\Domain\WorkOrder\WorkOrderCatalog;
 use App\Domain\WorkOrder\WorkOrderDomainException;
@@ -17,6 +19,7 @@ use App\Models\SchoolMembership;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderEvent;
+use App\Models\WorkOrderPartUsage;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -27,6 +30,8 @@ class WorkOrderMutationService
     public function __construct(
         private readonly WorkOrderNumberAllocator $numbers,
         private readonly IncidentVisibility $incidentVisibility,
+        private readonly InventoryMutationService $inventoryService,
+        private readonly AssetMutationService $assetService,
     ) {}
 
     /** @param array<string,mixed> $data */
@@ -291,6 +296,172 @@ class WorkOrderMutationService
             $workOrder->save();
 
             $this->writeEvent($context, $actor, $workOrder, 'work_order.resumed', $before, 'in_progress', []);
+
+            return $workOrder->refresh();
+        });
+    }
+
+    /**
+     * @param array{inventoryItemId:string,clientMutationId:string,quantity:mixed} $data
+     * @return array{workOrder:WorkOrder,usage:WorkOrderPartUsage,replayed:bool}
+     */
+    public function issuePart(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $workOrderId,
+        int $expectedVersion,
+        array $data,
+    ): array {
+        return DB::transaction(function () use ($context, $actor, $workOrderId, $expectedVersion, $data): array {
+            $workOrder = $this->lockWorkOrder($context, $workOrderId);
+
+            $existingUsage = WorkOrderPartUsage::query()
+                ->where('school_id', $context->membership->school_id)
+                ->where('client_mutation_id', (string) $data['clientMutationId'])
+                ->first();
+
+            if ($existingUsage !== null) {
+                $inventoryResult = $this->inventoryService->issueForWorkOrder(
+                    $context,
+                    $actor,
+                    (string) $workOrder->id,
+                    (string) $workOrder->work_order_number,
+                    $data,
+                );
+
+                if (! $inventoryResult['replayed']
+                    || (string) $existingUsage->work_order_id !== (string) $workOrder->id
+                    || (string) $existingUsage->inventory_transaction_id !== (string) $inventoryResult['transaction']->id) {
+                    throw WorkOrderDomainException::partUsageReconciliationRequired();
+                }
+
+                return [
+                    'workOrder' => $workOrder->refresh(),
+                    'usage' => $existingUsage->refresh(),
+                    'replayed' => true,
+                ];
+            }
+
+            $this->assertVersion($workOrder, $expectedVersion);
+            $this->assertState($workOrder, ['in_progress'], 'Spare parts may only be issued while Work Order is in progress.');
+            $this->assertProgressActor($context, $workOrder);
+
+            if (! $workOrder->custody_active) {
+                throw WorkOrderDomainException::custodyConflict('Corrective custody is not active for this Work Order.');
+            }
+
+            if (! $context->permissions->contains('work-orders.consume-stock')) {
+                throw new WorkOrderDomainException(
+                    'Work Order spare-part consumption permission is required.',
+                    'WORK_ORDER_STOCK_PERMISSION_REQUIRED',
+                    403,
+                );
+            }
+
+            $inventoryResult = $this->inventoryService->issueForWorkOrder(
+                $context,
+                $actor,
+                (string) $workOrder->id,
+                (string) $workOrder->work_order_number,
+                $data,
+            );
+
+            if ($inventoryResult['replayed']) {
+                throw WorkOrderDomainException::partUsageReconciliationRequired();
+            }
+
+            $transaction = $inventoryResult['transaction'];
+            $now = now();
+
+            $usage = WorkOrderPartUsage::query()->create([
+                'school_id' => $workOrder->school_id,
+                'work_order_id' => $workOrder->id,
+                'inventory_transaction_id' => $transaction->id,
+                'inventory_item_id' => $transaction->inventory_item_id,
+                'client_mutation_id' => $transaction->client_mutation_id,
+                'item_code_snapshot' => $transaction->item_code_snapshot,
+                'item_name_snapshot' => $transaction->item_name_snapshot,
+                'unit_snapshot' => $transaction->unit_snapshot,
+                'quantity' => $transaction->quantity,
+                'actor_user_id' => $actor->id,
+                'actor_membership_id' => $context->membership->id,
+                'actor_user_id_snapshot' => $actor->id,
+                'actor_membership_id_snapshot' => $context->membership->id,
+                'actor_name_snapshot' => $actor->name,
+                'used_at' => $transaction->occurred_at,
+                'created_at' => $now,
+            ]);
+
+            $workOrder->version++;
+            $workOrder->save();
+
+            $this->writeEvent($context, $actor, $workOrder, 'work_order.part_issued', 'in_progress', 'in_progress', [
+                'inventoryTransactionId' => (string) $transaction->id,
+                'inventoryItemId' => (string) $transaction->inventory_item_id,
+                'clientMutationId' => (string) $transaction->client_mutation_id,
+                'itemCodeSnapshot' => (string) $transaction->item_code_snapshot,
+                'itemNameSnapshot' => (string) $transaction->item_name_snapshot,
+                'unitSnapshot' => (string) $transaction->unit_snapshot,
+                'quantity' => (string) $transaction->quantity,
+                'balanceAfter' => (string) $transaction->balance_after,
+            ]);
+
+            return [
+                'workOrder' => $workOrder->refresh(),
+                'usage' => $usage->refresh(),
+                'replayed' => false,
+            ];
+        });
+    }
+
+    public function verify(
+        CurrentMembershipContext $context,
+        User $actor,
+        string $workOrderId,
+        int $expectedVersion,
+    ): WorkOrder {
+        return DB::transaction(function () use ($context, $actor, $workOrderId, $expectedVersion): WorkOrder {
+            $workOrder = $this->lockWorkOrder($context, $workOrderId);
+            $this->assertVersion($workOrder, $expectedVersion);
+            $this->assertState($workOrder, ['completed'], 'Only completed Work Orders may be verified.');
+
+            if (! $context->permissions->contains('work-orders.approve')) {
+                throw new WorkOrderDomainException(
+                    'Work Order approval permission is required.',
+                    'WORK_ORDER_VERIFY_FORBIDDEN',
+                    403,
+                );
+            }
+
+            $asset = $this->lockAsset($context, (string) $workOrder->asset_id);
+
+            if ($asset->version !== $workOrder->asset_version_at_start) {
+                throw WorkOrderDomainException::assetVersionDrift();
+            }
+
+            $this->assertAssetEligible($context, $asset);
+
+            $assetAfter = $this->assetService->applyWorkOrderCondition(
+                $context,
+                $asset,
+                (int) $workOrder->asset_version_at_start,
+                (string) $workOrder->condition_after,
+                (string) $workOrder->id,
+            );
+
+            $workOrder->status = 'verified';
+            $workOrder->custody_active = false;
+            $workOrder->verified_at = now();
+            $workOrder->version++;
+            $workOrder->save();
+
+            $this->writeEvent($context, $actor, $workOrder, 'work_order.verified', 'completed', 'verified', [
+                'conditionBefore' => $workOrder->condition_before,
+                'conditionAfter' => $workOrder->condition_after,
+                'assetVersionAtStart' => $workOrder->asset_version_at_start,
+                'assetVersionAfter' => $assetAfter->version,
+                'custodyReleased' => true,
+            ]);
 
             return $workOrder->refresh();
         });

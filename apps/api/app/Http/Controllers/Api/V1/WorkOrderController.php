@@ -13,8 +13,10 @@ use App\Http\Requests\CreateWorkOrderRequest;
 use App\Http\Requests\EmptyWorkOrderActionRequest;
 use App\Http\Requests\ListWorkOrdersRequest;
 use App\Http\Requests\UpdateWorkOrderRequest;
+use App\Http\Requests\UseWorkOrderPartRequest;
 use App\Http\Requests\WorkOrderReasonRequest;
 use App\Http\Resources\WorkOrderEventResource;
+use App\Http\Resources\WorkOrderPartUsageResource;
 use App\Http\Resources\WorkOrderResource;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -163,6 +165,43 @@ class WorkOrderController extends Controller
     {
         return $this->workOrderResponse(
             $service->resume($this->context($request), $this->actor($request), $workOrderId, $this->expectedVersion($request)),
+            $request,
+        );
+    }
+
+    public function usePart(
+        UseWorkOrderPartRequest $request,
+        string $workOrderId,
+        WorkOrderMutationService $service,
+    ): JsonResponse {
+        $result = $service->issuePart(
+            $this->context($request),
+            $this->actor($request),
+            $workOrderId,
+            $this->expectedVersion($request),
+            $request->validated(),
+        );
+
+        return response()->json([
+            'data' => (new WorkOrderResource($result['workOrder']))->resolve($request),
+            'partUsage' => (new WorkOrderPartUsageResource($result['usage']))->resolve($request),
+            'meta' => ['replayed' => $result['replayed']],
+        ], $result['replayed'] ? 200 : 201)
+            ->header('ETag', '"'.$result['workOrder']->version.'"');
+    }
+
+    public function verify(
+        EmptyWorkOrderActionRequest $request,
+        string $workOrderId,
+        WorkOrderMutationService $service,
+    ): JsonResponse {
+        return $this->workOrderResponse(
+            $service->verify(
+                $this->context($request),
+                $this->actor($request),
+                $workOrderId,
+                $this->expectedVersion($request),
+            ),
             $request,
         );
     }

@@ -417,6 +417,50 @@ class AssetMutationService
         return $asset->refresh();
     }
 
+    public function applyWorkOrderCondition(
+        CurrentMembershipContext $context,
+        Asset $asset,
+        int $expectedVersion,
+        string $condition,
+        string $workOrderId,
+    ): Asset {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Work Order Asset condition updates require an active transaction.');
+        }
+
+        if ((string) $asset->school_id !== (string) $context->membership->school_id) {
+            throw new AssetDomainException('Asset not found.', 'ASSET_NOT_FOUND', 404);
+        }
+
+        if (! in_array($condition, AssetCatalog::CONDITIONS, true)) {
+            throw new \LogicException('Invalid Asset condition supplied by Work Order authority.');
+        }
+
+        $this->assertVersion($asset, $expectedVersion);
+
+        if ($asset->lifecycle_status !== 'active') {
+            throw new AssetDomainException(
+                'Corrective Work Order verification can only update condition on an active Asset.',
+                'ASSET_LIFECYCLE_LOCKED',
+                409,
+            );
+        }
+
+        $before = $asset->condition;
+        if ($before !== $condition) {
+            $asset->condition = $condition;
+            $asset->version++;
+            $asset->save();
+        }
+
+        $this->writeEvent($context, $asset, 'asset.work_order_condition_updated', ['condition'], [
+            'condition' => ['before' => $before, 'after' => $condition],
+            'workOrderId' => ['after' => $workOrderId],
+        ]);
+
+        return $asset->refresh();
+    }
+
     private function lockAsset(CurrentMembershipContext $context, string $assetId): Asset
     {
         $asset = Asset::query()
