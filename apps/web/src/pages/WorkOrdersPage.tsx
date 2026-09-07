@@ -121,6 +121,23 @@ function eventLabel(event: WorkOrderEventDto): string {
   };
   return labels[event.eventType] ?? event.eventType;
 }
+async function listEligibleAssignees(): Promise<IdentityMembershipDto[]> {
+  const [roles, first] = await Promise.all([
+    identityAdminGateway.listRoles(),
+    identityAdminGateway.listMemberships({ status: 'active', page: 1, perPage: 100 }),
+  ]);
+  const eligibleRoleKeys = new Set(
+    roles.filter((role) => role.permissions.includes('work-orders.update')).map((role) => role.key),
+  );
+  const remaining = first.meta.lastPage > 1
+    ? await Promise.all(Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
+      identityAdminGateway.listMemberships({ status: 'active', page: index + 2, perPage: 100 })))
+    : [];
+  return [...first.data, ...remaining.flatMap((page) => page.data)]
+    .filter((membership) => membership.user.status === 'active'
+      && membership.roles.some((role) => eligibleRoleKeys.has(role.key)));
+}
+
 function partsFromHistory(history: WorkOrderEventDto[]) {
   return history.flatMap((event) => {
     if (event.eventType !== 'work_order.part_issued') return [];
@@ -195,8 +212,7 @@ export function WorkOrdersPage() {
         setInventoryItems([]);
       }
       if (canAssign) {
-        const page = await identityAdminGateway.listMemberships({ status: 'active', roleKey: 'teknisi', page: 1, perPage: 200 });
-        setTechnicians(page.data.filter((membership) => membership.user.status === 'active'));
+        setTechnicians(await listEligibleAssignees());
       } else {
         setTechnicians([]);
       }
