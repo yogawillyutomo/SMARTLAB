@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
+import { MaintenanceCampaignPanel } from '@/components/maintenance/MaintenanceCampaignPanel';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Textarea } from '@/components/ui/Input';
@@ -117,7 +118,7 @@ export function MaintenancePage() {
   const canConsumeStock = hasServerPermission(user, 'maintenance.consume-stock') && hasServerPermission(user, 'stock.view');
   const canExport = hasServerPermission(user, 'maintenance.export');
 
-  const [tab, setTab] = useState<'plans' | 'executions'>('plans');
+  const [tab, setTab] = useState<'plans' | 'executions' | 'campaigns'>('plans');
   const [plans, setPlans] = useState<MaintenancePlanDto[]>([]);
   const [executions, setExecutions] = useState<MaintenanceExecutionDto[]>([]);
   const [assets, setAssets] = useState<AssetDto[]>([]);
@@ -393,7 +394,7 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Pemeliharaan Berkala"
-        description="Preventive Maintenance exact-Asset. Custody, kondisi Asset, dan spare part tetap memakai authority canonical masing-masing."
+        description="Preventive Maintenance exact-Asset dengan Campaign/Batch orchestration per Lab. Custody, kondisi Asset, dan spare part tetap memakai authority canonical masing-masing."
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
@@ -418,6 +419,7 @@ export function MaintenancePage() {
       <div className="flex gap-2 border-b border-base-700">
         <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Rencana</button>
         <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Eksekusi & History</button>
+        <button onClick={() => setTab('campaigns')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'campaigns' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Campaign & Batch</button>
       </div>
 
       {tab === 'plans' ? (
@@ -458,7 +460,7 @@ export function MaintenancePage() {
             </Card>
           ))}
         </div>
-      ) : (
+      ) : tab === 'executions' ? (
         <Card>
           {executions.length === 0 ? <EmptyState title="Belum ada execution Preventive Maintenance" /> : (
             <div className="overflow-x-auto">
@@ -498,6 +500,8 @@ export function MaintenancePage() {
             </div>
           )}
         </Card>
+      ) : (
+        <MaintenanceCampaignPanel onChanged={load} />
       )}
 
       <FormDialog open={planOpen} onClose={() => setPlanOpen(false)} title={editingPlan ? 'Edit Rencana Preventive Maintenance' : 'Rencana Preventive Maintenance Baru'} onSubmit={() => void savePlan()} size="lg">
