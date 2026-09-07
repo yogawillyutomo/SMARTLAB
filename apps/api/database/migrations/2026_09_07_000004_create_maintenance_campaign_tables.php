@@ -143,24 +143,24 @@ return new class extends Migration
                     campaign_lab char(26);
                     asset_school char(26);
                     asset_lab char(26);
-                    asset_code varchar(32);
-                    asset_name varchar(255);
+                    asset_code_value varchar(32);
+                    asset_name_value varchar(255);
                     plan_school char(26);
                     plan_asset char(26);
-                    plan_code varchar(48);
+                    plan_code_value varchar(48);
                 BEGIN
                     SELECT school_id, laboratory_id
                     INTO campaign_school, campaign_lab
                     FROM maintenance_campaigns
                     WHERE id = NEW.maintenance_campaign_id;
 
-                    SELECT school_id, home_laboratory_id, asset_code, name
-                    INTO asset_school, asset_lab, asset_code, asset_name
+                    SELECT school_id, home_laboratory_id, assets.asset_code, assets.name
+                    INTO asset_school, asset_lab, asset_code_value, asset_name_value
                     FROM assets
                     WHERE id = NEW.asset_id;
 
-                    SELECT school_id, asset_id, plan_code
-                    INTO plan_school, plan_asset, plan_code
+                    SELECT school_id, asset_id, maintenance_plans.plan_code
+                    INTO plan_school, plan_asset, plan_code_value
                     FROM maintenance_plans
                     WHERE id = NEW.maintenance_plan_id;
 
@@ -169,12 +169,12 @@ return new class extends Migration
                         OR asset_school IS NULL
                         OR asset_school <> NEW.school_id
                         OR asset_lab IS DISTINCT FROM campaign_lab
-                        OR asset_code <> NEW.asset_code_snapshot
-                        OR asset_name <> NEW.asset_name_snapshot
+                        OR asset_code_value <> NEW.asset_code_snapshot
+                        OR asset_name_value <> NEW.asset_name_snapshot
                         OR plan_school IS NULL
                         OR plan_school <> NEW.school_id
                         OR plan_asset <> NEW.asset_id
-                        OR plan_code <> NEW.plan_code_snapshot
+                        OR plan_code_value <> NEW.plan_code_snapshot
                     THEN
                         RAISE EXCEPTION 'MaintenanceCampaignItem must bind one exact same-Lab Asset to one exact MaintenancePlan';
                     END IF;
