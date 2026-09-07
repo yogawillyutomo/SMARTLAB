@@ -47,7 +47,7 @@ class UatAdminSeederTest extends TestCase
 
         putenv('SMARTLAB_UAT_ADMIN_PASSWORD=NewUatPassword123!');
 
-        $this->seed(UatAdminSeeder::class);
+        app(UatAdminSeeder::class)->run();
 
         $user->refresh();
         $membership->refresh();
@@ -74,7 +74,7 @@ class UatAdminSeederTest extends TestCase
                 'UatAdminSeeder hanya boleh dijalankan pada environment local/testing.',
             );
 
-            $this->seed(UatAdminSeeder::class);
+            app(UatAdminSeeder::class)->run();
         } finally {
             app()['env'] = $originalEnvironment;
         }
@@ -100,7 +100,7 @@ class UatAdminSeederTest extends TestCase
         putenv('SMARTLAB_UAT_ADMIN_PASSWORD=NewUatPassword123!');
 
         try {
-            $this->seed(UatAdminSeeder::class);
+            app(UatAdminSeeder::class)->run();
             $this->fail('Seeder should fail closed when the UAT membership is not already super-admin.');
         } catch (RuntimeException $exception) {
             $this->assertSame(
@@ -122,6 +122,6 @@ class UatAdminSeederTest extends TestCase
             'SMARTLAB_UAT_ADMIN_PASSWORD wajib diisi dengan password minimal 12 karakter.',
         );
 
-        $this->seed(UatAdminSeeder::class);
+        app(UatAdminSeeder::class)->run();
     }
 }
