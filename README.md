@@ -111,6 +111,17 @@ composer install --no-interaction
 php artisan test
 ```
 
+### Local/UAT admin password reset
+
+The repository does not carry a default UAT password. To reset the existing local UAT administrator credential, set a process-scoped password and run the dedicated seeder explicitly:
+
+```powershell
+$env:SMARTLAB_UAT_ADMIN_PASSWORD="<choose-a-password-of-at-least-12-characters>"
+php artisan db:seed --class=UatAdminSeeder
+```
+
+`UatAdminSeeder` is intentionally not called by `DatabaseSeeder`. It runs only in `local` or `testing`, targets exactly `uat.admin@smartlab.local`, requires an existing active SchoolMembership that already has the SMARTLAB-local `super-admin` role, and changes only the password. It never creates or elevates a membership.
+
 GitHub CI additionally validates PostgreSQL migrations/seeders, the dedicated S4 PostgreSQL contention suite, relative Markdown links, and Composer metadata.
 
 ## Repository-wide validation
