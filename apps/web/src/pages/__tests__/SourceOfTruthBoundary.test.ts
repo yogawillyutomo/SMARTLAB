@@ -12,6 +12,7 @@ import assetsSource from '@/pages/AssetsPage.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
 import loansSource from '@/pages/LoansPage.tsx?raw';
 import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
+import maintenanceCampaignSource from '@/components/maintenance/MaintenanceCampaignPanel.tsx?raw';
 import workOrdersSource from '@/pages/WorkOrdersPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
@@ -242,6 +243,24 @@ describe('source-of-truth migration foundation', () => {
     expect(navSource).toContain("serverPermission: 'maintenance.view'");
   });
 
+
+  it('keeps Maintenance Campaign as Lab-level orchestration over exact-Asset Maintenance authority', () => {
+    expect(maintenanceCampaignSource).not.toContain('useAppData');
+    expect(maintenanceCampaignSource).not.toContain('mutate((d)');
+    expect(maintenanceCampaignSource).not.toContain('db.maintenance');
+    expect(maintenanceCampaignSource).not.toContain('db.assets');
+    expect(maintenanceCampaignSource).not.toContain('custody_active');
+    expect(maintenanceCampaignSource).toContain("from '@/services/maintenanceApi'");
+    expect(maintenanceCampaignSource).toContain("from '@/services/laboratoryApi'");
+    expect(maintenanceCampaignSource).toContain("from '@/services/assetApi'");
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.createCampaign');
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.scheduleCampaign');
+    expect(maintenanceCampaignSource).toContain("asset.homeLaboratoryId === form.laboratoryId");
+    expect(maintenanceCampaignSource).toContain('Campaign bukan custody dan tidak menutup Laboratorium');
+    expect(maintenanceCampaignSource).toContain('MaintenanceExecution exact-Asset');
+    expect(maintenanceSource).toContain('MaintenanceCampaignPanel');
+    expect(maintenanceSource).toContain('Campaign & Batch');
+  });
 
   it('cuts Corrective Work Orders over to canonical S5 exact-Asset server authority', () => {
     expect(workOrdersSource).not.toContain('useAppData');
