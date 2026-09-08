@@ -257,3 +257,5 @@ Before production, documentation and executable configuration must cover at leas
 17. exact release evidence: commit, artifacts, migrations, configuration, CI, UAT, approvals, deploy/rollback record.
 
 See [Documentation Convergence Audit](architecture/DOCUMENTATION_CONVERGENCE.md) for the evidence matrix behind this index.
+
+- [S1–S5 UAT Fixture Seeder](reviews/s1-s5-uat-fixture-seeder.md) — repeatable local/testing canonical fixtures, role accounts, safety guards, and manual-UAT boundaries.
