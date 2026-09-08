@@ -89,15 +89,22 @@ class UatS1S5FixtureSeeder extends Seeder
             RolePermissionSeeder::class,
         ]);
 
-        $adminMembership = SchoolMembership::query()
+        $adminMemberships = SchoolMembership::query()
             ->where('status', 'active')
             ->whereHas('user', fn ($query) => $query
                 ->where('email', UatAdminSeeder::EMAIL)
                 ->where('status', 'active'))
             ->whereHas('roles', fn ($query) => $query->where('key', 'super-admin'))
-            ->with(['user', 'roles.permissions'])
-            ->sole();
+            ->with(['user', 'school', 'roles.permissions'])
+            ->get();
 
+        if ($adminMemberships->count() !== 1) {
+            throw new RuntimeException(
+                'UatS1S5FixtureSeeder memerlukan tepat satu membership aktif UAT admin yang sudah memiliki role super-admin.',
+            );
+        }
+
+        $adminMembership = $adminMemberships->sole();
         $school = $adminMembership->school;
         if ($school === null || $school->status !== 'active') {
             throw new RuntimeException('School UAT admin harus berstatus active.');
