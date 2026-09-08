@@ -170,7 +170,6 @@ class UatS1S5FixtureSeeder extends Seeder
                     'nip' => $fixture['nip'] ?? null,
                     'nis' => $fixture['nis'] ?? null,
                     'status' => 'active',
-                    'email_verified_at' => now(),
                 ],
             );
 
@@ -385,27 +384,24 @@ class UatS1S5FixtureSeeder extends Seeder
             $assets[$assetCode] = $asset;
         }
 
-        Asset::query()->firstOrCreate(
-            [
-                'school_id' => $context->membership->school_id,
-                'asset_code' => 'UAT-AST-MEJA01',
-            ],
-            [
+        if (! Asset::query()
+            ->where('school_id', $context->membership->school_id)
+            ->where('asset_code', 'UAT-AST-MEJA01')
+            ->exists()) {
+            $this->assetService->create($context, [
+                'assetCode' => 'UAT-AST-MEJA01',
                 'name' => 'Meja Instruktur UAT',
                 'category' => 'Furniture',
-                'home_laboratory_id' => $labs['UAT-RPL1']->id,
+                'homeLaboratoryId' => (string) $labs['UAT-RPL1']->id,
                 'condition' => 'good',
-                'lifecycle_status' => 'active',
-                'acquisition_date' => '2026-09-01',
-                'acquisition_year' => 2026,
-                'funding_source' => 'UAT',
-                'purchase_price' => 1500000,
-                'supplier_name' => 'Supplier UAT',
+                'acquisitionDate' => '2026-09-01',
+                'acquisitionYear' => 2026,
+                'fundingSource' => 'UAT',
+                'purchasePrice' => 1500000,
+                'supplierName' => 'Supplier UAT',
                 'notes' => 'Asset-only fixture tanpa Device link untuk UAT/QR.',
-                'linked_device_id' => null,
-                'version' => 1,
-            ],
-        );
+            ]);
+        }
 
         return $assets;
     }
@@ -474,7 +470,7 @@ class UatS1S5FixtureSeeder extends Seeder
         string $schoolId,
         SchoolMembership $teacherMembership,
     ): void {
-        $year = AcademicYear::query()->updateOrCreate(
+        $year = AcademicYear::query()->firstOrCreate(
             ['school_id' => $schoolId, 'code' => '2026-2027'],
             [
                 'name' => 'Tahun Ajaran 2026/2027',
@@ -485,7 +481,7 @@ class UatS1S5FixtureSeeder extends Seeder
             ],
         );
 
-        Semester::query()->updateOrCreate(
+        Semester::query()->firstOrCreate(
             ['academic_year_id' => $year->id, 'code' => 'GANJIL'],
             [
                 'school_id' => $schoolId,
@@ -497,7 +493,7 @@ class UatS1S5FixtureSeeder extends Seeder
             ],
         );
 
-        $unit = AcademicUnit::query()->updateOrCreate(
+        $unit = AcademicUnit::query()->firstOrCreate(
             ['school_id' => $schoolId, 'code' => 'PPLG'],
             [
                 'name' => 'Pengembangan Perangkat Lunak dan Gim',
@@ -509,7 +505,7 @@ class UatS1S5FixtureSeeder extends Seeder
         );
 
         $teacherUser = $teacherMembership->user()->sole();
-        $teacher = Teacher::query()->updateOrCreate(
+        $teacher = Teacher::query()->firstOrCreate(
             ['school_id' => $schoolId, 'code' => 'UAT-GURU'],
             [
                 'personnel_number' => 'UAT-GURU',
@@ -523,7 +519,7 @@ class UatS1S5FixtureSeeder extends Seeder
             ],
         );
 
-        AcademicClass::query()->updateOrCreate(
+        AcademicClass::query()->firstOrCreate(
             ['school_id' => $schoolId, 'code' => 'XI-PPLG-1'],
             [
                 'name' => 'XI PPLG 1',
@@ -536,7 +532,7 @@ class UatS1S5FixtureSeeder extends Seeder
             ],
         );
 
-        Subject::query()->updateOrCreate(
+        Subject::query()->firstOrCreate(
             ['school_id' => $schoolId, 'code' => 'PWEB'],
             [
                 'name' => 'Pemrograman Web dan Mobile',
@@ -547,7 +543,7 @@ class UatS1S5FixtureSeeder extends Seeder
             ],
         );
 
-        $periodSet = LessonPeriodSet::query()->updateOrCreate(
+        $periodSet = LessonPeriodSet::query()->firstOrCreate(
             ['academic_year_id' => $year->id, 'code' => 'REGULER'],
             [
                 'school_id' => $schoolId,
@@ -573,7 +569,7 @@ class UatS1S5FixtureSeeder extends Seeder
         ];
 
         foreach ($periods as [$code, $sequence, $startsAt, $endsAt, $kind]) {
-            LessonPeriod::query()->updateOrCreate(
+            LessonPeriod::query()->firstOrCreate(
                 ['lesson_period_set_id' => $periodSet->id, 'code' => $code],
                 [
                     'school_id' => $schoolId,
