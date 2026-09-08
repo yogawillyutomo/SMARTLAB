@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Domain\Inventory\InventoryCatalog;
 use App\Http\Requests\Concerns\RejectsUnknownFields;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpdateInventoryItemRequest extends FormRequest
@@ -46,11 +48,11 @@ class UpdateInventoryItemRequest extends FormRequest
         $rules = [
             'name' => ['sometimes', 'string', 'min:1', 'max:255'],
             'category' => ['sometimes', 'string', 'min:1', 'max:120'],
-            'unit' => ['sometimes', 'string', 'min:1', 'max:32'],
-            'minimumStock' => ['sometimes', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999999.999'],
+            'unit' => ['sometimes', Rule::in(InventoryCatalog::UNITS)],
+            'minimumStock' => ['sometimes', 'integer', 'min:0', 'max:999999999999'],
             'storageLocation' => ['sometimes', 'nullable', 'string', 'max:255'],
             'supplierName' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'unitPriceSnapshot' => ['sometimes', 'nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999999999.99'],
+            'unitPriceSnapshot' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9999999999999'],
         ];
 
         foreach (self::PROHIBITED as $field) {
