@@ -383,7 +383,10 @@ export function AssetsPage() {
       <FormDialog open={Boolean(linking)} onClose={() => setLinking(null)} title="Tautkan Device canonical" onSubmit={() => void linkDevice()} submitLabel="Tautkan" size="md">
         <div className="space-y-4">
           <p className="text-sm text-ink-muted">Tautan bersifat 1:1 dan divalidasi lagi oleh server. Asset/Device lintas School atau home Laboratory yang bertentangan akan ditolak.</p>
-          <Select label="Device" value={deviceId} onChange={(event) => setDeviceId(event.target.value)} options={[{ value: '', label: 'Pilih Device' }, ...linkCandidates.map((device) => ({ value: device.id, label: `${device.deviceCode} · ${device.brand ?? ''} ${device.model ?? ''}`.trim() }))]} />
+          <Select label="Device" value={deviceId} onChange={(event) => setDeviceId(event.target.value)} options={[{ value: '', label: 'Pilih Device' }, ...linkCandidates.map((device) => {
+            const descriptor = [device.brand, device.model].filter(Boolean).join(' ');
+            return { value: device.id, label: descriptor ? `${device.deviceCode} · ${descriptor}` : device.deviceCode };
+          })]} />
         </div>
       </FormDialog>
 
