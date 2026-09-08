@@ -38,6 +38,15 @@ class MaintenanceDomainException extends RuntimeException
         );
     }
 
+    public static function checklistIncomplete(): self
+    {
+        return new self(
+            'Every frozen checklist item must be completed before MaintenanceExecution can complete.',
+            'MAINTENANCE_CHECKLIST_INCOMPLETE',
+            409,
+        );
+    }
+
     public static function stateConflict(string $message): self
     {
         return new self($message, 'MAINTENANCE_STATE_CONFLICT', 409);

@@ -411,6 +411,9 @@ class MaintenanceMutationService
             $this->assertAssetEligible($context, $asset);
 
             $checklistResults = $this->checklistEvidence($execution, $data['checklistResults']);
+            if (count(array_filter($checklistResults, fn (array $item): bool => $item['done'])) !== count($checklistResults)) {
+                throw MaintenanceDomainException::checklistIncomplete();
+            }
 
             $issues = $data['inventoryIssues'] ?? [];
             if ($issues !== [] && ! $context->permissions->contains('maintenance.consume-stock')) {

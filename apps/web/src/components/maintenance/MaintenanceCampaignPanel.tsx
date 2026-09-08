@@ -322,7 +322,7 @@ export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanel
                     <Button size="sm" variant="success" icon={<Play className="h-3.5 w-3.5" />} onClick={() => openBatch(campaign)}>Jadwalkan Batch</Button>
                   )}
                   {canToggle && (
-                    <Button size="sm" variant="secondary" loading={busy} onClick={() => void toggleCampaign(campaign)}>
+                    <Button size="sm" variant={campaign.status === 'active' ? 'warning' : 'success'} loading={busy} onClick={() => void toggleCampaign(campaign)}>
                       {campaign.status === 'active' ? 'Nonaktifkan Campaign' : 'Aktifkan Campaign'}
                     </Button>
                   )}
@@ -413,7 +413,7 @@ export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanel
                   <div key={item} className="flex items-center gap-3 rounded-lg border border-base-700 px-3 py-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-ink-muted" />
                     <span className="flex-1 text-ink-secondary">{index + 1}. {item}</span>
-                    <Button size="sm" variant="ghost" onClick={() => setForm({ ...form, checklistTemplate: form.checklistTemplate.filter((value) => value !== item) })}>Hapus</Button>
+                    <Button size="sm" variant="danger" onClick={() => setForm({ ...form, checklistTemplate: form.checklistTemplate.filter((value) => value !== item) })}>Hapus</Button>
                   </div>
                 ))}
               </div>

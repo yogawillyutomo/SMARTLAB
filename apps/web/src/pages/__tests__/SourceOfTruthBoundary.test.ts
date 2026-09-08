@@ -238,6 +238,9 @@ describe('source-of-truth migration foundation', () => {
     expect(maintenanceSource).toContain('maintenanceGateway.listAllPlans()');
     expect(maintenanceSource).toContain('maintenanceGateway.startExecution');
     expect(maintenanceSource).toContain('maintenanceGateway.completeExecution');
+    expect(maintenanceSource).toContain('checklistReadyForCompletion');
+    expect(maintenanceSource).toContain('Seluruh checklist harus selesai sebelum Maintenance dapat diselesaikan.');
+    expect(maintenanceSource).toContain('variant="danger"');
     expect(maintenanceSource).toContain('satu Asset canonical');
     expect(maintenanceSource).toContain('Corrective repair tetap S5 Work Order');
     expect(appSource).toContain('RequireServerPermission permission="maintenance.view"');
@@ -260,6 +263,7 @@ describe('source-of-truth migration foundation', () => {
     expect(maintenanceCampaignSource).toContain("asset.homeLaboratoryId === form.laboratoryId");
     expect(maintenanceCampaignSource).toContain('Campaign bukan custody dan tidak menutup Laboratorium');
     expect(maintenanceCampaignSource).toContain('MaintenanceExecution exact-Asset');
+    expect(maintenanceCampaignSource).toContain("campaign.status === 'active' ? 'warning' : 'success'");
     expect(maintenanceSource).toContain('MaintenanceCampaignPanel');
     expect(maintenanceSource).toContain('Campaign & Batch');
   });

@@ -93,6 +93,15 @@ function checklistBooleans(execution: MaintenanceExecutionDto): boolean[] {
     evidence?.[index]?.item === item ? evidence[index].done : false);
 }
 
+function checklistReadyForCompletion(execution: MaintenanceExecutionDto): boolean {
+  const evidence = execution.checklistProgress ?? execution.checklistResults;
+  return Boolean(
+    evidence
+      && evidence.length === execution.checklistSnapshot.length
+      && evidence.every((item, index) => item.item === execution.checklistSnapshot[index] && item.done),
+  );
+}
+
 function defaultPlanForm(): PlanForm {
   return {
     assetId: '',
@@ -340,7 +349,12 @@ export function MaintenancePage() {
   }
 
   async function completeExecution() {
-    if (!completeState || completeState.actionTaken.trim().length < 3) {
+    if (!completeState) return;
+    if (!completeState.checklistResults.every(Boolean)) {
+      toast('Seluruh checklist harus selesai sebelum Maintenance dapat diselesaikan.', 'error');
+      return;
+    }
+    if (completeState.actionTaken.trim().length < 3) {
       toast('Tindakan preventif wajib dicatat.', 'error');
       return;
     }
@@ -454,7 +468,7 @@ export function MaintenancePage() {
                     technicianName: plan.assignedTechnicianNameSnapshot ?? '',
                   })}>Jadwalkan Eksekusi</Button>}
                   {canUpdatePlan && <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => openEditPlan(plan)}>Edit</Button>}
-                  {canUpdatePlan && <Button size="sm" variant="secondary" onClick={() => void togglePlan(plan)}>{plan.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>}
+                  {canUpdatePlan && <Button size="sm" variant={plan.status === 'active' ? 'warning' : 'success'} onClick={() => void togglePlan(plan)}>{plan.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>}
                 </div>
               </CardContent>
             </Card>
@@ -489,8 +503,15 @@ export function MaintenancePage() {
                         <div className="flex flex-wrap gap-1">
                           {canStart && execution.status === 'scheduled' && <Button size="sm" icon={<Play className="h-3.5 w-3.5" />} onClick={() => void startExecution(execution)}>Mulai</Button>}
                           {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="secondary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => openChecklistProgress(execution)}>Checklist</Button>}
-                          {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="success" icon={<Wrench className="h-3.5 w-3.5" />} onClick={() => openComplete(execution)}>Selesaikan</Button>}
-                          {canCancel && (execution.status === 'scheduled' || execution.status === 'in_progress') && <Button size="sm" variant="ghost" icon={<StopCircle className="h-3.5 w-3.5" />} onClick={() => setCancelState({ execution, reason: '' })}>Batalkan</Button>}
+                          {canComplete && execution.status === 'in_progress' && <Button
+                            size="sm"
+                            variant="success"
+                            icon={<Wrench className="h-3.5 w-3.5" />}
+                            disabled={!checklistReadyForCompletion(execution)}
+                            title={checklistReadyForCompletion(execution) ? 'Selesaikan Maintenance' : 'Lengkapi dan simpan seluruh checklist terlebih dahulu'}
+                            onClick={() => openComplete(execution)}
+                          >Selesaikan</Button>}
+                          {canCancel && (execution.status === 'scheduled' || execution.status === 'in_progress') && <Button size="sm" variant="danger" icon={<StopCircle className="h-3.5 w-3.5" />} onClick={() => setCancelState({ execution, reason: '' })}>Batalkan</Button>}
                         </div>
                       </td>
                     </tr>
@@ -624,9 +645,12 @@ export function MaintenancePage() {
         open={Boolean(completeState)}
         onClose={() => setCompleteState(null)}
         title="Selesaikan Preventive Maintenance"
-        description="Completion atomik: checklist evidence, audited Asset condition, immutable stock issue, custody release, dan plan next-due."
+        description="Seluruh checklist frozen wajib selesai. Setelah itu completion atomik menyimpan evidence, Asset condition, Inventory issue, custody release, dan plan next-due."
         size="xl"
-        footer={<><Button variant="ghost" onClick={() => setCompleteState(null)}>Batal</Button><Button onClick={() => void completeExecution()}>Selesaikan</Button></>}
+        footer={<>
+          <Button variant="ghost" onClick={() => setCompleteState(null)}>Batal</Button>
+          <Button variant="success" disabled={!completeState?.checklistResults.every(Boolean)} onClick={() => void completeExecution()}>Selesaikan Maintenance</Button>
+        </>}
       >
         {completeState && <div className="space-y-5">
           <div className="rounded-lg border border-base-700 p-3 text-sm">
@@ -666,7 +690,7 @@ export function MaintenancePage() {
                   next[index] = { ...next[index], quantity: Number(event.target.value) };
                   setCompleteState({ ...completeState, inventoryIssues: next });
                 }} />
-                <Button variant="ghost" size="sm" onClick={() => setCompleteState({ ...completeState, inventoryIssues: completeState.inventoryIssues.filter((_, itemIndex) => itemIndex !== index) })}>Hapus</Button>
+                <Button variant="danger" size="sm" onClick={() => setCompleteState({ ...completeState, inventoryIssues: completeState.inventoryIssues.filter((_, itemIndex) => itemIndex !== index) })}>Hapus</Button>
               </div>
             ))}</div>
           </div>}
@@ -679,7 +703,7 @@ export function MaintenancePage() {
         onClose={() => setCancelState(null)}
         title="Batalkan Execution"
         description="Jika execution sedang in-progress, Maintenance custody dilepas tanpa mengubah kondisi Asset."
-        footer={<><Button variant="ghost" onClick={() => setCancelState(null)}>Kembali</Button><Button onClick={() => void cancelExecution()}>Batalkan Execution</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setCancelState(null)}>Kembali</Button><Button variant="danger" onClick={() => void cancelExecution()}>Batalkan Execution</Button></>}
       >
         {cancelState && <Textarea label="Alasan" required value={cancelState.reason} onChange={(event) => setCancelState({ ...cancelState, reason: event.target.value })} />}
       </Modal>
