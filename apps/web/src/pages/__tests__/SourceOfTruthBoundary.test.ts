@@ -217,7 +217,9 @@ describe('source-of-truth migration foundation', () => {
     expect(loansSource).toContain('loanGateway.checkout');
     expect(loansSource).toContain('loanGateway.returnLoan');
     expect(loansSource).toContain('satu LoanItem → satu Asset ULID exact');
-    expect(loansSource).toContain('Kerusakan tidak membuat Incident');
+    expect(loansSource).toContain('Return melepaskan custody Loan dan menyimpan evidence.');
+    expect(loansSource).toContain('Asset condition, atau Incident secara implisit.');
+    expect(loansSource).toContain('Incident dan perubahan kondisi Asset harus dilakukan eksplisit melalui authority masing-masing.');
     expect(appSource).toContain('RequireServerPermission permission="loans.view"');
     expect(navSource).toContain("loans: 'loans.view'");
     expect(navSource).toContain("serverPermission: 'loans.view'");
