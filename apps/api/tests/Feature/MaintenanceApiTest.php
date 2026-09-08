@@ -671,7 +671,8 @@ class MaintenanceApiTest extends TestCase
     public function test_maintenance_routes_use_server_permissions_and_version_preconditions(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-plans')
+                || str_starts_with($route->uri(), 'api/v1/maintenance-executions'))
             ->values();
 
         $this->assertCount(13, $routes);

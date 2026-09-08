@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\RequireMaintenanceCampaignVersionPrecondition;
 use App\Models\Asset;
 use App\Models\Laboratory;
 use App\Models\MaintenanceCampaign;
@@ -16,6 +17,7 @@ use App\Models\SchoolMembership;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -355,6 +357,46 @@ class MaintenanceCampaignApiTest extends TestCase
         $this->getJson("/api/v1/maintenance-campaigns/{$id}")
             ->assertNotFound()
             ->assertJsonPath('code', 'MAINTENANCE_CAMPAIGN_NOT_FOUND');
+    }
+
+    public function test_campaign_routes_use_server_permissions_and_version_preconditions(): void
+    {
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-campaigns'))
+            ->values();
+
+        $this->assertCount(7, $routes);
+        $map = $routes->mapWithKeys(fn ($route): array => [
+            implode(',', $route->methods()).' '.$route->uri() => $route->gatherMiddleware(),
+        ]);
+
+        $this->assertContains(
+            'permission:maintenance.view',
+            $map->get('GET,HEAD api/v1/maintenance-campaigns'),
+        );
+        $this->assertContains(
+            'permission:maintenance.view',
+            $map->get('GET,HEAD api/v1/maintenance-campaigns/{campaignId}'),
+        );
+        $this->assertContains(
+            'permission:maintenance.view',
+            $map->get('GET,HEAD api/v1/maintenance-campaigns/{campaignId}/history'),
+        );
+
+        $createMiddleware = $map->get('POST api/v1/maintenance-campaigns');
+        $this->assertContains('permission:maintenance.create-plan', $createMiddleware);
+        $this->assertContains('permission:assets.view', $createMiddleware);
+        $this->assertContains('permission:laboratories.view', $createMiddleware);
+
+        foreach (['activate', 'deactivate'] as $action) {
+            $middleware = $map->get("POST api/v1/maintenance-campaigns/{campaignId}/{$action}");
+            $this->assertContains('permission:maintenance.update-plan', $middleware);
+            $this->assertContains(RequireMaintenanceCampaignVersionPrecondition::class, $middleware);
+        }
+
+        $scheduleMiddleware = $map->get('POST api/v1/maintenance-campaigns/{campaignId}/executions');
+        $this->assertContains('permission:maintenance.schedule', $scheduleMiddleware);
+        $this->assertContains(RequireMaintenanceCampaignVersionPrecondition::class, $scheduleMiddleware);
     }
 
     /** @param list<string> $permissions @return array{User,School,SchoolMembership} */
