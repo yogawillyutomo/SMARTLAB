@@ -9,7 +9,7 @@ export const INVENTORY_CATEGORIES = [
   'Periferal',
   'Jaringan',
   'Elektronik',
-  'Consumable',
+  'Bahan Habis Pakai',
   'Bahan Praktikum',
   'Alat',
   'Lainnya',
