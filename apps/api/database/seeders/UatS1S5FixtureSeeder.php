@@ -15,12 +15,15 @@ use App\Models\InventoryItem;
 use App\Models\Laboratory;
 use App\Models\LessonPeriod;
 use App\Models\LessonPeriodSet;
+use App\Models\LoanItem;
+use App\Models\MaintenanceExecution;
 use App\Models\Role;
 use App\Models\SchoolMembership;
 use App\Models\Semester;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Models\WorkOrder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -109,6 +112,8 @@ class UatS1S5FixtureSeeder extends Seeder
         if ($school === null || $school->status !== 'active') {
             throw new RuntimeException('School UAT admin harus berstatus active.');
         }
+
+        $this->assertNoActiveCustody((string) $school->id);
 
         $context = new CurrentMembershipContext(
             $adminMembership,
@@ -284,6 +289,32 @@ class UatS1S5FixtureSeeder extends Seeder
             if ($device->device_type !== 'desktop_pc') {
                 throw new RuntimeException("{$deviceCode} memiliki device_type berbeda dari fixture.");
             }
+
+            $expectedAssetCode = match ($deviceCode) {
+                'UAT-PC-001' => 'UAT-AST-PC001',
+                'UAT-PC-002' => 'UAT-AST-PC002',
+                'UAT-PC-101' => 'UAT-AST-PC101',
+                default => throw new RuntimeException('Unexpected UAT Device fixture.'),
+            };
+            $linkedAsset = Asset::query()
+                ->where('school_id', $context->membership->school_id)
+                ->where('linked_device_id', $device->id)
+                ->first();
+
+            if ($linkedAsset !== null) {
+                $identityMatches = $linkedAsset->asset_code === $expectedAssetCode
+                    && (string) $linkedAsset->home_laboratory_id === (string) $lab->id
+                    && $linkedAsset->brand === 'Lenovo'
+                    && $linkedAsset->model === 'ThinkCentre UAT'
+                    && $linkedAsset->serial_number === $fixture['serialNumber'];
+
+                if (! $identityMatches) {
+                    throw new RuntimeException(
+                        "{$deviceCode} sudah tertaut ke Asset dengan identity berbeda. Seeder tidak melakukan identity rewrite.",
+                    );
+                }
+            }
+
             if ($device->home_laboratory_id !== null
                 && (string) $device->home_laboratory_id !== (string) $lab->id) {
                 throw new RuntimeException(
@@ -470,6 +501,28 @@ class UatS1S5FixtureSeeder extends Seeder
                     'reason' => 'Opening balance S1-S5 UAT fixture',
                 ]);
             }
+        }
+    }
+
+    private function assertNoActiveCustody(string $schoolId): void
+    {
+        $activeLoan = LoanItem::query()
+            ->where('school_id', $schoolId)
+            ->where('custody_active', true)
+            ->exists();
+        $activeMaintenance = MaintenanceExecution::query()
+            ->where('school_id', $schoolId)
+            ->where('custody_active', true)
+            ->exists();
+        $activeWorkOrder = WorkOrder::query()
+            ->where('school_id', $schoolId)
+            ->where('custody_active', true)
+            ->exists();
+
+        if ($activeLoan || $activeMaintenance || $activeWorkOrder) {
+            throw new RuntimeException(
+                'UatS1S5FixtureSeeder menolak berjalan saat active custody masih ada. Selesaikan lifecycle UAT atau gunakan disposable DB.',
+            );
         }
     }
 
