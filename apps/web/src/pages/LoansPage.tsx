@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, CalendarClock, Check, ClipboardCheck, Download, HandHelping, PackageCheck, Plus, RotateCcw, UserRound, XCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -105,6 +106,8 @@ type ReasonAction = { kind: 'reject' | 'cancel'; loan: LoanDto } | null;
 
 export function LoansPage() {
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const canViewAssets = hasServerPermission(user, 'assets.view');
   const canCreate = hasServerPermission(user, 'loans.create');
   const canApprove = hasServerPermission(user, 'loans.approve');
   const canCheckout = hasServerPermission(user, 'loans.checkout');
@@ -138,7 +141,9 @@ export function LoansPage() {
     try {
       const [nextLoans, nextAssets] = await Promise.all([
         loanGateway.listAll(),
-        canCreate ? assetGateway.listAll() : Promise.resolve([]),
+        canViewAssets
+          ? assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})
+          : Promise.resolve([]),
       ]);
       setLoans(nextLoans);
       setAssets(nextAssets);
@@ -148,7 +153,7 @@ export function LoansPage() {
     } finally {
       setLoading(false);
     }
-  }, [canCreate]);
+  }, [activeLabId, canViewAssets]);
 
   useEffect(() => {
     void load();
@@ -160,19 +165,26 @@ export function LoansPage() {
       && (asset.condition === 'good' || asset.condition === 'minor_damage')),
     [assets],
   );
+  const scopedAssetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
+  const scopedLoans = useMemo(
+    () => activeLabId
+      ? loans.filter((loan) => loan.items.some((item) => scopedAssetIds.has(item.assetId)))
+      : loans,
+    [activeLabId, loans, scopedAssetIds],
+  );
 
   const stats = useMemo(() => {
-    const returned = loans.filter((loan) => loan.status === 'returned').length;
-    const closed = loans.filter((loan) => loan.status === 'closed').length;
+    const returned = scopedLoans.filter((loan) => loan.status === 'returned').length;
+    const closed = scopedLoans.filter((loan) => loan.status === 'closed').length;
 
     return {
-      active: loans.filter((loan) => loan.status === 'checked_out').length,
-      overdue: loans.filter((loan) => loan.isOverdue).length,
+      active: scopedLoans.filter((loan) => loan.status === 'checked_out').length,
+      overdue: scopedLoans.filter((loan) => loan.isOverdue).length,
       returned,
       closed,
       completedHistory: returned + closed,
     };
-  }, [loans]);
+  }, [scopedLoans]);
 
   const detailCustodyCount = detail?.items.filter((item) => item.custodyActive).length ?? 0;
   const detailTimeline = detail ? loanTimeline(detail) : [];
@@ -297,7 +309,7 @@ export function LoansPage() {
   }
 
   function exportCSV() {
-    downloadCSV('peminjaman-canonical.csv', loans.map((loan) => ({
+    downloadCSV('peminjaman-canonical.csv', scopedLoans.map((loan) => ({
       Nomor: loan.loanNumber,
       Peminjam: loan.borrowerNameSnapshot,
       Unit: loan.borrowerUnitSnapshot ?? '',
@@ -320,7 +332,7 @@ export function LoansPage() {
     <div className="space-y-6">
       <PageHeader
         title="Peminjaman Barang"
-        description="Satu LoanItem selalu menunjuk satu Asset canonical. Checkout hanya mengubah custody Loan, bukan home Laboratory atau lifecycle Asset/Device."
+        description="Peminjaman mengikuti konteks Lab melalui exact Asset binding. Checkout tetap hanya mengubah custody Loan, bukan home Laboratory atau lifecycle Asset/Device."
         icon={<HandHelping className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
@@ -347,7 +359,7 @@ export function LoansPage() {
       )}
 
       <Card>
-        {loans.length === 0 ? <EmptyState title="Belum ada peminjaman" /> : (
+        {scopedLoans.length === 0 ? <EmptyState title="Belum ada peminjaman pada konteks ini" /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -361,7 +373,7 @@ export function LoansPage() {
                 </tr>
               </thead>
               <tbody>
-                {loans.map((loan) => (
+                {scopedLoans.map((loan) => (
                   <tr key={loan.id} className="cursor-pointer border-b border-base-700/40 hover:bg-base-700/30" onClick={() => setDetail(loan)}>
                     <td className="px-4 py-3 font-medium text-ink-primary">{loan.loanNumber}</td>
                     <td className="px-4 py-3 text-ink-secondary">

@@ -290,6 +290,9 @@ describe('source-of-truth migration foundation', () => {
     expect(loansSource).toContain("from '@/services/loanApi'");
     expect(loansSource).toContain("from '@/services/assetApi'");
     expect(loansSource).toContain('loanGateway.listAll()');
+    expect(loansSource).toContain("from '@/stores/uiStore'");
+    expect(loansSource).toContain('homeLaboratoryId: activeLabId');
+    expect(loansSource).toContain('loan.items.some((item) => scopedAssetIds.has(item.assetId))');
     expect(loansSource).toContain('loanGateway.checkout');
     expect(loansSource).toContain('loanGateway.returnLoan');
     expect(loansSource).toContain('satu LoanItem → satu Asset ULID exact');
