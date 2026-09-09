@@ -30,6 +30,7 @@ import {
   type WorkOrderStatus,
 } from '@/services/workOrderApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/stores/toastStore';
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
@@ -184,6 +185,7 @@ function partsFromHistory(history: WorkOrderEventDto[]) {
 export function WorkOrdersPage() {
   const { id: routeId } = useParams();
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const canCreate = hasServerPermission(user, 'work-orders.create');
   const canUpdate = hasServerPermission(user, 'work-orders.update');
   const canAssign = hasServerPermission(user, 'work-orders.assign');
@@ -257,6 +259,23 @@ export function WorkOrdersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const scopedWorkOrders = useMemo(
+    () => activeLabId ? workOrders.filter((workOrder) => workOrder.laboratoryId === activeLabId) : workOrders,
+    [activeLabId, workOrders],
+  );
+  const scopedAssets = useMemo(
+    () => activeLabId ? assets.filter((asset) => asset.homeLaboratoryId === activeLabId) : assets,
+    [activeLabId, assets],
+  );
+  const scopedLabs = useMemo(
+    () => activeLabId ? labs.filter((lab) => lab.id === activeLabId) : labs,
+    [activeLabId, labs],
+  );
+  const scopedIncidents = useMemo(
+    () => activeLabId ? incidents.filter((incident) => incident.laboratory.id === activeLabId) : incidents,
+    [activeLabId, incidents],
+  );
+
   const openDetail = useCallback(async (workOrder: WorkOrderDto) => {
     setDetail(workOrder);
     setHistory([]);
@@ -282,8 +301,8 @@ export function WorkOrdersPage() {
   }, [routeId, loading, workOrders, openDetail]);
 
   const counts = useMemo(() => Object.fromEntries(
-    WORK_ORDER_STATUSES.map((status) => [status, workOrders.filter((item) => item.status === status).length]),
-  ) as Record<WorkOrderStatus, number>, [workOrders]);
+    WORK_ORDER_STATUSES.map((status) => [status, scopedWorkOrders.filter((item) => item.status === status).length]),
+  ) as Record<WorkOrderStatus, number>, [scopedWorkOrders]);
 
   const parts = useMemo(() => partsFromHistory(history), [history]);
 
@@ -298,11 +317,11 @@ export function WorkOrdersPage() {
   }
 
   function openCreate() {
-    const firstAsset = assets.find((asset) => asset.lifecycleStatus === 'active');
+    const firstAsset = scopedAssets.find((asset) => asset.lifecycleStatus === 'active');
     setCreateForm({
       ...EMPTY_CREATE,
       assetId: firstAsset?.id ?? '',
-      laboratoryId: firstAsset?.homeLaboratoryId ?? labs.find((lab) => lab.status === 'active')?.id ?? '',
+      laboratoryId: firstAsset?.homeLaboratoryId ?? scopedLabs.find((lab) => lab.status === 'active')?.id ?? '',
       incidentId: '',
       scheduledFor: new Date().toISOString().slice(0, 10),
     });
@@ -504,7 +523,7 @@ export function WorkOrdersPage() {
   }
 
   function exportCsv() {
-    downloadCSV('work-orders.csv', workOrders.map((item) => ({
+    downloadCSV('work-orders.csv', scopedWorkOrders.map((item) => ({
       WorkOrder: item.workOrderNumber,
       Asset: item.assetCodeSnapshot,
       AssetName: item.assetNameSnapshot,
@@ -530,7 +549,7 @@ export function WorkOrdersPage() {
 
   const boardStatuses = WORK_ORDER_STATUSES.filter((status) => counts[status] > 0);
   const selectedAsset = assets.find((asset) => asset.id === createForm.assetId);
-  const compatibleIncidents = incidents.filter((incident) =>
+  const compatibleIncidents = scopedIncidents.filter((incident) =>
     !incident.device || incident.device.id === selectedAsset?.linkedDeviceId);
 
   if (loading) return <LoadingState label="Memuat Work Order canonical..." />;
@@ -540,7 +559,7 @@ export function WorkOrdersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Tugas Perbaikan"
-        description="Corrective Work Order exact-Asset. Inventory, Asset condition, custody, dan audit tetap pada authority server masing-masing."
+        description="Corrective Work Order exact-Asset mengikuti konteks Lab global di topbar; authority Inventory, Asset, custody, dan audit tetap server-side."
         icon={<Wrench className="h-5 w-5" />}
         actions={<>
           {canExport && <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
@@ -566,16 +585,16 @@ export function WorkOrdersPage() {
         ))}
       </div>
 
-      {workOrders.length === 0 ? (
+      {scopedWorkOrders.length === 0 ? (
         <Card><EmptyState title="Belum ada Work Order" description="Buat Work Order dari exact Asset canonical ketika perbaikan corrective diperlukan." /></Card>
       ) : view === 'table' ? (
-        <Card><DataTable columns={columns} data={workOrders} rowKey={(item) => item.id} searchable searchKeys={(item) => `${item.workOrderNumber} ${item.assetCodeSnapshot} ${item.assetNameSnapshot} ${item.problemSummary} ${item.assigneeNameSnapshot ?? ''}`} /></Card>
+        <Card><DataTable columns={columns} data={scopedWorkOrders} rowKey={(item) => item.id} searchable searchKeys={(item) => `${item.workOrderNumber} ${item.assetCodeSnapshot} ${item.assetNameSnapshot} ${item.problemSummary} ${item.assigneeNameSnapshot ?? ''}`} /></Card>
       ) : view === 'board' ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {boardStatuses.map((status) => (
             <div key={status} className="space-y-2">
               <div className="flex items-center justify-between"><p className="text-sm font-semibold text-ink-secondary">{STATUS_LABELS[status]}</p><Badge tone="muted">{counts[status]}</Badge></div>
-              {workOrders.filter((item) => item.status === status).map((item) => (
+              {scopedWorkOrders.filter((item) => item.status === status).map((item) => (
                 <button key={item.id} onClick={() => void openDetail(item)} className="w-full rounded-xl border border-base-700/70 bg-base-800/60 p-3 text-left hover:border-base-600">
                   <p className="text-sm font-medium text-ink-primary">{item.workOrderNumber}</p>
                   <p className="mt-1 truncate text-xs text-ink-muted">{item.assetCodeSnapshot} · {item.assetNameSnapshot}</p>
@@ -588,7 +607,7 @@ export function WorkOrdersPage() {
       ) : (
         <Card><CardContent>
           <div className="space-y-2">
-            {workOrders.filter((item) => item.scheduledFor !== null).sort((a,b) => (a.scheduledFor ?? '').localeCompare(b.scheduledFor ?? '')).map((item) => (
+            {scopedWorkOrders.filter((item) => item.scheduledFor !== null).sort((a,b) => (a.scheduledFor ?? '').localeCompare(b.scheduledFor ?? '')).map((item) => (
               <button key={item.id} onClick={() => void openDetail(item)} className="flex w-full items-center justify-between rounded-lg border border-base-700/60 p-3 text-left hover:border-base-600">
                 <div><p className="text-sm font-medium text-ink-primary">{item.scheduledFor} · {item.workOrderNumber}</p><p className="text-xs text-ink-muted">{item.assetCodeSnapshot} · {item.laboratoryNameSnapshot}</p></div>
                 <Badge tone={statusTone(item.status)}>{STATUS_LABELS[item.status]}</Badge>
@@ -604,8 +623,8 @@ export function WorkOrdersPage() {
 
       <FormDialog open={createOpen} onClose={() => setCreateOpen(false)} title="Work Order Baru" description="Satu Work Order selalu menarget satu exact Asset canonical." onSubmit={() => void createWorkOrder()} submitLabel="Buat Draft" loading={busy} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label="Asset" value={createForm.assetId} onChange={(e) => selectAsset(e.target.value)} options={assets.filter((asset) => asset.lifecycleStatus === 'active').map((asset) => ({ value: asset.id, label: `${asset.assetCode} · ${asset.name}` }))} placeholder="Pilih Asset" />
-          <Select label="Laboratorium" value={createForm.laboratoryId} onChange={(e) => setCreateForm({...createForm,laboratoryId:e.target.value})} options={labs.filter((lab) => lab.status === 'active').map((lab) => ({value:lab.id,label:`${lab.code} · ${lab.name}`}))} placeholder="Pilih Lab" />
+          <Select label="Asset" value={createForm.assetId} onChange={(e) => selectAsset(e.target.value)} options={scopedAssets.filter((asset) => asset.lifecycleStatus === 'active').map((asset) => ({ value: asset.id, label: `${asset.assetCode} · ${asset.name}` }))} placeholder="Pilih Asset" />
+          <Select label="Laboratorium" value={createForm.laboratoryId} onChange={(e) => setCreateForm({...createForm,laboratoryId:e.target.value})} options={scopedLabs.filter((lab) => lab.status === 'active').map((lab) => ({value:lab.id,label:`${lab.code} · ${lab.name}`}))} placeholder="Pilih Lab" />
           {canViewIncidents && <Select label="Incident (opsional)" value={createForm.incidentId} onChange={(e) => selectIncident(e.target.value)} options={compatibleIncidents.map((incident) => ({value:incident.id,label:`${incident.ticketNumber} · ${incident.title}`}))} placeholder="Tanpa Incident" />}
           <Select label="Prioritas" value={createForm.priority} onChange={(e) => setCreateForm({...createForm,priority:e.target.value as WorkOrderPriority})} options={WORK_ORDER_PRIORITIES.map((priority)=>({value:priority,label:PRIORITY_LABELS[priority]}))} />
           <Input label="Jadwal" type="date" value={createForm.scheduledFor} onChange={(e)=>setCreateForm({...createForm,scheduledFor:e.target.value})} />
