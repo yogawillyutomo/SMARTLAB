@@ -296,6 +296,8 @@ describe('source-of-truth migration foundation', () => {
     expect(workOrdersSource).toContain('workOrderGateway.listAll()');
     expect(workOrdersSource).toContain('workOrderGateway.usePart');
     expect(workOrdersSource).toContain('workOrderGateway.verify');
+    expect(workOrdersSource).toContain('event.payload.assignee');
+    expect(workOrdersSource).toContain("event.eventType === 'work_order.assigned' ? 'Teknisi ditugaskan' : 'Teknisi diganti'");
     expect(workOrdersSource).toContain('Tidak ada lagi Work Order browser-local');
     expect(workOrdersSource).toContain('tidak mengubah Device atau Incident secara implisit');
     expect(appSource).toContain('RequireServerPermission permission="work-orders.view"');

@@ -107,12 +107,23 @@ function priorityTone(priority: WorkOrderPriority): 'muted' | 'info' | 'warning'
   if (priority === 'normal') return 'info';
   return 'muted';
 }
+function eventAssigneeName(event: WorkOrderEventDto): string | null {
+  const assignee = event.payload.assignee;
+  if (typeof assignee !== 'object' || assignee === null || Array.isArray(assignee)) return null;
+  const name = (assignee as Record<string, unknown>).name;
+  return typeof name === 'string' && name.trim() !== '' ? name : null;
+}
+
 function eventLabel(event: WorkOrderEventDto): string {
+  if (event.eventType === 'work_order.assigned' || event.eventType === 'work_order.reassigned') {
+    const assigneeName = eventAssigneeName(event);
+    const action = event.eventType === 'work_order.assigned' ? 'Teknisi ditugaskan' : 'Teknisi diganti';
+    return assigneeName ? `${action}: ${assigneeName}` : action;
+  }
+
   const labels: Record<string, string> = {
     'work_order.created': 'Work Order dibuat',
     'work_order.updated': 'Work Order diperbarui',
-    'work_order.assigned': 'Teknisi ditugaskan',
-    'work_order.reassigned': 'Teknisi diganti',
     'work_order.started': 'Perbaikan dimulai',
     'work_order.held': 'Perbaikan ditahan',
     'work_order.waiting_part': 'Menunggu spare part',
