@@ -10,6 +10,8 @@ import {
   List,
   MemoryStick,
   Monitor,
+  MonitorCheck,
+  MonitorX,
   RefreshCw,
   Search,
   Server,
@@ -229,7 +231,10 @@ export function MonitoringPage() {
             <CardTitle>Perangkat dalam Konteks Aktif</CardTitle>
             <p className="mt-1 text-xs text-ink-muted">Filter Lab mengikuti selector global di topbar. Filter di bawah hanya mempersempit Device dalam konteks tersebut.</p>
           </div>
-          <Badge tone="success">Server</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <LifecycleLegend />
+            <Badge tone="success">Server</Badge>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <div className="w-full sm:min-w-64 sm:flex-1">
@@ -285,37 +290,15 @@ export function MonitoringPage() {
           />
         </Card>
       ) : view === 'grid' ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((device) => {
-            const capacity = desktopCapacity(device);
-            return (
-              <Card key={device.id} hover>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <button type="button" className="truncate text-left text-sm font-semibold text-accent-content hover:underline" onClick={() => openDevice(device)}>
-                        {device.deviceCode}
-                      </button>
-                      <p className="mt-1 truncate text-xs text-ink-secondary">{deviceHeadline(device)}</p>
-                    </div>
-                    <Badge tone={lifecycleTone(device.lifecycleStatus)}>{DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}</Badge>
-                  </div>
-
-                  <dl className="space-y-2 rounded-lg bg-base-700/30 p-3 text-xs">
-                    <DeviceRow label="Jenis" value={DEVICE_TYPE_LABELS[device.deviceType]} />
-                    <DeviceRow label="Laboratorium" value={laboratoryLabel(laboratories, device.homeLaboratoryId)} />
-                    <DeviceRow label="RAM" value={capacity.ram} />
-                    <DeviceRow label="Penyimpanan" value={capacity.storage} />
-                  </dl>
-
-                  <div className="flex items-center justify-between border-t border-base-700/60 pt-3">
-                    <span className="text-[11px] text-ink-muted">Realtime: belum S6</span>
-                    <Button variant="secondary" size="sm" icon={<Eye className="h-3.5 w-3.5" />} onClick={() => openDevice(device)}>Detail</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
+          {filtered.map((device) => (
+            <CanonicalPcCard
+              key={device.id}
+              device={device}
+              selected={selected?.id === device.id}
+              onClick={() => openDevice(device)}
+            />
+          ))}
         </div>
       ) : (
         <Card>
@@ -415,11 +398,104 @@ export function MonitoringPage() {
   );
 }
 
+function CanonicalPcCard({
+  device,
+  selected,
+  onClick,
+}: {
+  device: DeviceDto;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const capacity = desktopCapacity(device);
+  const config: Record<DeviceLifecycleStatus, {
+    icon: typeof Monitor;
+    border: string;
+    dot: string;
+    iconClass: string;
+  }> = {
+    in_service: {
+      icon: MonitorCheck,
+      border: 'border-success/45 hover:border-success',
+      dot: 'bg-success',
+      iconClass: 'text-success-foreground',
+    },
+    spare: {
+      icon: Monitor,
+      border: 'border-info/45 hover:border-info',
+      dot: 'bg-info',
+      iconClass: 'text-info',
+    },
+    retired: {
+      icon: MonitorX,
+      border: 'border-base-600 hover:border-base-600',
+      dot: 'bg-base-600',
+      iconClass: 'text-ink-muted',
+    },
+    decommissioned: {
+      icon: MonitorX,
+      border: 'border-danger/45 hover:border-danger',
+      dot: 'bg-danger',
+      iconClass: 'text-danger',
+    },
+  };
+  const current = config[device.lifecycleStatus];
+  const Icon = current.icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${device.deviceCode} — ${DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}`}
+      className={cn(
+        'group relative flex min-h-36 w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 bg-base-800/85 p-3 text-center shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card',
+        current.border,
+        selected && 'ring-2 ring-accent-content ring-offset-2 ring-offset-base-900',
+      )}
+    >
+      <span className={cn('absolute right-2 top-2 h-2.5 w-2.5 rounded-full ring-2 ring-base-800', current.dot)} />
+      <Icon className={cn('h-9 w-9', current.iconClass)} />
+      <div className="mt-1 w-full min-w-0">
+        <p className="truncate text-xs font-semibold text-ink-primary">{device.deviceCode}</p>
+        <p className="mt-0.5 truncate text-[10px] text-ink-muted">{device.hostname ?? DEVICE_TYPE_LABELS[device.deviceType]}</p>
+      </div>
+      {(capacity.ram !== '—' || capacity.storage !== '—') && (
+        <div className="mt-1 flex w-full items-center justify-center gap-2 text-[9px] text-ink-muted">
+          {capacity.ram !== '—' && <span className="inline-flex items-center gap-0.5"><MemoryStick className="h-2.5 w-2.5" />{capacity.ram}</span>}
+          {capacity.storage !== '—' && <span className="inline-flex items-center gap-0.5"><HardDrive className="h-2.5 w-2.5" />{capacity.storage}</span>}
+        </div>
+      )}
+      <span className="mt-1 max-w-full truncate rounded-full border border-base-700 bg-base-900/40 px-2 py-0.5 text-[9px] font-medium text-ink-secondary">
+        {DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}
+      </span>
+    </button>
+  );
+}
+
 function DeviceRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <dt className="text-ink-muted">{label}</dt>
       <dd className="break-words text-right text-ink-secondary">{value}</dd>
+    </div>
+  );
+}
+
+function LifecycleLegend() {
+  const items: Array<{ status: DeviceLifecycleStatus; dot: string }> = [
+    { status: 'in_service', dot: 'bg-success' },
+    { status: 'spare', dot: 'bg-info' },
+    { status: 'retired', dot: 'bg-base-600' },
+    { status: 'decommissioned', dot: 'bg-danger' },
+  ];
+  return (
+    <div className="hidden flex-wrap items-center gap-2 xl:flex">
+      {items.map((item) => (
+        <span key={item.status} className="inline-flex items-center gap-1.5 text-[10px] text-ink-muted">
+          <span className={cn('h-2 w-2 rounded-full', item.dot)} />
+          {DEVICE_LIFECYCLE_LABELS[item.status]}
+        </span>
+      ))}
     </div>
   );
 }

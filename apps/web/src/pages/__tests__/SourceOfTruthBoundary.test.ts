@@ -63,6 +63,9 @@ describe('source-of-truth migration foundation', () => {
     expect(topbarSource).toContain("from '@/services/laboratoryApi'");
     expect(topbarSource).toContain('laboratoryGateway.list()');
     expect(topbarSource).toContain('Semua Laboratorium');
+    expect(topbarSource).toContain('role="listbox"');
+    expect(topbarSource).toContain('aria-haspopup="listbox"');
+    expect(topbarSource).not.toContain('<select');
     expect(topbarSource).toContain("activeLabId !== ''");
     expect(topbarSource).toContain('Notifikasi server belum tersedia');
   });
@@ -80,6 +83,9 @@ describe('source-of-truth migration foundation', () => {
     expect(monitoringSource).toContain('deviceGateway.list');
     expect(monitoringSource).toContain('activeLabId');
     expect(monitoringSource).toContain('Monitoring realtime belum aktif');
+    expect(monitoringSource).toContain('CanonicalPcCard');
+    expect(monitoringSource).toContain('DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]');
+    expect(monitoringSource).toContain('grid-cols-3');
     expect(monitoringSource).toContain('tidak ada simulasi atau mutation browser-local');
     expect(monitoringSource).toContain('S6 akan menambahkan telemetry tanpa mengubah Device/Asset authority');
     expect(appSource).toContain('path="/monitoring" element={<RequireServerPermission permission="devices.view"');
