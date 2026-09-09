@@ -17,6 +17,7 @@ import { downloadCSV, relativeTime, cn } from '@/utils';
 import { assetGateway, ASSET_CONDITIONS, type AssetCondition, type AssetDto } from '@/services/assetApi';
 import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
 import { inventoryGateway, type InventoryItemDto } from '@/services/inventoryApi';
+import { formatInventoryQuantity } from '@/lib/inventoryQuantityPresentation';
 import { incidentGateway, type IncidentListItem } from '@/services/incidentApi';
 import { identityAdminGateway, type IdentityMembershipDto } from '@/services/identityAdminApi';
 import {
@@ -623,7 +624,7 @@ export function WorkOrdersPage() {
           </div>}
 
           <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Spare Part Evidence ({parts.length})</p>
-            {parts.length === 0 ? <p className="text-xs text-ink-muted">Belum ada part issue.</p> : <div className="space-y-1">{parts.map((part)=><div key={part.key} className="flex justify-between rounded-lg border border-base-700/60 p-2 text-sm"><span>{part.name}</span><span className="text-ink-muted">{part.quantity} {part.unit}</span></div>)}</div>}
+            {parts.length === 0 ? <p className="text-xs text-ink-muted">Belum ada part issue.</p> : <div className="space-y-1">{parts.map((part)=><div key={part.key} className="flex justify-between rounded-lg border border-base-700/60 p-2 text-sm"><span>{part.name}</span><span className="text-ink-muted">{formatInventoryQuantity(part.quantity, part.unit)} {part.unit}</span></div>)}</div>}
           </div>
 
           <div><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Timeline</p>
