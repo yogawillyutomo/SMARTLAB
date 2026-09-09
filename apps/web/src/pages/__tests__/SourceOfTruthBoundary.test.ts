@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import appSource from '@/App.tsx?raw';
 import dashboardSource from '@/pages/DashboardPage.tsx?raw';
+import monitoringSource from '@/pages/MonitoringPage.tsx?raw';
 import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
 import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import calendarSource from '@/pages/CalendarPage.tsx?raw';
@@ -64,6 +65,26 @@ describe('source-of-truth migration foundation', () => {
     expect(topbarSource).toContain('Semua Laboratorium');
     expect(topbarSource).toContain("activeLabId !== ''");
     expect(topbarSource).toContain('Notifikasi server belum tersedia');
+  });
+
+  it('cuts Monitoring Perangkat over to canonical Device inventory while keeping S6 telemetry deferred', () => {
+    expect(monitoringSource).not.toContain('useAppData');
+    expect(monitoringSource).not.toContain('services/repositories');
+    expect(monitoringSource).not.toContain('deviceRepository');
+    expect(monitoringSource).not.toContain('simulateHeartbeat');
+    expect(monitoringSource).not.toContain('mutate((d)');
+    expect(monitoringSource).not.toContain('applyDeviceOperationalStatus');
+    expect(monitoringSource).not.toContain('createIncidentFromDevice');
+    expect(monitoringSource).not.toContain('scheduleMaintenance');
+    expect(monitoringSource).toContain("from '@/services/deviceApi'");
+    expect(monitoringSource).toContain('deviceGateway.list');
+    expect(monitoringSource).toContain('activeLabId');
+    expect(monitoringSource).toContain('Monitoring realtime belum aktif');
+    expect(monitoringSource).toContain('tidak ada simulasi atau mutation browser-local');
+    expect(monitoringSource).toContain('S6 akan menambahkan telemetry tanpa mengubah Device/Asset authority');
+    expect(appSource).toContain('path="/monitoring" element={<RequireServerPermission permission="devices.view"');
+    expect(navSource).toContain("to: '/monitoring', label: 'Monitoring Perangkat'");
+    expect(navSource).toContain("serverPermission: 'devices.view'");
   });
 
   it('keeps Academic Master Data server-authoritative and removes local CRUD from the production page', () => {

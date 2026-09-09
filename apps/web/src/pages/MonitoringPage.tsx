@@ -1,291 +1,346 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Monitor,
-  Search,
-  RefreshCw,
+  Activity,
+  Cpu,
+  Eye,
+  FlaskConical,
+  HardDrive,
   LayoutGrid,
   List,
-  Cpu,
   MemoryStick,
-  HardDrive,
-  Thermometer,
-  Clock,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
-  Wrench,
-  Activity,
-  Map,
+  Monitor,
+  RefreshCw,
+  Search,
   Server,
-  Tag,
-  XCircle,
 } from 'lucide-react';
-import { useAppData } from '@/hooks/useAppData';
-import { useUIStore } from '@/stores/uiStore';
-import { deviceRepository } from '@/services/repositories';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Card, CardContent } from '@/components/ui/Card';
-import { Input, Select } from '@/components/ui/Input';
+import { StatCard } from '@/components/common/StatCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Badge, StatusBadge, ConditionBadge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
-import { EmptyState } from '@/components/ui/States';
-import { PCIconCard, PCStatusLegend } from '@/components/common/PCIconCard';
-import { Tabs } from '@/components/ui/Tabs';
-import { useAuthStore } from '@/stores/authStore';
-import { usePermission } from '@/components/common/PermissionGuard';
-import { toast } from '@/stores/toastStore';
-import { cn, relativeTime } from '@/utils';
-import { mutationSucceeded, runHeartbeat } from '@/lib/mutationOutcome';
+import { Input, Select } from '@/components/ui/Input';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
+import { cn } from '@/utils';
+import { useUIStore } from '@/stores/uiStore';
+import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
 import {
-  applyDeviceOperationalStatus,
-  formatOptionalTelemetry,
-  getDesktopPcTechnicalProfile,
-  getDeviceOperatingSystem,
-  getDeviceTechnicalProfileDisplayRows,
-} from '@/domain/managed-device';
-import type { Asset, Device, DeviceStatus, Incident, MaintenanceExecution } from '@/types';
+  DEVICE_LIFECYCLE_STATUSES,
+  DEVICE_TYPES,
+  deviceGateway,
+  type DeviceDto,
+  type DeviceLifecycleStatus,
+  type DeviceType,
+} from '@/services/deviceApi';
+import {
+  DEVICE_LIFECYCLE_LABELS,
+  DEVICE_PROFILE_FIELDS,
+  DEVICE_TYPE_LABELS,
+} from '@/lib/devicePresentation';
 
-const STATUS_FILTERS: (DeviceStatus | 'all')[] = ['all', 'Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
+function lifecycleTone(status: DeviceLifecycleStatus): 'success' | 'info' | 'muted' | 'danger' {
+  if (status === 'in_service') return 'success';
+  if (status === 'spare') return 'info';
+  if (status === 'retired') return 'muted';
+  return 'danger';
+}
+
+function laboratoryLabel(laboratories: readonly LaboratoryDto[], id: string | null): string {
+  if (id === null) return 'Belum ditetapkan';
+  const laboratory = laboratories.find((item) => item.id === id);
+  return laboratory ? `${laboratory.code} · ${laboratory.name}` : 'Laboratorium tidak tersedia';
+}
+
+function formatProfileValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
+  if (Array.isArray(value)) return value.join(', ');
+  if (value === null || value === undefined || value === '') return 'Tidak tersedia';
+  return String(value);
+}
+
+function deviceProfileRows(device: DeviceDto): Array<{ key: string; label: string; value: string }> {
+  const profile = device.technicalProfile as Record<string, unknown>;
+  if (device.deviceType === 'other') {
+    return Object.entries(profile).map(([key, value]) => ({ key, label: key, value: formatProfileValue(value) }));
+  }
+
+  return DEVICE_PROFILE_FIELDS[device.deviceType]
+    .filter((field) => profile[field.key] !== undefined)
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      value: formatProfileValue(profile[field.key]),
+    }));
+}
+
+function deviceHeadline(device: DeviceDto): string {
+  return device.hostname ?? [device.brand, device.model].filter(Boolean).join(' ') || DEVICE_TYPE_LABELS[device.deviceType];
+}
+
+function desktopCapacity(device: DeviceDto): { ram: string; storage: string } {
+  if (device.deviceType !== 'desktop_pc' && device.deviceType !== 'laptop' && device.deviceType !== 'server') {
+    return { ram: '—', storage: '—' };
+  }
+  const profile = device.technicalProfile as Record<string, unknown>;
+  return {
+    ram: typeof profile.ramGB === 'number' ? `${profile.ramGB} GB` : '—',
+    storage: typeof profile.storageGB === 'number' ? `${profile.storageGB} GB` : '—',
+  };
+}
 
 export function MonitoringPage() {
-  const { db, mutate, refresh } = useAppData();
-  const { activeLabId, setActiveLab } = useUIStore();
-  const user = useAuthStore((s) => s.user);
-  const canUpdateMonitoring = usePermission('monitoring', 'update');
-  const canCreateIncident = usePermission('incidents', 'create');
-  const canScheduleMaintenance = usePermission('maintenance', 'create');
-  const [selectedLab, setSelectedLab] = useState(activeLabId);
+  const navigate = useNavigate();
+  const { deviceId } = useParams();
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const [laboratories, setLaboratories] = useState<LaboratoryDto[]>([]);
+  const [devices, setDevices] = useState<DeviceDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<DeviceStatus | 'all'>('all');
-  const [conditionFilter, setConditionFilter] = useState<string>('all');
+  const [deviceType, setDeviceType] = useState<DeviceType | ''>('');
+  const [lifecycleStatus, setLifecycleStatus] = useState<DeviceLifecycleStatus | ''>('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [selected, setSelected] = useState<Device | null>(null);
-  const [simulating, setSimulating] = useState(false);
+  const [selected, setSelected] = useState<DeviceDto | null>(null);
 
-  const labDevices = useMemo(
-    () => db.devices.filter((d) => d.laboratoryId === selectedLab),
-    [db.devices, selectedLab]
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [nextLaboratories, firstPage] = await Promise.all([
+        laboratoryGateway.list(),
+        deviceGateway.list({
+          page: 1,
+          perPage: 100,
+          ...(activeLabId ? { homeLaboratoryId: activeLabId } : {}),
+        }),
+      ]);
+      const remaining = firstPage.meta.lastPage > 1
+        ? await Promise.all(Array.from({ length: firstPage.meta.lastPage - 1 }, (_, index) =>
+            deviceGateway.list({
+              page: index + 2,
+              perPage: 100,
+              ...(activeLabId ? { homeLaboratoryId: activeLabId } : {}),
+            })))
+        : [];
+
+      setLaboratories(nextLaboratories);
+      setDevices([...firstPage.data, ...remaining.flatMap((page) => page.data)]);
+    } catch (loadError) {
+      setLaboratories([]);
+      setDevices([]);
+      setError(loadError instanceof Error ? loadError.message : 'Monitoring perangkat tidak dapat dimuat.');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeLabId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!deviceId) {
+      setSelected(null);
+      return;
+    }
+    const match = devices.find((device) => device.id === deviceId) ?? null;
+    setSelected(match);
+  }, [deviceId, devices]);
+
+  const activeLaboratory = laboratories.find((laboratory) => laboratory.id === activeLabId) ?? null;
+  const scopeLabel = activeLaboratory ? `${activeLaboratory.code} · ${activeLaboratory.name}` : 'Semua Laboratorium';
 
   const filtered = useMemo(() => {
-    return labDevices.filter((d) => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!d.hostname.toLowerCase().includes(q) && !d.positionCode.toLowerCase().includes(q) && !d.assetCode.toLowerCase().includes(q)) return false;
-      }
-      if (statusFilter !== 'all' && d.status !== statusFilter) return false;
-      if (conditionFilter !== 'all') {
-        const asset = db.assets.find((a) => a.assetCode === d.assetCode);
-        if (asset?.condition !== conditionFilter) return false;
-      }
-      return true;
+    const normalizedSearch = search.trim().toLowerCase();
+    return devices.filter((device) => {
+      if (deviceType && device.deviceType !== deviceType) return false;
+      if (lifecycleStatus && device.lifecycleStatus !== lifecycleStatus) return false;
+      if (!normalizedSearch) return true;
+      return [
+        device.deviceCode,
+        device.hostname,
+        device.serialNumber,
+        device.brand,
+        device.model,
+      ].some((value) => value?.toLowerCase().includes(normalizedSearch));
     });
-  }, [labDevices, search, statusFilter, conditionFilter, db.assets]);
+  }, [deviceType, devices, lifecycleStatus, search]);
 
-  const summary = useMemo(() => {
-    const total = labDevices.length;
-    return {
-      total,
-      online: labDevices.filter((d) => d.status === 'Online').length,
-      offline: labDevices.filter((d) => d.status === 'Offline').length,
-      warning: labDevices.filter((d) => d.status === 'Warning').length,
-      critical: labDevices.filter((d) => d.status === 'Critical').length,
-      maintenance: labDevices.filter((d) => d.status === 'Maintenance').length,
-    };
-  }, [labDevices]);
+  const summary = useMemo(() => ({
+    total: devices.length,
+    inService: devices.filter((device) => device.lifecycleStatus === 'in_service').length,
+    spare: devices.filter((device) => device.lifecycleStatus === 'spare').length,
+  }), [devices]);
 
-  async function handleSimulate() {
-    if (!canUpdateMonitoring) return;
-    const outcome = await runHeartbeat(() => deviceRepository.simulateHeartbeat(selectedLab), setSimulating);
-    if (outcome.ok) { refresh(); toast('Heartbeat disimulasikan. Metrik PC online diperbarui.', 'success'); }
-    else { toast(outcome.error instanceof Error ? outcome.error.message : 'Heartbeat tidak dapat disimulasikan.', 'error'); }
+  function openDevice(device: DeviceDto) {
+    setSelected(device);
+    navigate(`/monitoring/${device.id}`);
   }
 
-  function handleStatusChange(device: Device, newStatus: DeviceStatus) {
-    if (!canUpdateMonitoring) return;
-    const changedAt = new Date().toISOString();
-    const result = mutate((d) => {
-      const idx = d.devices.findIndex((x) => x.id === device.id);
-      if (idx >= 0) {
-        d.devices[idx] = applyDeviceOperationalStatus(d.devices[idx], newStatus, changedAt);
-        // sync asset condition
-        const aIdx = d.assets.findIndex((a) => a.assetCode === device.assetCode);
-        if (aIdx >= 0) {
-          d.assets[aIdx].condition = newStatus === 'Critical' ? 'Rusak Berat' : newStatus === 'Warning' ? 'Rusak Ringan' : newStatus === 'Maintenance' ? 'Rusak Sedang' : 'Baik';
-          d.assets[aIdx].status = newStatus === 'Maintenance' ? 'Maintenance' : newStatus === 'Offline' ? 'Rusak' : 'Aktif';
-        }
-      }
-    });
-    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
-    setSelected((s) => (s && s.id === device.id ? applyDeviceOperationalStatus(s, newStatus, changedAt) : s));
-    toast(`Status ${device.hostname} diubah menjadi ${newStatus}`, 'success');
-  }
-
-  function createIncidentFromDevice(device: Device) {
-    if (!canCreateIncident) return;
-    const result = mutate((d) => {
-      const num = `INC-2026-${String(d.incidents.length + 1).padStart(4, '0')}`;
-      d.incidents.unshift({
-        id: `inc-${Date.now()}`,
-        ticketNumber: num,
-        reporterName: user?.name ?? 'User',
-        laboratoryId: device.laboratoryId,
-        assetCode: device.assetCode,
-        date: new Date().toISOString(),
-        category: 'hardware',
-        title: `Kerusakan ${device.hostname}`,
-        description: `Dilaporkan dari halaman monitoring. Status PC: ${device.status}`,
-        impact: 'Menghambat praktikum',
-        priority: device.status === 'Critical' ? 'Kritis' : 'Tinggi',
-        blocksPracticum: device.status === 'Critical',
-        stepsTaken: 'Dicek dari dashboard monitoring',
-        status: 'Dilaporkan',
-        comments: [],
-        timeline: [{ status: 'Dilaporkan', at: new Date().toISOString(), by: user?.name ?? 'User' }],
-      });
-    });
-    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
-    toast(`Tiket kerusakan dibuat untuk ${device.hostname}`, 'success');
+  function closeDevice() {
     setSelected(null);
+    navigate('/monitoring');
   }
-
-  function scheduleMaintenance(device: Device) {
-    if (!canScheduleMaintenance) return;
-    const result = mutate((d) => {
-      d.maintenance.plans.push({
-        id: `mp-${Date.now()}`,
-        name: `Maintenance ${device.hostname}`,
-        assetCategory: 'Komputer',
-        laboratoryId: device.laboratoryId,
-        frequency: 'bulanan',
-        checklist: ['Cek kondisi umum', 'Test koneksi', 'Bersihkan unit'],
-        technician: 'Andi Wijaya',
-        nextSchedule: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-        status: 'active',
-      });
-    });
-    if (!mutationSucceeded(result)) { toast(result.error, 'error'); return; }
-    toast(`Pemeliharaan terjadwal untuk ${device.hostname}`, 'success');
-  }
-
-  const selectedAsset = selected ? db.assets.find((a) => a.assetCode === selected.assetCode) : null;
-  const selectedIncidents = selected ? db.incidents.filter((i) => i.assetCode === selected.assetCode).slice(0, 5) : [];
-  const selectedMaint = selected ? db.maintenance.executions.filter((m) => m.assetCode === selected.assetCode).slice(0, 5) : [];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Monitoring Perangkat"
-        description="Pantau status operasional, konektivitas, dan kondisi teknis perangkat laboratorium."
+        description={`${scopeLabel} · inventaris Device canonical. Telemetri realtime tetap ditahan sampai S6.`}
         icon={<Monitor className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="secondary" size="sm" icon={<Map className="h-4 w-4" />} onClick={() => (window.location.href = `/laboratories/${selectedLab}/layout`)}>
-              Denah
+            {activeLabId && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<FlaskConical className="h-4 w-4" />}
+                onClick={() => navigate(`/laboratories/${activeLabId}/layout`)}
+              >
+                Denah Lab
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" icon={<RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />} onClick={() => void load()} disabled={loading}>
+              Muat Ulang
             </Button>
-            {canUpdateMonitoring && <Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} loading={simulating} onClick={handleSimulate}>
-              Simulasi Heartbeat
-            </Button>}
           </>
         }
       />
 
-      <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>Monitoring operasional masih menggunakan data lokal dan belum terhubung ke inventaris perangkat server.</p>
+      <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm text-info">
+        <p className="font-medium">Monitoring realtime belum aktif.</p>
+        <p className="mt-1 text-xs opacity-90">
+          Halaman ini hanya membaca Device canonical dari API Laravel + PostgreSQL. Heartbeat, CPU/RAM usage, suhu, network status, dan alert realtime akan masuk pada S6 Monitoring; tidak ada simulasi atau mutation browser-local.
+        </p>
       </div>
 
-      {/* Lab selector + summary */}
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <Card>
-          <CardContent className="space-y-4">
-            <Select
-              label="Laboratorium"
-              value={selectedLab}
-              onChange={(e) => {
-                setSelectedLab(e.target.value);
-                setActiveLab(e.target.value);
-              }}
-              options={db.labs.map((l) => ({ value: l.id, label: `${l.name} · ${l.location}` }))}
-            />
-            <div className="grid grid-cols-3 gap-2">
-              <SummaryStat label="Total" value={summary.total} tone="neutral" />
-              <SummaryStat label="Online" value={summary.online} tone="success" />
-              <SummaryStat label="Offline" value={summary.offline} tone="muted" />
-              <SummaryStat label="Warning" value={summary.warning} tone="warning" />
-              <SummaryStat label="Critical" value={summary.critical} tone="danger" />
-              <SummaryStat label="Maint." value={summary.maintenance} tone="orange" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <PCStatusLegend />
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label={activeLaboratory ? 'Perangkat Lab ini' : 'Perangkat Terkelola'} value={summary.total} icon={<Monitor className="h-5 w-5" />} tone="accent" to="/devices" />
+        <StatCard label="Dalam Layanan" value={summary.inService} icon={<Server className="h-5 w-5" />} tone="success" />
+        <StatCard label="Cadangan" value={summary.spare} icon={<Cpu className="h-5 w-5" />} tone="info" />
+        <StatCard label="Telemetri Realtime" value="—" icon={<Activity className="h-5 w-5" />} tone="neutral" />
       </div>
 
-      {/* Filters */}
       <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Perangkat dalam Konteks Aktif</CardTitle>
+            <p className="mt-1 text-xs text-ink-muted">Filter Lab mengikuti selector global di topbar. Filter di bawah hanya mempersempit Device dalam konteks tersebut.</p>
+          </div>
+          <Badge tone="success">Server</Badge>
+        </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="w-full sm:w-56">
-            <Input icon={<Search className="h-4 w-4" />} placeholder="Cari PC, hostname, aset..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="w-full sm:min-w-64 sm:flex-1">
+            <Input
+              label="Pencarian"
+              icon={<Search className="h-4 w-4" />}
+              value={search}
+              placeholder="Kode, hostname, serial, merek, atau model"
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-          <div className="w-full sm:w-44">
-            <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as DeviceStatus | 'all')} options={STATUS_FILTERS.slice(1).map((s) => ({ value: s, label: s }))} placeholder="Semua status" />
+          <div className="w-full sm:w-52">
+            <Select
+              label="Jenis"
+              value={deviceType}
+              placeholder="Semua jenis"
+              options={DEVICE_TYPES.map((value) => ({ value, label: DEVICE_TYPE_LABELS[value] }))}
+              onChange={(event) => setDeviceType(event.target.value as DeviceType | '')}
+            />
           </div>
-          <div className="w-full sm:w-44">
-            <Select label="Kondisi" value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value)} options={['Baik', 'Rusak Ringan', 'Rusak Sedang', 'Rusak Berat', 'Tidak Diketahui'].map((c) => ({ value: c, label: c }))} placeholder="Semua kondisi" />
+          <div className="w-full sm:w-52">
+            <Select
+              label="Lifecycle"
+              value={lifecycleStatus}
+              placeholder="Semua lifecycle"
+              options={DEVICE_LIFECYCLE_STATUSES.map((value) => ({ value, label: DEVICE_LIFECYCLE_LABELS[value] }))}
+              onChange={(event) => setLifecycleStatus(event.target.value as DeviceLifecycleStatus | '')}
+            />
           </div>
           <div className="ml-auto flex items-center gap-1 rounded-lg border border-base-700 p-1">
-          <button onClick={() => setView('grid')} className={cn('rounded-md p-1.5', view === 'grid' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan grid">
+            <button type="button" onClick={() => setView('grid')} className={cn('rounded-md p-1.5', view === 'grid' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan grid">
               <LayoutGrid className="h-4 w-4" />
             </button>
-          <button onClick={() => setView('list')} className={cn('rounded-md p-1.5', view === 'list' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan list">
+            <button type="button" onClick={() => setView('list')} className={cn('rounded-md p-1.5', view === 'list' ? 'bg-accent-primary text-accent-foreground' : 'text-ink-muted hover:text-ink-primary')} aria-label="Tampilan list">
               <List className="h-4 w-4" />
             </button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Devices */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <Card><LoadingState label="Memuat Device canonical..." /></Card>
+      ) : error ? (
+        <Card><ErrorState message={error} onRetry={() => void load()} /></Card>
+      ) : filtered.length === 0 ? (
         <Card>
-          <EmptyState icon={<Monitor className="h-7 w-7" />} title="Tidak ada PC ditemukan" description="Coba ubah filter atau pilih laboratorium lain." />
+          <EmptyState
+            icon={<Monitor className="h-7 w-7" />}
+            title="Tidak ada perangkat pada konteks ini"
+            description={activeLaboratory
+              ? `Tidak ada Device canonical yang cocok di ${activeLaboratory.name}.`
+              : 'Tidak ada Device canonical yang cocok dengan filter saat ini.'}
+          />
         </Card>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
-          {filtered.map((d) => (
-            <PCIconCard key={d.id} device={d} onClick={setSelected} selected={selected?.id === d.id} />
-          ))}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((device) => {
+            const capacity = desktopCapacity(device);
+            return (
+              <Card key={device.id} hover>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <button type="button" className="truncate text-left text-sm font-semibold text-accent-content hover:underline" onClick={() => openDevice(device)}>
+                        {device.deviceCode}
+                      </button>
+                      <p className="mt-1 truncate text-xs text-ink-secondary">{deviceHeadline(device)}</p>
+                    </div>
+                    <Badge tone={lifecycleTone(device.lifecycleStatus)}>{DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}</Badge>
+                  </div>
+
+                  <dl className="space-y-2 rounded-lg bg-base-700/30 p-3 text-xs">
+                    <DeviceRow label="Jenis" value={DEVICE_TYPE_LABELS[device.deviceType]} />
+                    <DeviceRow label="Laboratorium" value={laboratoryLabel(laboratories, device.homeLaboratoryId)} />
+                    <DeviceRow label="RAM" value={capacity.ram} />
+                    <DeviceRow label="Penyimpanan" value={capacity.storage} />
+                  </dl>
+
+                  <div className="flex items-center justify-between border-t border-base-700/60 pt-3">
+                    <span className="text-[11px] text-ink-muted">Realtime: belum S6</span>
+                    <Button variant="secondary" size="sm" icon={<Eye className="h-3.5 w-3.5" />} onClick={() => openDevice(device)}>Detail</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-base-700 text-left text-ink-muted">
-                  <th className="px-4 py-2 font-medium">Posisi</th>
-                  <th className="px-4 py-2 font-medium">Hostname</th>
-                  <th className="px-4 py-2 font-medium">IP</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">CPU</th>
-                  <th className="px-4 py-2 font-medium">RAM</th>
-                  <th className="px-4 py-2 font-medium">Heartbeat</th>
+                <tr className="border-b border-base-700 text-left text-xs text-ink-muted">
+                  <th className="px-4 py-3 font-medium">Kode</th>
+                  <th className="px-4 py-3 font-medium">Hostname / Identitas</th>
+                  <th className="px-4 py-3 font-medium">Jenis</th>
+                  <th className="px-4 py-3 font-medium">Laboratorium</th>
+                  <th className="px-4 py-3 font-medium">Lifecycle</th>
+                  <th className="px-4 py-3 font-medium">Realtime</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((d) => (
-                  <tr key={d.id} onClick={() => setSelected(d)} className="cursor-pointer border-b border-base-700/40 hover:bg-base-700/30">
-                    <td className="px-4 py-2 font-medium text-ink-primary">{d.positionCode}</td>
-                    <td className="px-4 py-2 text-ink-secondary">{d.hostname}</td>
-                    <td className="px-4 py-2 text-ink-muted">{d.ipAddress}</td>
-                    <td className="px-4 py-2"><StatusBadge status={d.status} /></td>
-                    <td className="px-4 py-2 text-ink-secondary">{formatOptionalTelemetry(d.cpuUsage, '%')}</td>
-                    <td className="px-4 py-2 text-ink-secondary">{formatOptionalTelemetry(d.ramUsage, '%')}</td>
-                    <td className="px-4 py-2 text-ink-muted">{d.lastHeartbeat ? relativeTime(d.lastHeartbeat) : 'Tidak tersedia'}</td>
+                {filtered.map((device) => (
+                  <tr key={device.id} className="border-b border-base-700/40 hover:bg-base-700/20">
+                    <td className="px-4 py-3">
+                      <button type="button" className="font-medium text-accent-content hover:underline" onClick={() => openDevice(device)}>{device.deviceCode}</button>
+                    </td>
+                    <td className="px-4 py-3 text-ink-secondary">{deviceHeadline(device)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{DEVICE_TYPE_LABELS[device.deviceType]}</td>
+                    <td className="px-4 py-3 text-ink-muted">{laboratoryLabel(laboratories, device.homeLaboratoryId)}</td>
+                    <td className="px-4 py-3"><Badge tone={lifecycleTone(device.lifecycleStatus)}>{DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}</Badge></td>
+                    <td className="px-4 py-3 text-ink-muted">Belum S6</td>
                   </tr>
                 ))}
               </tbody>
@@ -294,256 +349,85 @@ export function MonitoringPage() {
         </Card>
       )}
 
-      {/* Detail drawer */}
+      {!loading && !error && (
+        <p className="text-xs text-ink-muted">
+          Menampilkan {filtered.length} dari {devices.length} Device pada konteks {scopeLabel}.
+        </p>
+      )}
+
       <Drawer
         open={Boolean(selected)}
-        onClose={() => setSelected(null)}
-        title={selected ? `${selected.hostname} · ${selected.positionCode}` : ''}
-        description={selected ? `Aset ${selected.assetCode} · ${selected.brand} ${selected.model}` : ''}
+        onClose={closeDevice}
+        title={selected ? selected.deviceCode : ''}
+        description={selected ? `${DEVICE_TYPE_LABELS[selected.deviceType]} · ${laboratoryLabel(laboratories, selected.homeLaboratoryId)}` : ''}
         width="max-w-2xl"
       >
         {selected && (
-          <DeviceDetail
-            device={selected}
-            asset={selectedAsset ?? undefined}
-            incidents={selectedIncidents}
-            maintenance={selectedMaint}
-            onStatusChange={(s) => handleStatusChange(selected, s)}
-            onCreateIncident={() => createIncidentFromDevice(selected)}
-            onScheduleMaintenance={() => scheduleMaintenance(selected)}
-            canUpdateStatus={canUpdateMonitoring}
-            canCreateIncident={canCreateIncident}
-            canScheduleMaintenance={canScheduleMaintenance}
-          />
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-base-700 bg-base-800/60 p-4">
+              <div>
+                <p className="font-semibold text-ink-primary">{deviceHeadline(selected)}</p>
+                <p className="mt-1 text-xs text-ink-muted">Device canonical · versi {selected.version}</p>
+              </div>
+              <Badge tone={lifecycleTone(selected.lifecycleStatus)}>{DEVICE_LIFECYCLE_LABELS[selected.lifecycleStatus]}</Badge>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <DetailRow icon={<Server className="h-4 w-4" />} label="Hostname" value={selected.hostname ?? 'Tidak tersedia'} />
+              <DetailRow icon={<Cpu className="h-4 w-4" />} label="Serial" value={selected.serialNumber ?? 'Tidak tersedia'} />
+              <DetailRow icon={<FlaskConical className="h-4 w-4" />} label="Laboratorium" value={laboratoryLabel(laboratories, selected.homeLaboratoryId)} />
+              <DetailRow icon={<Monitor className="h-4 w-4" />} label="Merek / Model" value={[selected.brand, selected.model].filter(Boolean).join(' ') || 'Tidak tersedia'} />
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Profil Teknis</p>
+              {deviceProfileRows(selected).length === 0 ? (
+                <EmptyState title="Profil teknis belum tersedia" className="py-5" />
+              ) : (
+                <div className="space-y-2">
+                  {deviceProfileRows(selected).map((row) => (
+                    <DetailRow
+                      key={row.key}
+                      icon={row.key === 'ramGB' ? <MemoryStick className="h-4 w-4" /> : row.key === 'storageGB' ? <HardDrive className="h-4 w-4" /> : <Cpu className="h-4 w-4" />}
+                      label={row.label}
+                      value={row.value}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-base-700 bg-base-800/40 p-4">
+              <p className="text-sm font-semibold text-ink-primary">Telemetri Realtime</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                CPU usage, RAM usage, disk usage, suhu, network state, uptime, heartbeat, dan alert belum memiliki authority canonical. S6 akan menambahkan telemetry tanpa mengubah Device/Asset authority.
+              </p>
+            </div>
+
+            <Button variant="secondary" size="sm" className="w-full" onClick={() => navigate(`/devices/${selected.id}`)}>
+              Buka Detail Perangkat Canonical
+            </Button>
+          </div>
         )}
       </Drawer>
     </div>
   );
 }
 
-function SummaryStat({ label, value, tone }: { label: string; value: number; tone: 'neutral' | 'success' | 'muted' | 'warning' | 'danger' | 'orange' }) {
-  const toneClass: Record<typeof tone, string> = {
-    neutral: 'text-ink-primary',
-    success: 'text-success-foreground',
-    muted: 'text-ink-muted',
-    warning: 'text-warning-foreground',
-    danger: 'text-danger',
-    orange: 'text-orange-foreground',
-  };
+function DeviceRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-2 text-center">
-      <p className={cn('text-lg font-bold', toneClass[tone])}>{value}</p>
-      <p className="text-[10px] text-ink-muted">{label}</p>
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="break-words text-right text-ink-secondary">{value}</dd>
     </div>
   );
 }
 
-function DeviceDetail({ device, asset, incidents, maintenance, onStatusChange, onCreateIncident, onScheduleMaintenance, canUpdateStatus, canCreateIncident, canScheduleMaintenance }: {
-  device: Device;
-  asset?: Asset;
-  incidents: Incident[];
-  maintenance: MaintenanceExecution[];
-  onStatusChange: (s: DeviceStatus) => void;
-  onCreateIncident: () => void;
-  onScheduleMaintenance: () => void;
-  canUpdateStatus: boolean;
-  canCreateIncident: boolean;
-  canScheduleMaintenance: boolean;
-}) {
-  const [tab, setTab] = useState('overview');
-  const statuses: DeviceStatus[] = ['Online', 'Offline', 'Warning', 'Critical', 'Maintenance', 'Reserved'];
-  const operatingSystem = getDeviceOperatingSystem(device.technicalProfile);
-  const specificationRows = getDeviceTechnicalProfileDisplayRows(device.technicalProfile);
-  const desktopProfile = getDesktopPcTechnicalProfile(device.technicalProfile);
-  const peripherals = desktopProfile?.peripherals;
-
-  const tabs = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'spec', label: 'Spesifikasi' },
-    { key: 'realtime', label: 'Realtime' },
-    { key: 'peripherals', label: 'Periferal' },
-    { key: 'history', label: 'Riwayat' },
-    { key: 'actions', label: 'Quick Actions' },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-xl border border-base-700 bg-base-800/60 p-4">
-        <div className={cn('flex h-14 w-14 items-center justify-center rounded-xl', device.status === 'Online' ? 'bg-success/15 text-success-foreground' : device.status === 'Critical' ? 'bg-danger/15 text-danger' : device.status === 'Maintenance' ? 'bg-orange/15 text-orange-foreground' : 'bg-base-700 text-ink-muted')}>
-          <Monitor className="h-7 w-7" />
-        </div>
-        <div className="flex-1">
-          <p className="font-semibold text-ink-primary">{device.hostname}</p>
-          <p className="text-xs text-ink-muted">{device.brand} {device.model}{operatingSystem ? ` · ${operatingSystem}` : ''}</p>
-        </div>
-        <StatusBadge status={device.status} />
-      </div>
-
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
-
-      {tab === 'overview' && (
-        <div className="space-y-3">
-          <DetailRow icon={<Tag className="h-4 w-4" />} label="Kode Aset" value={device.assetCode} />
-          <DetailRow icon={<Map className="h-4 w-4" />} label="Posisi" value={device.positionCode} />
-          <DetailRow icon={<Server className="h-4 w-4" />} label="Hostname" value={device.hostname} />
-          <DetailRow icon={<Tag className="h-4 w-4" />} label="IP Address" value={device.ipAddress} />
-          <DetailRow icon={<Tag className="h-4 w-4" />} label="MAC Address" value={device.macAddress} />
-          <DetailRow icon={<Tag className="h-4 w-4" />} label="Serial Number" value={device.serialNumber} />
-          <DetailRow icon={<Tag className="h-4 w-4" />} label="Merek / Model" value={`${device.brand} ${device.model}`} />
-          <DetailRow icon={<Clock className="h-4 w-4" />} label="Tahun Perolehan" value={String(device.yearAcquired)} />
-          {asset && (
-            <>
-              <DetailRow icon={<Activity className="h-4 w-4" />} label="Kondisi" value={<ConditionBadge condition={asset.condition} />} />
-              <DetailRow icon={<Tag className="h-4 w-4" />} label="Harga" value={new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(asset.price)} />
-            </>
-          )}
-        </div>
-      )}
-
-      {tab === 'spec' && (
-        <div className="space-y-3">
-          {specificationRows.length === 0
-            ? <EmptyState title="Spesifikasi teknis belum tersedia" className="py-4" />
-            : specificationRows.map((row) => <DetailRow key={row.key} icon={technicalProfileIcon(row.key)} label={row.label} value={row.value} />)}
-        </div>
-      )}
-
-      {tab === 'realtime' && (
-        <div className="space-y-3">
-          <MetricBar icon={<Cpu className="h-4 w-4" />} label="CPU Usage" value={device.cpuUsage} max={100} unit="%" tone={metricTone(device.cpuUsage, 60, 80)} />
-          <MetricBar icon={<MemoryStick className="h-4 w-4" />} label="RAM Usage" value={device.ramUsage} max={100} unit="%" tone={metricTone(device.ramUsage, 60, 80)} />
-          <MetricBar icon={<HardDrive className="h-4 w-4" />} label="Disk Usage" value={device.diskUsage} max={100} unit="%" tone={metricTone(device.diskUsage, 70, 85)} />
-          <MetricBar icon={<Thermometer className="h-4 w-4" />} label="Suhu" value={device.temperature} max={100} unit="°C" tone={metricTone(device.temperature, 65, 80)} />
-          <DetailRow icon={<Clock className="h-4 w-4" />} label="Uptime" value={formatOptionalTelemetry(device.uptimeHours, ' jam')} />
-          <DetailRow icon={device.network === 'Connected' ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />} label="Network" value={device.network ?? 'Tidak tersedia'} />
-          <DetailRow icon={<Clock className="h-4 w-4" />} label="Last Heartbeat" value={device.lastHeartbeat ? relativeTime(device.lastHeartbeat) : 'Tidak tersedia'} />
-        </div>
-      )}
-
-      {tab === 'peripherals' && (
-        peripherals ? <div className="grid grid-cols-2 gap-2">
-          {Object.entries(peripherals).map(([key, val]) => (
-            <div key={key} className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-800/40 p-3">
-              <span className="text-sm capitalize text-ink-secondary">{key}</span>
-              <Badge tone={val ? 'success' : 'danger'}>{val ? 'Tersedia' : 'Tidak'}</Badge>
-            </div>
-          ))}
-        </div> : <EmptyState title="Data periferal tidak tersedia untuk perangkat ini" className="py-4" />
-      )}
-
-      {tab === 'history' && (
-        <div className="space-y-4">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Incident</p>
-            {incidents.length === 0 ? <EmptyState title="Belum ada incident" className="py-4" /> : (
-              <div className="space-y-2">
-                {incidents.map((i) => (
-                  <div key={i.id} className="rounded-lg border border-base-700/60 bg-base-800/40 p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-ink-primary">{i.ticketNumber}</p>
-                      <StatusBadge status={i.status} />
-                    </div>
-                    <p className="mt-1 text-xs text-ink-muted">{i.title}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Maintenance</p>
-            {maintenance.length === 0 ? <EmptyState title="Belum ada maintenance" className="py-4" /> : (
-              <div className="space-y-2">
-                {maintenance.map((m) => (
-                  <div key={m.id} className="rounded-lg border border-base-700/60 bg-base-800/40 p-3">
-                    <p className="text-sm font-medium text-ink-primary">{m.date}</p>
-                    <p className="mt-1 text-xs text-ink-muted">{m.findings || 'Tidak ada temuan'}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === 'actions' && (
-        <div className="space-y-3">
-          {canUpdateStatus && <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">Ubah Status</p>
-            <div className="grid grid-cols-3 gap-2">
-              {statuses.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => onStatusChange(s)}
-                  className={cn(
-                    'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                    device.status === s ? 'border-accent-content bg-accent-primary/15 text-accent-content' : 'border-base-700 text-ink-secondary hover:bg-base-700/40'
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>}
-          <div className="grid gap-2 pt-2">
-            {canCreateIncident && <Button variant="danger" size="sm" icon={<AlertTriangle className="h-4 w-4" />} onClick={onCreateIncident} className="w-full justify-start">
-              Buat Tiket Kerusakan
-            </Button>}
-            {canScheduleMaintenance && <Button variant="warning" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={onScheduleMaintenance} className="w-full justify-start">
-              Jadwalkan Pemeliharaan
-            </Button>}
-            {canUpdateStatus && <Button variant="secondary" size="sm" icon={<XCircle className="h-4 w-4" />} onClick={() => onStatusChange('Offline')} className="w-full justify-start">
-              Tandai Offline
-            </Button>}
-            {canUpdateStatus && <Button variant="secondary" size="sm" icon={<Wrench className="h-4 w-4" />} onClick={() => onStatusChange('Maintenance')} className="w-full justify-start">
-              Mode Maintenance
-            </Button>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-base-700/60 bg-base-800/40 px-3 py-2">
-      <span className="flex items-center gap-2 text-xs text-ink-muted">
-        {icon}
-        {label}
-      </span>
-      <span className="text-sm font-medium text-ink-primary text-right">{value}</span>
-    </div>
-  );
-}
-
-function technicalProfileIcon(key: string): React.ReactNode {
-  if (key === 'processor' || key === 'cpuSockets' || key === 'cpuCores') return <Cpu className="h-4 w-4" />;
-  if (key === 'ramGB') return <MemoryStick className="h-4 w-4" />;
-  if (key === 'storageGB') return <HardDrive className="h-4 w-4" />;
-  if (key === 'gpu') return <Activity className="h-4 w-4" />;
-  if (key === 'monitor' || key === 'display') return <Monitor className="h-4 w-4" />;
-  if (key === 'os') return <Server className="h-4 w-4" />;
-  return <Tag className="h-4 w-4" />;
-}
-
-function metricTone(value: number | undefined, warning: number, danger: number): 'success' | 'warning' | 'danger' {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'success';
-  return value > danger ? 'danger' : value > warning ? 'warning' : 'success';
-}
-
-function MetricBar({ icon, label, value, max, unit, tone }: { icon: React.ReactNode; label: string; value?: number; max: number; unit: string; tone: 'success' | 'warning' | 'danger' }) {
-  const available = typeof value === 'number' && Number.isFinite(value);
-  const pct = available ? Math.min(100, (value / max) * 100) : 0;
-  const color = tone === 'success' ? 'bg-success' : tone === 'warning' ? 'bg-warning' : 'bg-danger';
-  return (
-    <div className="rounded-lg border border-base-700/60 bg-base-800/40 p-3">
-      <div className="flex items-center justify-between text-xs">
-        <span className="flex items-center gap-2 text-ink-muted">{icon}{label}</span>
-        <span className="font-semibold text-ink-primary">{formatOptionalTelemetry(value, unit)}</span>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-base-700">
-        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
-      </div>
+      <span className="flex items-center gap-2 text-xs text-ink-muted">{icon}{label}</span>
+      <span className="text-right text-sm font-medium text-ink-primary">{value}</span>
     </div>
   );
 }
