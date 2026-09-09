@@ -30,6 +30,13 @@ describe('source-of-truth migration foundation', () => {
     expect(dashboardSource).toContain("from '@/services/laboratoryApi'");
     expect(dashboardSource).toContain("from '@/services/deviceApi'");
     expect(dashboardSource).toContain("from '@/services/incidentApi'");
+    expect(dashboardSource).toContain("from '@/services/workOrderApi'");
+    expect(dashboardSource).toContain('workOrderGateway.listAll()');
+    expect(dashboardSource).toContain('Work Order Saya');
+    expect(dashboardSource).toContain('Work Order Aktif');
+    expect(dashboardSource).toContain('workOrder.assigneeMembershipId === user?.membership.id');
+    expect(dashboardSource).toContain('to={`/work-orders/${workOrder.id}`}');
+    expect(dashboardSource).not.toContain("  'Tugas Perbaikan',");
     expect(dashboardSource).toContain('Dashboard tidak lagi mengambil nilai seed/browser');
   });
 
