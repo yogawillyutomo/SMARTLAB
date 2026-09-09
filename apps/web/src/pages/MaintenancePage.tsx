@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, Pencil, Play, Plus, ShieldCheck, StopCircle, Wrench } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -117,6 +118,7 @@ function defaultPlanForm(): PlanForm {
 
 export function MaintenancePage() {
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const canViewAssets = hasServerPermission(user, 'assets.view');
   const canCreatePlan = hasServerPermission(user, 'maintenance.create-plan') && canViewAssets;
   const canUpdatePlan = hasServerPermission(user, 'maintenance.update-plan');
@@ -150,7 +152,9 @@ export function MaintenancePage() {
       const [nextPlans, nextExecutions, nextAssets, nextStock] = await Promise.all([
         maintenanceGateway.listAllPlans(),
         maintenanceGateway.listAllExecutions(),
-        canViewAssets ? assetGateway.listAll() : Promise.resolve([]),
+        canViewAssets
+          ? assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})
+          : Promise.resolve([]),
         canConsumeStock ? inventoryGateway.listAllItems() : Promise.resolve([]),
       ]);
       setPlans(nextPlans);
@@ -162,20 +166,29 @@ export function MaintenancePage() {
     } finally {
       setLoading(false);
     }
-  }, [canConsumeStock, canViewAssets]);
+  }, [activeLabId, canConsumeStock, canViewAssets]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.lifecycleStatus === 'active'), [assets]);
+  const scopedAssetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
+  const scopedPlans = useMemo(
+    () => activeLabId ? plans.filter((plan) => scopedAssetIds.has(plan.assetId)) : plans,
+    [activeLabId, plans, scopedAssetIds],
+  );
+  const scopedExecutions = useMemo(
+    () => activeLabId ? executions.filter((execution) => scopedAssetIds.has(execution.assetId)) : executions,
+    [activeLabId, executions, scopedAssetIds],
+  );
   const stats = useMemo(() => ({
-    overdue: plans.filter((plan) => plan.isOverdue).length,
-    activePlans: plans.filter((plan) => plan.status === 'active').length,
-    scheduled: executions.filter((execution) => execution.status === 'scheduled').length,
-    inProgress: executions.filter((execution) => execution.status === 'in_progress').length,
-    completed: executions.filter((execution) => execution.status === 'completed').length,
-  }), [executions, plans]);
+    overdue: scopedPlans.filter((plan) => plan.isOverdue).length,
+    activePlans: scopedPlans.filter((plan) => plan.status === 'active').length,
+    scheduled: scopedExecutions.filter((execution) => execution.status === 'scheduled').length,
+    inProgress: scopedExecutions.filter((execution) => execution.status === 'in_progress').length,
+    completed: scopedExecutions.filter((execution) => execution.status === 'completed').length,
+  }), [scopedExecutions, scopedPlans]);
 
   function openCreatePlan() {
     setEditingPlan(null);
@@ -390,7 +403,7 @@ export function MaintenancePage() {
   }
 
   function exportCsv() {
-    downloadCSV('preventive-maintenance-canonical.csv', plans.map((plan) => ({
+    downloadCSV('preventive-maintenance-canonical.csv', scopedPlans.map((plan) => ({
       Plan: plan.planCode,
       Asset: `${plan.assetCodeSnapshot} · ${plan.assetNameSnapshot}`,
       Nama: plan.name,
@@ -408,7 +421,7 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Pemeliharaan Berkala"
-        description="Preventive Maintenance exact-Asset dengan Campaign/Batch orchestration per Lab. Custody, kondisi Asset, dan spare part tetap memakai authority canonical masing-masing."
+        description="Preventive Maintenance exact-Asset mengikuti konteks Lab global di topbar. Custody, kondisi Asset, dan spare part tetap pada authority canonical masing-masing."
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
@@ -438,7 +451,7 @@ export function MaintenancePage() {
 
       {tab === 'plans' ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {plans.length === 0 ? <Card className="lg:col-span-2"><EmptyState title="Belum ada rencana Preventive Maintenance" /></Card> : plans.map((plan) => (
+          {scopedPlans.length === 0 ? <Card className="lg:col-span-2"><EmptyState title="Belum ada rencana Preventive Maintenance pada konteks ini" /></Card> : scopedPlans.map((plan) => (
             <Card key={plan.id}>
               <CardContent className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
@@ -476,7 +489,7 @@ export function MaintenancePage() {
         </div>
       ) : tab === 'executions' ? (
         <Card>
-          {executions.length === 0 ? <EmptyState title="Belum ada execution Preventive Maintenance" /> : (
+          {scopedExecutions.length === 0 ? <EmptyState title="Belum ada execution Preventive Maintenance pada konteks ini" /> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-base-700 text-left text-ink-muted">
@@ -490,7 +503,7 @@ export function MaintenancePage() {
                   <th className="px-4 py-3 font-medium">Aksi</th>
                 </tr></thead>
                 <tbody>
-                  {executions.map((execution) => (
+                  {scopedExecutions.map((execution) => (
                     <tr key={execution.id} className="border-b border-base-700/40">
                       <td className="px-4 py-3 font-medium text-ink-primary">{execution.executionNumber}</td>
                       <td className="px-4 py-3 text-ink-secondary">{execution.assetCodeSnapshot}<div className="text-xs text-ink-muted">{execution.assetNameSnapshot}</div></td>
@@ -522,7 +535,7 @@ export function MaintenancePage() {
           )}
         </Card>
       ) : (
-        <MaintenanceCampaignPanel onChanged={load} />
+        <MaintenanceCampaignPanel activeLabId={activeLabId} onChanged={load} />
       )}
 
       <FormDialog open={planOpen} onClose={() => setPlanOpen(false)} title={editingPlan ? 'Edit Rencana Preventive Maintenance' : 'Rencana Preventive Maintenance Baru'} onSubmit={() => void savePlan()} size="lg">

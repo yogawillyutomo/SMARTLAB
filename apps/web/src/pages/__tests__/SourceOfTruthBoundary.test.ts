@@ -224,6 +224,10 @@ describe('source-of-truth migration foundation', () => {
     expect(workOrdersSource).toContain('workOrder.laboratoryId === activeLabId');
     expect(workOrdersSource).toContain('data={scopedWorkOrders}');
     expect(workOrdersSource).toContain('scopedAssets.filter');
+    expect(maintenanceSource).toContain("from '@/stores/uiStore'");
+    expect(maintenanceSource).toContain('scopedAssetIds.has(plan.assetId)');
+    expect(maintenanceSource).toContain('scopedAssetIds.has(execution.assetId)');
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.listAllCampaigns(activeLabId || undefined)');
   });
 
   it('cuts fixed Assets over to canonical S4.2 API authority', () => {

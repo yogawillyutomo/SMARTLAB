@@ -72,10 +72,11 @@ function errorMessage(error: unknown): string {
 }
 
 interface MaintenanceCampaignPanelProps {
+  activeLabId: string;
   onChanged?: () => Promise<void> | void;
 }
 
-export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanelProps) {
+export function MaintenanceCampaignPanel({ activeLabId, onChanged }: MaintenanceCampaignPanelProps) {
   const user = useAuthStore((state) => state.user);
   const canCreate = hasServerPermission(user, 'maintenance.create-plan')
     && hasServerPermission(user, 'assets.view')
@@ -99,9 +100,11 @@ export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanel
     setLoadError('');
     try {
       const [nextCampaigns, nextLabs, nextAssets] = await Promise.all([
-        maintenanceGateway.listAllCampaigns(),
+        maintenanceGateway.listAllCampaigns(activeLabId || undefined),
         canCreate ? laboratoryGateway.list() : Promise.resolve([]),
-        canCreate ? assetGateway.listAll() : Promise.resolve([]),
+        canCreate
+          ? assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})
+          : Promise.resolve([]),
       ]);
       setCampaigns(nextCampaigns);
       setLaboratories(nextLabs);
@@ -111,16 +114,20 @@ export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanel
     } finally {
       setLoading(false);
     }
-  }, [canCreate]);
+  }, [activeLabId, canCreate]);
 
   useEffect(() => { void load(); }, [load]);
 
+  const contextLaboratories = useMemo(
+    () => activeLabId ? laboratories.filter((laboratory) => laboratory.id === activeLabId) : laboratories,
+    [activeLabId, laboratories],
+  );
   const selectedLabAssets = useMemo(() => assets
     .filter((asset) => asset.lifecycleStatus === 'active' && asset.homeLaboratoryId === form.laboratoryId)
     .sort((left, right) => left.assetCode.localeCompare(right.assetCode)), [assets, form.laboratoryId]);
 
   function openCreate() {
-    const lab = laboratories.find((item) => item.status === 'active');
+    const lab = contextLaboratories.find((item) => item.status === 'active');
     const eligible = lab
       ? assets.filter((asset) => asset.lifecycleStatus === 'active' && asset.homeLaboratoryId === lab.id)
       : [];
@@ -350,7 +357,7 @@ export function MaintenanceCampaignPanel({ onChanged }: MaintenanceCampaignPanel
             value={form.laboratoryId}
             onChange={(event) => selectLaboratory(event.target.value)}
             placeholder="Pilih Lab"
-            options={laboratories.filter((lab) => lab.status === 'active').map((lab) => ({ value: lab.id, label: `${lab.code} · ${lab.name}` }))}
+            options={contextLaboratories.filter((lab) => lab.status === 'active').map((lab) => ({ value: lab.id, label: `${lab.code} · ${lab.name}` }))}
           />
           <Input label="Nama Campaign" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           <Select
