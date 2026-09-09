@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
-**Snapshot date:** 2026-09-07  
-**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, closed S4 on merged PR #83, and canonical S5.1–S5.3 Work Order backend on merged PRs #85–#87 / `main@5835b10a116c0e9fba0319ce697cfd608824052a`; S5.4 frontend cutover is candidate PR #88 with manual browser UAT still gated
+**Snapshot date:** 2026-09-10  
+**Baseline:** `main@5835b10a116c0e9fba0319ce697cfd608824052a` with closed S4 and merged S5.1–S5.3 backend; stacked merge candidates are PR #88 (`c9947de27ffebd99d1c4f634086ff18d1163771f`) and PR #89 (`ddc2ffff1a35639f64eb815731507abd338a52b1`). Candidate runtime is server-authoritative for Work Orders, Maintenance Campaign orchestration, Dashboard/Monitoring Device inventory, and global Laboratory context, but the stack remains unmerged and final impacted browser UAT is still gated.
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -40,19 +40,33 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | ActivityReport attachments | immutable private-file metadata with SHA-256, draft-only upload, ActivityReport version/audit integration, authorized download, and no exposed storage key |
 | ActivityReport offline draft sync | account-scoped seven-day browser working copy + server receipt ledger with stable client mutation IDs, canonical payload hashes, explicit stale-version conflicts, idempotent replay, and three-way rebase UX; server remains authoritative |
 | Corrective Work Order backend | **S5.1–S5.3 merged / canonical:** exact-Asset WorkOrder + append-oriented history, corrective custody, Loan/Preventive-Maintenance/WorkOrder exclusion, sourced immutable Inventory part usage, Asset-authority verification, `in_repair` projection, and OpenAPI 0.32; latest merge PR #87 / `5835b10a` with post-merge CI #332 green |
-| Dashboard supported metrics | Laboratory, Device, and Incident APIs |
+| Dashboard supported metrics | Candidate PR #89: Laboratory, Device, Incident, and active Work Order APIs with a global Laboratory context; no fabricated realtime telemetry |
+| Monitoring Device inventory | Candidate PR #89: canonical Device API inventory, lifecycle, and technical profile; heartbeat/CPU/RAM/disk/network telemetry remains deferred to S6 |
+| Global Laboratory context | Candidate PR #89: topbar context supports all Laboratories or one exact Laboratory and propagates through Dashboard, Monitoring, Device, Asset, Incident, Work Order, Maintenance/Campaign, Schedule, Reservation, Session/ActivityReport, Operational Calendar, and Loan presentation/query boundaries; school-scoped Calendar events remain visible in Laboratory context |
+
+## Candidate / merge-gated
+
+These areas are implemented on the stacked PR #88 → PR #89 candidate but are **not yet merged to main**:
+
+- canonical `/work-orders` frontend and server permission guards;
+- Maintenance Campaign / Batch orchestration over exact-Asset Preventive Maintenance authority;
+- Work Order history contract normalization and quantity presentation hardening;
+- Dashboard Work Order visibility;
+- themed global Laboratory selector and cross-page Laboratory context propagation;
+- canonical Monitoring Device inventory view with S6 telemetry explicitly deferred.
+
+Exact candidate head `ddc2ffff1a35639f64eb815731507abd338a52b1` has Vercel SUCCESS and operator local web parity PASS: typecheck, SourceOfTruthBoundary 23/23, Asset+Maintenance service tests 17/17, and production build. GitHub Actions has no run for this exact stacked head, so full CI PASS must not be claimed.
 
 ## Transitional
 
-These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
+These routes/domains still rely wholly or materially on browser-local repositories, compatibility state, or incomplete server slices.
 
-- monitoring telemetry;
-- work orders frontend — backend S5.1–S5.3 is merged on `main@5835b10a`; PR #88 cuts `/work-orders` to canonical APIs and server permissions, but manual storage-cleared browser UAT remains required before the route is declared closed;
+- monitoring **telemetry** only; Device inventory itself is canonical on the candidate stack;
 - notifications;
 - reports/analytics;
 - audit-log query UI;
 - tenant settings;
-- some global search/topbar/cross-domain summaries.
+- some global search/cross-domain summaries.
 
 `AppDataProvider` remains a transitional application-lifecycle dependency while these domains exist. Its presence must not be interpreted as authority for already-canonical data.
 
@@ -64,11 +78,13 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 2. S5.1 is locked on merged PR #85 / `8c7f84ee`; preserve [ADR-003](./ADR-003-corrective-work-order-boundary.md) and the [Work Order contract](./work-order-domain-contract.md).
 3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
 4. S5.3 is complete on merged PR #87 / `main@5835b10a`: preserve least-privilege `work-orders.consume-stock`, immutable sourced WorkOrderPartUsage, idempotent issue, Asset-authority verification, drift guards, atomic custody release, contention proofs, and OpenAPI 0.32.
-5. Complete S5.4 PR #88: canonical `/work-orders` frontend + server permission guards are implemented and automated CI is green; execute and record the storage-cleared manual browser matrix in `docs/reviews/s5.4-work-order-uat.md` before review/merge and S5 closure.
-6. Track Laboratory-scale Maintenance Campaign / Batch as a future Preventive Maintenance orchestration UX; it must not create ambiguous multi-Asset execution authority or implicitly block the Laboratory.
-7. Phase S6: PC monitoring telemetry.
-8. Phase S7: Notifications, Reporting, final Dashboard/global search.
-9. Phase S8: remove remaining browser-local business persistence and compatibility layers after all consumers migrate.
+5. Finish the stacked S5 closure candidate: PR #88 remains the canonical Work Order frontend base; PR #89 adds Maintenance Campaign, Work Order UAT-driven hardening, Dashboard/Monitoring cleanup, and Global Laboratory Context. Do not merge either until final impacted browser UAT and exact-head regression evidence are recorded.
+6. After browser context UAT, canonically cancel temporary `WO-2026-000002` rather than deleting/resetting UAT data; preserve its audit trail.
+7. Merge order, when explicitly authorized, is PR #88 first and PR #89 second after retarget/reverification. Post-merge web/API regression remains part of S5 closure.
+8. After S5 closure, implement S5.6 QR Asset Identity & Label Batch before S6.
+9. Phase S6: PC monitoring telemetry.
+10. Phase S7: Notifications, Reporting, final cross-domain search/summary hardening.
+11. Phase S8: remove remaining browser-local compatibility layers after all consumers migrate.
 
 ## Reserved / placeholder
 
