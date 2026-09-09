@@ -141,6 +141,9 @@ describe('source-of-truth migration foundation', () => {
     expect(calendarSource).not.toContain('mutate((d)');
     expect(calendarSource).toContain("from '@/services/calendarApi'");
     expect(calendarSource).toContain('calendarEventGateway.list');
+    expect(calendarSource).toContain("from '@/stores/uiStore'");
+    expect(calendarSource).toContain("event.scope==='school'||event.laboratory?.id===activeLabId");
+    expect(calendarSource).toContain("scope:'laboratory',laboratoryId:activeLabId");
     expect(appSource).toContain('RequireServerPermission permission="calendar.view"');
     expect(navSource).toContain("calendar: 'calendar.view'");
     expect(navSource).toContain("serverPermission: 'calendar.view'");
@@ -182,6 +185,9 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).toContain("from '@/services/laboratorySessionApi'");
     expect(sessionsSource).toContain("from '@/services/activityReportApi'");
     expect(sessionsSource).toContain('laboratorySessionGateway.sources');
+    expect(sessionsSource).toContain("from '@/stores/uiStore'");
+    expect(sessionsSource).toContain('laboratoryId: activeLabId');
+    expect(sessionsSource).toContain('activityReportGateway.listAll');
     expect(sessionsSource).toContain('activityReportGateway');
     expect(sessionsSource).toContain('Tidak ada lagi Session/Journal browser-local');
     expect(journalsSource).toContain("'/sessions?tab=history'");

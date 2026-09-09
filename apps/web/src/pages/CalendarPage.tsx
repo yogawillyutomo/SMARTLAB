@@ -13,6 +13,7 @@ import { toast } from '@/stores/toastStore';
 import { downloadCSV, cn } from '@/utils';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
 import {
   calendarEventGateway,
@@ -67,6 +68,7 @@ function issueMessage(error:unknown):string{
 
 export function CalendarPage(){
   const user=useAuthStore((s)=>s.user);
+  const activeLabId=useUIStore((s)=>s.activeLabId);
   const canCreate=hasServerPermission(user,'calendar.create');
   const canUpdate=hasServerPermission(user,'calendar.update');
   const canCancel=hasServerPermission(user,'calendar.cancel');
@@ -105,10 +107,12 @@ export function CalendarPage(){
 
   useEffect(()=>{void load();},[load]);
 
+  const contextLabs=useMemo(()=>activeLabId?labs.filter((lab)=>lab.id===activeLabId):labs,[activeLabId,labs]);
   const filtered=useMemo(()=>events.filter((event)=>
+    (!activeLabId||event.scope==='school'||event.laboratory?.id===activeLabId)&&
     (filterCat==='all'||event.category===filterCat)&&
     (filterEffect==='all'||event.availabilityEffect===filterEffect)
-  ),[events,filterCat,filterEffect]);
+  ),[activeLabId,events,filterCat,filterEffect]);
 
   const monthData=useMemo(()=>{
     const year=current.getFullYear(),month=current.getMonth();
@@ -121,7 +125,13 @@ export function CalendarPage(){
   },[current]);
 
   function eventsOnDate(key:string){return filtered.filter((e)=>e.startsOn<=key&&e.endsOn>=key);}
-  function openCreate(key?:string){if(!canCreate)return;setEditing(null);setForm(defaultForm(key));setOpen(true);}
+  function openCreate(key?:string){
+    if(!canCreate)return;
+    setEditing(null);
+    const next=defaultForm(key);
+    setForm(activeLabId?{...next,scope:'laboratory',laboratoryId:activeLabId}:next);
+    setOpen(true);
+  }
   function openEdit(event:CalendarEventDto){if(!canUpdate)return;setEditing(event);setForm(inputFromEvent(event));setOpen(true);}
 
   async function save(){
@@ -161,7 +171,7 @@ export function CalendarPage(){
   const weekDates=useMemo(()=>Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d;}),[weekStart]);
 
   return <div className="space-y-6">
-    <PageHeader title="Kalender Operasional" description="Event sekolah dan closure yang menjadi input availability tanpa mengubah jadwal TESSELA." icon={<CalendarRange className="h-5 w-5"/>}
+    <PageHeader title="Kalender Operasional" description="Event sekolah selalu terlihat; event Lab mengikuti konteks global topbar. Availability tetap canonical tanpa mengubah jadwal TESSELA." icon={<CalendarRange className="h-5 w-5"/>}
       actions={<>
         {canExport&&<Button variant="secondary" size="sm" icon={<Download className="h-4 w-4"/>} onClick={exportCSV}>Export</Button>}
         {canCreate&&<Button size="sm" icon={<Plus className="h-4 w-4"/>} onClick={()=>openCreate()}>Tambah Event</Button>}
@@ -224,8 +234,8 @@ export function CalendarPage(){
     <FormDialog open={open} onClose={()=>setOpen(false)} title={editing?'Edit Event':'Tambah Event'} onSubmit={()=>void save()} size="lg">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><Input label="Judul" value={form.title} onChange={(e)=>setForm({...form,title:e.target.value})}/></div>
-        <Select label="Scope" value={form.scope} onChange={(e)=>{const scope=e.target.value as CalendarScope;setForm({...form,scope,laboratoryId:scope==='school'?null:(form.laboratoryId??labs[0]?.id??null)});}} options={[{value:'school',label:'Seluruh sekolah'},{value:'laboratory',label:'Laboratorium tertentu'}]}/>
-        {form.scope==='laboratory'?<Select label="Laboratorium" value={form.laboratoryId??''} onChange={(e)=>setForm({...form,laboratoryId:e.target.value})} options={labs.map((lab)=>({value:lab.id,label:`${lab.code} · ${lab.name}`}))}/>:<div/>}
+        <Select label="Scope" value={form.scope} onChange={(e)=>{const scope=e.target.value as CalendarScope;setForm({...form,scope,laboratoryId:scope==='school'?null:(form.laboratoryId??contextLabs[0]?.id??null)});}} options={[{value:'school',label:'Seluruh sekolah'},{value:'laboratory',label:'Laboratorium tertentu'}]}/>
+        {form.scope==='laboratory'?<Select label="Laboratorium" value={form.laboratoryId??''} onChange={(e)=>setForm({...form,laboratoryId:e.target.value})} options={contextLabs.map((lab)=>({value:lab.id,label:`${lab.code} · ${lab.name}`}))}/>:<div/>}
         <Select label="Kategori" value={form.category} onChange={(e)=>setForm({...form,category:e.target.value as CalendarCategory})} options={CATEGORIES.map((c)=>({value:c.value,label:c.label}))}/>
         <Select label="Dampak ke Availability" value={form.availabilityEffect} onChange={(e)=>setForm({...form,availabilityEffect:e.target.value as CalendarAvailabilityEffect})} options={[{value:'informational',label:'Informasi saja'},{value:'blocked',label:'Blokir penggunaan laboratorium'}]}/>
         <Input label="Tanggal Mulai" type="date" value={form.startsOn} onChange={(e)=>setForm({...form,startsOn:e.target.value,endsOn:form.allDay?form.endsOn:e.target.value})}/>
