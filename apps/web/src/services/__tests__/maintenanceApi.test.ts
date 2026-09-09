@@ -180,7 +180,7 @@ describe('Preventive Maintenance API contract', () => {
       post: post as ApiClient['post'],
     }));
 
-    await gateway.listAllCampaigns();
+    await gateway.listAllCampaigns(LAB_ID);
     await gateway.showCampaign(CAMPAIGN_ID);
     await gateway.campaignHistory(CAMPAIGN_ID);
     await gateway.createCampaign({
@@ -199,6 +199,7 @@ describe('Preventive Maintenance API contract', () => {
       assetIds: [ASSET_ID],
     });
 
+    expect(get).toHaveBeenCalledWith(`/maintenance-campaigns?perPage=100&page=1&laboratoryId=${LAB_ID}`);
     expect(batch.executionCount).toBe(1);
     expect(batch.campaign.version).toBe(2);
     expect(post).toHaveBeenCalledWith(

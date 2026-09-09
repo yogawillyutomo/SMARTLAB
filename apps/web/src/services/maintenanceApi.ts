@@ -206,7 +206,7 @@ export interface CompleteMaintenanceExecutionInput {
 
 export interface MaintenanceGateway {
   listCampaigns: () => Promise<MaintenancePage<MaintenanceCampaignDto>>;
-  listAllCampaigns: () => Promise<MaintenanceCampaignDto[]>;
+  listAllCampaigns: (laboratoryId?: string) => Promise<MaintenanceCampaignDto[]>;
   showCampaign: (campaignId: string) => Promise<MaintenanceCampaignDto>;
   campaignHistory: (campaignId: string) => Promise<MaintenanceCampaignEventDto[]>;
   createCampaign: (input: CreateMaintenanceCampaignInput) => Promise<MaintenanceCampaignDto>;
@@ -589,6 +589,16 @@ function campaignPath(campaignId: string): string {
   return `/maintenance-campaigns/${encodeURIComponent(campaignId)}`;
 }
 
+function campaignCollectionPath(page: number, laboratoryId?: string): string {
+  if (!positiveInteger(page)) throw new MaintenanceContractError('Halaman MaintenanceCampaign tidak valid.');
+  const parameters = new URLSearchParams({ perPage: '100', page: String(page) });
+  if (laboratoryId !== undefined) {
+    if (!isUlid(laboratoryId)) throw new MaintenanceContractError('Filter Laboratory MaintenanceCampaign tidak valid.');
+    parameters.set('laboratoryId', laboratoryId);
+  }
+  return `/maintenance-campaigns?${parameters.toString()}`;
+}
+
 function planPath(planId: string): string {
   if (!isUlid(planId)) throw new MaintenanceContractError('ID MaintenancePlan tidak valid.');
   return `/maintenance-plans/${encodeURIComponent(planId)}`;
@@ -604,11 +614,11 @@ export function createMaintenanceGateway(client: ApiClient): MaintenanceGateway 
     async listCampaigns() {
       return parsePage(await client.get<unknown>('/maintenance-campaigns?perPage=100'), parseMaintenanceCampaign);
     },
-    async listAllCampaigns() {
-      const first = parsePage(await client.get<unknown>('/maintenance-campaigns?perPage=100&page=1'), parseMaintenanceCampaign);
+    async listAllCampaigns(laboratoryId) {
+      const first = parsePage(await client.get<unknown>(campaignCollectionPath(1, laboratoryId)), parseMaintenanceCampaign);
       if (first.meta.lastPage === 1) return first.data;
       const pages = await Promise.all(Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
-        client.get<unknown>(`/maintenance-campaigns?perPage=100&page=${index + 2}`)));
+        client.get<unknown>(campaignCollectionPath(index + 2, laboratoryId))));
       return [...first.data, ...pages.flatMap((page) => parsePage(page, parseMaintenanceCampaign).data)];
     },
     async showCampaign(campaignId) {
