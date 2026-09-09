@@ -18,7 +18,7 @@ class WorkOrderEventResource extends JsonResource
             'eventType' => $this->event_type,
             'beforeStatus' => $this->before_status,
             'afterStatus' => $this->after_status,
-            'payload' => $this->payload,
+            'payload' => (object) ($this->payload ?? []),
             'createdAt' => $this->created_at?->toISOString(),
         ];
     }
