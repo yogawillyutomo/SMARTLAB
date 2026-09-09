@@ -39,6 +39,7 @@ import {
   type IncidentStatus,
 } from '@/services/incidentApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/stores/toastStore';
 
 export interface IncidentListFilterValues {
@@ -67,8 +68,9 @@ function newSubmissionId(): string {
   return crypto.randomUUID().toLowerCase();
 }
 
-function toListFilters(filters: IncidentListFilterValues, page: number): IncidentListFilters {
+function toListFilters(filters: IncidentListFilterValues, page: number, laboratoryId?: string): IncidentListFilters {
   return {
+    ...(laboratoryId ? { laboratoryId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     ...(filters.category ? { category: filters.category } : {}),
@@ -416,6 +418,7 @@ async function loadAllReportingLaboratories(): Promise<IncidentReportingLaborato
 export function IncidentsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const canCreate = hasServerPermission(user, 'incidents.create');
   const [filters, setFilters] = useState<IncidentListFilterValues>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<IncidentListFilterValues>(DEFAULT_FILTERS);
@@ -437,13 +440,18 @@ export function IncidentsPage() {
   const load = useCallback(async (nextFilters: IncidentListFilterValues, page: number) => {
     setState({ status: 'loading' });
     try {
-      setState({ status: 'ready', page: await incidentGateway.list(toListFilters(nextFilters, page)) });
+      setState({
+        status: 'ready',
+        page: await incidentGateway.list(toListFilters(nextFilters, page, activeLabId || undefined)),
+      });
     } catch (error) {
       setState({ status: 'error', issue: incidentPresentationIssue(error) });
     }
-  }, []);
+  }, [activeLabId]);
 
   useEffect(() => {
+    setFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
     void load(DEFAULT_FILTERS, 1);
   }, [load]);
 
@@ -465,7 +473,15 @@ export function IncidentsPage() {
     setDeviceHasMore(false);
     try {
       setSubmissionId(newSubmissionId());
-      setLaboratories(await loadAllReportingLaboratories());
+      const allLaboratories = await loadAllReportingLaboratories();
+      const scopedLaboratories = activeLabId
+        ? allLaboratories.filter((laboratory) => laboratory.id === activeLabId)
+        : allLaboratories;
+      setLaboratories(scopedLaboratories);
+      setCreateValues({
+        ...emptyIncidentCreateForm(),
+        laboratoryId: scopedLaboratories.some((laboratory) => laboratory.id === activeLabId) ? activeLabId : '',
+      });
       setCreateOpen(true);
     } catch (error) {
       const issue = incidentPresentationIssue(error);

@@ -10,6 +10,8 @@ import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
 import sessionsSource from '@/pages/SessionsPage.tsx?raw';
 import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import assetsSource from '@/pages/AssetsPage.tsx?raw';
+import devicesSource from '@/pages/DeviceApiPages.tsx?raw';
+import incidentsSource from '@/pages/IncidentApiPages.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
 import loansSource from '@/pages/LoansPage.tsx?raw';
 import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
@@ -209,6 +211,17 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).not.toContain('queueAttachment');
   });
 
+  it('propagates the global Laboratory context through Device, Asset, and Incident pages', () => {
+    expect(devicesSource).toContain("from '@/stores/uiStore'");
+    expect(devicesSource).toContain('homeLaboratoryId: activeLabId');
+    expect(devicesSource).toContain('setActiveLab(next.homeLaboratoryId)');
+    expect(assetsSource).toContain("from '@/stores/uiStore'");
+    expect(assetsSource).toContain('assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})');
+    expect(incidentsSource).toContain("from '@/stores/uiStore'");
+    expect(incidentsSource).toContain('activeLabId || undefined');
+    expect(incidentsSource).toContain('scopedLaboratories');
+  });
+
   it('cuts fixed Assets over to canonical S4.2 API authority', () => {
     expect(assetsSource).not.toContain('useAppData');
     expect(assetsSource).not.toContain('db.assets');
@@ -218,7 +231,7 @@ describe('source-of-truth migration foundation', () => {
     expect(assetsSource).not.toContain('Mutasi Aset');
     expect(assetsSource).not.toContain('Hapus aset');
     expect(assetsSource).toContain("from '@/services/assetApi'");
-    expect(assetsSource).toContain('assetGateway.listAll()');
+    expect(assetsSource).toContain('assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})');
     expect(assetsSource).toContain('assetGateway.linkDevice');
     expect(assetsSource).toContain('Tidak ada lagi mutation Asset browser-local');
     expect(appSource).toContain('RequireServerPermission permission="assets.view"');
