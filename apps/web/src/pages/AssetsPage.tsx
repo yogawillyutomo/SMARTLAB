@@ -267,7 +267,7 @@ export function AssetsPage() {
     setLinking(asset);
     setDeviceId('');
     try {
-      setDevices(await listAllDevices(linking.homeLaboratoryId ?? undefined));
+      setDevices(await listAllDevices(asset.homeLaboratoryId ?? undefined));
     } catch (error) {
       toast(messageFrom(error), 'error');
     }
@@ -354,7 +354,7 @@ export function AssetsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Aset Tetap"
-        description="Asset canonical mengikuti konteks Laboratorium global di topbar. Tidak ada mutation Asset browser-local."
+        description="Asset canonical mengikuti konteks Laboratorium global di topbar. Tidak ada lagi mutation Asset browser-local."
         icon={<Boxes className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
