@@ -2,15 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  BookOpen,
   Boxes,
   FlaskConical,
-  HandHelping,
-  Monitor,
-  Package,
   Plus,
   RefreshCw,
-  ShieldCheck,
   Wrench,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
@@ -99,15 +94,7 @@ function workOrderPriorityTone(priority: WorkOrderPriority): 'muted' | 'info' | 
 }
 
 const PENDING_SERVER_DOMAINS = [
-  'Jadwal Reguler & Ketersediaan',
-  'Reservasi Lab',
-  'Pelaksanaan Lab & Jurnal',
   'Monitoring Telemetri',
-  'Aset Tetap',
-  'Stok & Spare Part',
-  'Pemeliharaan Berkala',
-  'Peminjaman Barang',
-  'Kalender Akademik',
   'Notifikasi',
   'Laporan & Analitik',
   'Audit Log',
@@ -255,24 +242,26 @@ export function DashboardPage() {
           to={canViewLaboratories ? '/laboratories' : undefined}
         />
         <StatCard
-          label={selectedLaboratory ? 'Perangkat Terkelola (Lab ini)' : 'Perangkat Terkelola'}
+          label={selectedLaboratory ? 'Perangkat (Lab ini)' : 'Perangkat Terkelola'}
           value={canViewDevices && !error ? state.deviceTotal : '—'}
           icon={<Boxes className="h-5 w-5" />}
           tone="success"
           to={canViewDevices ? '/devices' : undefined}
         />
         <StatCard
-          label={selectedLaboratory ? 'Tiket Kerusakan (Lab ini)' : 'Tiket Kerusakan'}
+          label={selectedLaboratory ? 'Tiket Aktif (Lab ini)' : 'Tiket Kerusakan'}
           value={canViewIncidents && !error ? state.incidentTotal : '—'}
           icon={<AlertTriangle className="h-5 w-5" />}
           tone="warning"
           to={canViewIncidents ? '/incidents' : undefined}
         />
-        <StatCard label="Monitoring Realtime" value="—" icon={<Monitor className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Jadwal Reguler Hari Ini" value="—" icon={<BookOpen className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Pemeliharaan Jatuh Tempo" value="—" icon={<ShieldCheck className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Barang Dipinjam" value="—" icon={<HandHelping className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Stok Hampir Habis" value="—" icon={<Package className="h-5 w-5" />} tone="neutral" />
+        <StatCard
+          label={personalWorkOrderScope ? 'Work Order Saya' : selectedLaboratory ? 'Work Order Aktif (Lab ini)' : 'Work Order Aktif'}
+          value={canViewWorkOrders && !error ? state.activeWorkOrders.length : '—'}
+          icon={<Wrench className="h-5 w-5" />}
+          tone={state.activeWorkOrders.length > 0 ? 'warning' : 'neutral'}
+          to={canViewWorkOrders ? '/work-orders' : undefined}
+        />
       </div>
 
       {canViewWorkOrders && (
@@ -370,7 +359,8 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-xs text-ink-muted">
             <p>Laboratorium, perangkat, tiket, dan Work Order pada Dashboard berasal dari API Laravel + PostgreSQL.</p>
-            <p>Angka `—` berarti domain tersebut belum memiliki API canonical; Dashboard tidak lagi mengambil nilai seed/browser untuk mengisi kekosongan.</p>
+            <p>Konteks Lab mengikuti selector global di topbar. Pilih “Semua Laboratorium” untuk ringkasan sekolah.</p>
+            <p>Telemetri realtime tetap ditahan sampai S6; Dashboard tidak mengisi kekosongan dengan data seed/browser.</p>
           </CardContent>
         </Card>
       </div>
@@ -411,8 +401,8 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Domain Dalam Migrasi API</CardTitle>
-            <Badge tone="warning">Bertahap</Badge>
+            <CardTitle>Domain Belum Canonical</CardTitle>
+            <Badge tone="warning">Roadmap</Badge>
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2">

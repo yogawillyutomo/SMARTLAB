@@ -98,8 +98,8 @@ export function AppTopbar() {
       if (activeLabId !== '') setActiveLab('');
       return;
     }
-    if (!laboratories.some((laboratory) => laboratory.id === activeLabId)) {
-      setActiveLab(laboratories[0].id);
+    if (activeLabId !== '' && !laboratories.some((laboratory) => laboratory.id === activeLabId)) {
+      setActiveLab('');
     }
   }, [activeLabId, laboratories, laboratoriesError, laboratoriesLoading, setActiveLab]);
 
@@ -191,7 +191,7 @@ export function AppTopbar() {
               aria-label="Pilih laboratorium aktif"
             >
               {laboratoriesLoading && <option value="">Memuat laboratorium...</option>}
-              {!laboratoriesLoading && laboratories.length === 0 && <option value="">Belum ada laboratorium</option>}
+              {!laboratoriesLoading && <option value="">Semua Laboratorium</option>}
               {laboratories.map((laboratory) => (
                 <option key={laboratory.id} value={laboratory.id} className="bg-base-800">
                   {laboratory.name}

@@ -37,7 +37,13 @@ describe('source-of-truth migration foundation', () => {
     expect(dashboardSource).toContain('workOrder.assigneeMembershipId === user?.membership.id');
     expect(dashboardSource).toContain('to={`/work-orders/${workOrder.id}`}');
     expect(dashboardSource).not.toContain("  'Tugas Perbaikan',");
-    expect(dashboardSource).toContain('Dashboard tidak lagi mengambil nilai seed/browser');
+    expect(dashboardSource).not.toContain("'Aset Tetap',");
+    expect(dashboardSource).not.toContain("'Stok & Spare Part',");
+    expect(dashboardSource).not.toContain("'Pemeliharaan Berkala',");
+    expect(dashboardSource).not.toContain("'Peminjaman Barang',");
+    expect(dashboardSource).toContain('Semua Laboratorium');
+    expect(dashboardSource).toContain('Telemetri realtime tetap ditahan sampai S6');
+    expect(dashboardSource).toContain('Dashboard tidak mengisi kekosongan dengan data seed/browser');
   });
 
   it('does not show browser-local badge counts from the production sidebar', () => {
@@ -55,6 +61,8 @@ describe('source-of-truth migration foundation', () => {
     expect(topbarSource).not.toContain('db.incidents');
     expect(topbarSource).toContain("from '@/services/laboratoryApi'");
     expect(topbarSource).toContain('laboratoryGateway.list()');
+    expect(topbarSource).toContain('Semua Laboratorium');
+    expect(topbarSource).toContain("activeLabId !== ''");
     expect(topbarSource).toContain('Notifikasi server belum tersedia');
   });
 
