@@ -62,6 +62,7 @@ import {
   type DeviceTransferPage,
 } from '@/services/deviceTransferApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/stores/toastStore';
 
 export type DeviceListState =
@@ -147,7 +148,7 @@ export function DeviceListView({
     <div className="space-y-6">
       <PageHeader
         title="Perangkat"
-        description="Kelola inventaris perangkat canonical pada sekolah aktif."
+        description="Kelola Device canonical. Konteks Laboratorium mengikuti selector global di topbar."
         icon={<Laptop className="h-5 w-5" />}
         actions={canCreate ? <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={onCreate}>Tambah Perangkat</Button> : undefined}
       />
@@ -185,9 +186,9 @@ export function DeviceListView({
             </div>
             <div className="w-full sm:w-64">
               <Select
-                label="Laboratorium asal"
+                label="Konteks Laboratorium"
                 value={filters.homeLaboratoryId}
-                placeholder="Semua laboratorium"
+                placeholder="Semua Laboratorium"
                 options={laboratories.map((laboratory) => ({ value: laboratory.id, label: `${laboratory.code} · ${laboratory.name}` }))}
                 onChange={(event) => onFiltersChange({ ...filters, homeLaboratoryId: event.target.value })}
               />
@@ -481,6 +482,8 @@ export function DevicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const setActiveLab = useUIStore((state) => state.setActiveLab);
   const canCreate = hasServerPermission(user, 'devices.create');
   const canUpdate = hasServerPermission(user, 'devices.update');
   const canViewLaboratories = hasServerPermission(user, 'laboratories.view');
@@ -528,6 +531,15 @@ export function DevicesPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    const current = deviceFilterValuesFromSearchParams(searchParams);
+    if (current.homeLaboratoryId === activeLabId) return;
+    setSearchParams(
+      deviceListSearchParams({ ...current, homeLaboratoryId: activeLabId }, 1),
+      { replace: true },
+    );
+  }, [activeLabId, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (!canViewLaboratories) {
       setLaboratories([]);
       return;
@@ -545,7 +557,7 @@ export function DevicesPage() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyDeviceForm());
+    setForm({ ...emptyDeviceForm(), homeLaboratoryId: activeLabId });
     setFormErrors({});
     setDialogOpen(true);
   }
@@ -624,7 +636,10 @@ export function DevicesPage() {
         filters={filters}
         canCreate={canCreate}
         canUpdate={canUpdate}
-        onFiltersChange={setFilters}
+        onFiltersChange={(next) => {
+          setFilters(next);
+          if (next.homeLaboratoryId !== activeLabId) setActiveLab(next.homeLaboratoryId);
+        }}
         onSearch={() => applyFilters(filters)}
         onRetry={() => void load()}
         onCreate={openCreate}

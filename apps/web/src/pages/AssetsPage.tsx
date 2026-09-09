@@ -23,6 +23,7 @@ import {
 import { deviceGateway, type DeviceDto } from '@/services/deviceApi';
 import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/stores/toastStore';
 
 const CONDITION_LABELS: Record<AssetCondition, string> = {
@@ -144,12 +145,20 @@ function lifecycleTone(status: AssetDto['lifecycleStatus']): 'success' | 'warnin
   return 'muted';
 }
 
-async function listAllDevices(): Promise<DeviceDto[]> {
-  const first = await deviceGateway.list({ page: 1, perPage: 100 });
+async function listAllDevices(homeLaboratoryId?: string): Promise<DeviceDto[]> {
+  const first = await deviceGateway.list({
+    page: 1,
+    perPage: 100,
+    ...(homeLaboratoryId ? { homeLaboratoryId } : {}),
+  });
   if (first.meta.lastPage === 1) return first.data;
   const pages = await Promise.all(
     Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
-      deviceGateway.list({ page: index + 2, perPage: 100 })),
+      deviceGateway.list({
+        page: index + 2,
+        perPage: 100,
+        ...(homeLaboratoryId ? { homeLaboratoryId } : {}),
+      })),
   );
   return [...first.data, ...pages.flatMap((page) => page.data)];
 }
@@ -157,6 +166,8 @@ async function listAllDevices(): Promise<DeviceDto[]> {
 export function AssetsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const setActiveLab = useUIStore((state) => state.setActiveLab);
   const canCreate = hasServerPermission(user, 'assets.create');
   const canUpdate = hasServerPermission(user, 'assets.update');
   const canExport = hasServerPermission(user, 'assets.export');
@@ -178,13 +189,16 @@ export function AssetsPage() {
   const [retiring, setRetiring] = useState<AssetDto | null>(null);
   const [disposing, setDisposing] = useState<AssetDto | null>(null);
   const [reason, setReason] = useState('');
-  const [filters, setFilters] = useState({ lab: 'all', condition: 'all', lifecycle: 'all' });
+  const [filters, setFilters] = useState({ lab: activeLabId || 'all', condition: 'all', lifecycle: 'all' });
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
-      const [nextAssets, nextLabs] = await Promise.all([assetGateway.listAll(), laboratoryGateway.list()]);
+      const [nextAssets, nextLabs] = await Promise.all([
+        assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {}),
+        laboratoryGateway.list(),
+      ]);
       setAssets(nextAssets);
       setLabs(nextLabs);
     } catch (error) {
@@ -192,11 +206,15 @@ export function AssetsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeLabId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setFilters((current) => ({ ...current, lab: activeLabId || 'all' }));
+  }, [activeLabId]);
 
   const filtered = useMemo(() => assets.filter((asset) => {
     if (filters.lab !== 'all' && asset.homeLaboratoryId !== filters.lab) return false;
@@ -210,7 +228,11 @@ export function AssetsPage() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ ...EMPTY_FORM, category: 'Komputer', homeLaboratoryId: labs[0]?.id ?? '' });
+    setForm({
+      ...EMPTY_FORM,
+      category: 'Komputer',
+      homeLaboratoryId: activeLabId || labs.find((lab) => lab.status === 'active')?.id || '',
+    });
     setFormOpen(true);
   }
 
@@ -245,7 +267,7 @@ export function AssetsPage() {
     setLinking(asset);
     setDeviceId('');
     try {
-      setDevices(await listAllDevices());
+      setDevices(await listAllDevices(linking.homeLaboratoryId ?? undefined));
     } catch (error) {
       toast(messageFrom(error), 'error');
     }
@@ -332,7 +354,7 @@ export function AssetsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Aset Tetap"
-        description="Aset Tetap sekarang membaca source canonical Laravel/PostgreSQL. Tidak ada lagi mutation Asset browser-local."
+        description="Asset canonical mengikuti konteks Laboratorium global di topbar. Tidak ada mutation Asset browser-local."
         icon={<Boxes className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
@@ -349,7 +371,16 @@ export function AssetsPage() {
 
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <Select label="Home Lab" value={filters.lab} onChange={(event) => setFilters({ ...filters, lab: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...labs.map((lab) => ({ value: lab.id, label: lab.name }))]} />
+          <Select
+            label="Konteks Lab"
+            value={filters.lab}
+            onChange={(event) => {
+              const laboratoryId = event.target.value;
+              setFilters({ ...filters, lab: laboratoryId });
+              setActiveLab(laboratoryId === 'all' ? '' : laboratoryId);
+            }}
+            options={[{ value: 'all', label: 'Semua Laboratorium' }, ...labs.map((lab) => ({ value: lab.id, label: lab.name }))]}
+          />
           <Select label="Kondisi" value={filters.condition} onChange={(event) => setFilters({ ...filters, condition: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...ASSET_CONDITIONS.map((condition) => ({ value: condition, label: CONDITION_LABELS[condition] }))]} />
           <Select label="Lifecycle" value={filters.lifecycle} onChange={(event) => setFilters({ ...filters, lifecycle: event.target.value })} options={[{ value: 'all', label: 'Semua' }, ...Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))]} />
         </CardContent>
