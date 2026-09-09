@@ -75,7 +75,8 @@ function deviceProfileRows(device: DeviceDto): Array<{ key: string; label: strin
 }
 
 function deviceHeadline(device: DeviceDto): string {
-  return device.hostname ?? [device.brand, device.model].filter(Boolean).join(' ') || DEVICE_TYPE_LABELS[device.deviceType];
+  const identity = [device.brand, device.model].filter(Boolean).join(' ');
+  return device.hostname ?? (identity || DEVICE_TYPE_LABELS[device.deviceType]);
 }
 
 function desktopCapacity(device: DeviceDto): { ram: string; storage: string } {
