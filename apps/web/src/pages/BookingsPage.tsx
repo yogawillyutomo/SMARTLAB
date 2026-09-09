@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarClock, Plus, Check, X, Eye, Download, Ban, ShieldCheck, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -101,6 +102,7 @@ function timelineLabel(event: LaboratoryReservationDto['timeline'][number]): str
 export function BookingsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const canCreate = hasServerPermission(user, 'bookings.create');
   const canApprove = hasServerPermission(user, 'bookings.approve');
   const canCancel = hasServerPermission(user, 'bookings.cancel');
@@ -136,6 +138,7 @@ export function BookingsPage() {
         from,
         to,
         scope: canViewAll ? 'all' : 'mine',
+        ...(activeLabId ? { laboratoryId: activeLabId } : {}),
       });
       const labsPromise = canCreate ? laboratoryGateway.list() : Promise.resolve([]);
       const [items, laboratoryItems] = await Promise.all([reservationPromise, labsPromise]);
@@ -146,12 +149,16 @@ export function BookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canCreate, canViewAll, from, to]);
+  }, [activeLabId, canCreate, canViewAll, from, to]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const contextLabs = useMemo(
+    () => activeLabId ? labs.filter((lab) => lab.id === activeLabId) : labs,
+    [activeLabId, labs],
+  );
   const displayed = useMemo(
     () => reservations.filter((reservation) => statusFilter === 'all' || reservation.status === statusFilter),
     [reservations, statusFilter],
@@ -160,7 +167,7 @@ export function BookingsPage() {
   const pendingCount = reservations.filter((reservation) => reservation.status === 'submitted').length;
 
   function openCreate(): void {
-    const firstLab = labs[0]?.id ?? '';
+    const firstLab = contextLabs[0]?.id ?? '';
     setForm(defaultForm(user?.name ?? '', firstLab));
     setAvailabilityPreview(null);
     setOpen(true);
@@ -296,7 +303,7 @@ export function BookingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reservasi Lab"
-        description="Pengajuan penggunaan laboratorium bertanggal dengan availability canonical dan approval yang dicek ulang secara transaksional."
+        description="Reservasi mengikuti konteks Lab global di topbar dengan availability canonical dan approval yang dicek ulang secara transaksional."
         icon={<CalendarClock className="h-5 w-5" />}
         actions={(
           <>
@@ -329,7 +336,9 @@ export function BookingsPage() {
           <Input label="Sampai" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           <Select label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | LaboratoryReservationStatus)} options={STATUS_OPTIONS} />
           <Button variant="ghost" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => void load()}>Muat ulang</Button>
-          <div className="ml-auto text-xs text-ink-muted">{canViewAll ? 'Scope: seluruh sekolah' : 'Scope: reservasi saya'}</div>
+          <div className="ml-auto text-xs text-ink-muted">
+            {activeLabId ? 'Lab: konteks topbar' : canViewAll ? 'Scope: seluruh sekolah' : 'Scope: reservasi saya'}
+          </div>
         </CardContent>
       </Card>
 
@@ -391,7 +400,7 @@ export function BookingsPage() {
             label="Laboratorium"
             value={form.laboratoryId}
             onChange={(event) => { setForm({ ...form, laboratoryId: event.target.value }); setAvailabilityPreview(null); }}
-            options={labs.map((lab) => ({ value: lab.id, label: `${lab.code} · ${lab.name} · kapasitas ${lab.capacity}` }))}
+            options={contextLabs.map((lab) => ({ value: lab.id, label: `${lab.code} · ${lab.name} · kapasitas ${lab.capacity}` }))}
           />
           <Input label="Tanggal" type="date" value={form.date} onChange={(event) => { setForm({ ...form, date: event.target.value }); setAvailabilityPreview(null); }} />
           <Input label="Peserta" type="number" min={1} value={form.participants} onChange={(event) => setForm({ ...form, participants: Number(event.target.value) })} />

@@ -45,6 +45,7 @@ import {
   type ScheduleOccurrenceResult,
 } from '@/services/scheduleOccurrenceApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/stores/toastStore';
 import { downloadCSV, cn } from '@/utils';
 
@@ -240,6 +241,7 @@ function OccurrenceCard({
 export function SchedulesPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const bootstrapSession = useAuthStore((state) => state.bootstrapSession);
   const canViewBookings = hasServerPermission(user, 'bookings.view');
   const canCreateException = hasServerPermission(user, 'schedule-exceptions.create');
@@ -271,6 +273,7 @@ export function SchedulesPage() {
         scheduleOccurrenceGateway.listAll({
           from: weekDates[0].key,
           to: weekDates[6].key,
+          ...(activeLabId ? { laboratoryId: activeLabId } : {}),
         }),
         canCreateException ? laboratoryGateway.list() : Promise.resolve([]),
       ]);
@@ -288,7 +291,7 @@ export function SchedulesPage() {
       }
       setState({ status: 'error', issue });
     }
-  }, [bootstrapSession, canCreateException, weekDates]);
+  }, [activeLabId, bootstrapSession, canCreateException, weekDates]);
 
   useEffect(() => {
     void load();
@@ -305,13 +308,6 @@ export function SchedulesPage() {
 
   const occurrences = state.status === 'ready' ? state.result.data : [];
 
-  const laboratoryOptions = useMemo(
-    () => occurrenceResourceOptions(
-      occurrences,
-      (occurrence) => occurrence.operationalStatus === 'cancelled' ? null : occurrence.operationalLaboratory,
-    ),
-    [occurrences],
-  );
   const classOptions = useMemo(
     () => occurrenceResourceOptions(occurrences, (occurrence) => occurrence.academicClass),
     [occurrences],
@@ -325,19 +321,7 @@ export function SchedulesPage() {
     [occurrences],
   );
 
-  const hasUnplannedLaboratory = useMemo(
-    () => occurrences.some(
-      (occurrence) => occurrence.operationalStatus === 'scheduled' && occurrence.operationalLaboratory === null,
-    ),
-    [occurrences],
-  );
-
   const filtered = useMemo(() => occurrences.filter((occurrence) => {
-    if (filters.laboratoryId === '__unplanned__'
-      && !(occurrence.operationalStatus === 'scheduled' && occurrence.operationalLaboratory === null)) return false;
-    if (filters.laboratoryId !== 'all'
-      && filters.laboratoryId !== '__unplanned__'
-      && occurrence.operationalLaboratory?.id !== filters.laboratoryId) return false;
     if (filters.academicClassId !== 'all' && occurrence.academicClass.id !== filters.academicClassId) return false;
     if (filters.teacherId !== 'all' && occurrence.teacher.id !== filters.teacherId) return false;
     if (filters.subjectId !== 'all' && occurrence.subject.id !== filters.subjectId) return false;
@@ -511,7 +495,7 @@ export function SchedulesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Jadwal Reguler"
-        description="Current plan TESSELA dengan operational overlay SmartLab yang bertanggal dan non-destruktif."
+        description="Current plan TESSELA mengikuti konteks Lab global di topbar, dengan operational overlay SmartLab yang bertanggal dan non-destruktif."
         icon={<CalendarDays className="h-5 w-5" />}
         actions={(
           <>
@@ -578,17 +562,7 @@ export function SchedulesPage() {
             <p className="ml-auto text-sm font-semibold text-ink-primary">{formatScheduleWeekRange(weekStart)}</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <Select
-              label="Laboratorium Operasional"
-              value={filters.laboratoryId}
-              onChange={(event) => setFilters({ ...filters, laboratoryId: event.target.value })}
-              options={[
-                { value: 'all', label: 'Semua laboratorium' },
-                ...laboratoryOptions,
-                ...(hasUnplannedLaboratory ? [{ value: '__unplanned__', label: 'Belum direncanakan' }] : []),
-              ]}
-            />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Select
               label="Kelas"
               value={filters.academicClassId}

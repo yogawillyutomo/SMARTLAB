@@ -122,6 +122,9 @@ describe('source-of-truth migration foundation', () => {
     expect(schedulesSource).not.toContain('ConfirmDialog');
     expect(schedulesSource).toContain("from '@/services/scheduleOccurrenceApi'");
     expect(schedulesSource).toContain('scheduleOccurrenceGateway.listAll');
+    expect(schedulesSource).toContain("from '@/stores/uiStore'");
+    expect(schedulesSource).toContain('laboratoryId: activeLabId');
+    expect(schedulesSource).not.toContain('label="Laboratorium Operasional"');
     expect(schedulesSource).toContain("from '@/services/scheduleExceptionApi'");
     expect(schedulesSource).toContain('scheduleExceptionGateway.create');
     expect(schedulesSource).toContain("hasServerPermission(user, 'schedule-exceptions.create')");
@@ -150,6 +153,9 @@ describe('source-of-truth migration foundation', () => {
     expect(bookingsSource).not.toContain('checkConflict');
     expect(bookingsSource).toContain("from '@/services/laboratoryReservationApi'");
     expect(bookingsSource).toContain('laboratoryReservationGateway');
+    expect(bookingsSource).toContain("from '@/stores/uiStore'");
+    expect(bookingsSource).toContain('laboratoryId: activeLabId');
+    expect(bookingsSource).toContain('contextLabs');
     expect(bookingsSource).toContain('laboratoryAvailabilityGateway.check');
     expect(appSource).toContain('RequireServerPermission permission="bookings.view"');
     expect(navSource).toContain("bookings: 'bookings.view'");
