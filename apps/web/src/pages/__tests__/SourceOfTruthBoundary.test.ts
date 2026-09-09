@@ -14,6 +14,7 @@ import loansSource from '@/pages/LoansPage.tsx?raw';
 import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
 import maintenanceCampaignSource from '@/components/maintenance/MaintenanceCampaignPanel.tsx?raw';
 import workOrdersSource from '@/pages/WorkOrdersPage.tsx?raw';
+import usersSource from '@/pages/UsersPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -266,6 +267,12 @@ describe('source-of-truth migration foundation', () => {
     expect(maintenanceCampaignSource).toContain("campaign.status === 'active' ? 'warning' : 'success'");
     expect(maintenanceSource).toContain('MaintenanceCampaignPanel');
     expect(maintenanceSource).toContain('Campaign & Batch');
+  });
+
+  it('requires explicit role selection when creating a School membership', () => {
+    expect(usersSource).toContain('setForm(emptyForm())');
+    expect(usersSource).not.toContain("roleKeys: roles.some((role) => role.key === 'siswa') ? ['siswa'] : []");
+    expect(usersSource).toContain("if (form.roleKeys.length === 0) errors.roleKeys = 'Minimal satu role wajib dipilih.';");
   });
 
   it('cuts Corrective Work Orders over to canonical S5 exact-Asset server authority', () => {
