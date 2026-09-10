@@ -21,6 +21,7 @@ import { PriorityEventsPage } from '@/pages/PriorityEventsPage';
 import { SessionsPage } from '@/pages/SessionsPage';
 import { JournalsPage } from '@/pages/JournalsPage';
 import { AssetsPage, AssetDetailPage } from '@/pages/AssetsPage';
+import { AssetQrLabelsPage } from '@/pages/AssetQrLabelsPage';
 import { StockPage } from '@/pages/StockPage';
 import { IncidentsPage } from '@/pages/IncidentApiPages';
 import { IncidentDetailPage } from '@/pages/IncidentDetailApiPage';
@@ -63,6 +64,7 @@ function AppRoutes() {
         <Route path="/monitoring" element={<RequireServerPermission permission="devices.view"><MonitoringPage /></RequireServerPermission>} />
         <Route path="/monitoring/:deviceId" element={<RequireServerPermission permission="devices.view"><MonitoringPage /></RequireServerPermission>} />
         <Route path="/assets" element={<RequireServerPermission permission="assets.view"><AssetsPage /></RequireServerPermission>} />
+        <Route path="/assets/qr-labels" element={<RequireServerPermission permission="assets.view"><RequireServerPermission permission="assets.generate-labels"><AssetQrLabelsPage /></RequireServerPermission></RequireServerPermission>} />
         <Route path="/assets/:id" element={<RequireServerPermission permission="assets.view"><AssetDetailPage /></RequireServerPermission>} />
         <Route path="/stock" element={<RequireServerPermission permission="stock.view"><StockPage /></RequireServerPermission>} />
         <Route path="/incidents" element={<RequireServerPermission permission="incidents.view"><IncidentsPage /></RequireServerPermission>} />
