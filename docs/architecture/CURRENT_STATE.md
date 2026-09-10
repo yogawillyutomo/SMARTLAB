@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-10  
-**Baseline:** `main@5835b10a116c0e9fba0319ce697cfd608824052a` with closed S4 and merged S5.1–S5.3 backend; stacked merge candidates are PR #88 (`c9947de27ffebd99d1c4f634086ff18d1163771f`) and PR #89 runtime `1c4aca20c289526dc912322c7c3fd87413e3869c`. Candidate runtime is server-authoritative for Work Orders, Maintenance Campaign orchestration, Dashboard/Monitoring Device inventory, and global Laboratory context. Browser Global Laboratory Context UAT and exact-head API regression are complete; the stack remains unmerged pending explicit merge authorization.
+**Baseline:** `main@276326946bd4d4b9c6cf7073058886a893279e52`. S5 is closed: PR #88 squash-merged as `3d455868ebe61e910655897fd7803cc1ca25ffcc`, PR #89 squash-merged as `276326946bd4d4b9c6cf7073058886a893279e52`, and post-merge GitHub Actions CI #341 plus Vercel are green. S5.6 Asset QR Identity & Label Batch is the active development tranche before S6 telemetry.
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -40,22 +40,23 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | ActivityReport attachments | immutable private-file metadata with SHA-256, draft-only upload, ActivityReport version/audit integration, authorized download, and no exposed storage key |
 | ActivityReport offline draft sync | account-scoped seven-day browser working copy + server receipt ledger with stable client mutation IDs, canonical payload hashes, explicit stale-version conflicts, idempotent replay, and three-way rebase UX; server remains authoritative |
 | Corrective Work Order backend | **S5.1–S5.3 merged / canonical:** exact-Asset WorkOrder + append-oriented history, corrective custody, Loan/Preventive-Maintenance/WorkOrder exclusion, sourced immutable Inventory part usage, Asset-authority verification, `in_repair` projection, and OpenAPI 0.32; latest merge PR #87 / `5835b10a` with post-merge CI #332 green |
-| Dashboard supported metrics | Candidate PR #89: Laboratory, Device, Incident, and active Work Order APIs with a global Laboratory context; no fabricated realtime telemetry |
-| Monitoring Device inventory | Candidate PR #89: canonical Device API inventory, lifecycle, and technical profile; heartbeat/CPU/RAM/disk/network telemetry remains deferred to S6 |
-| Global Laboratory context | Candidate PR #89: topbar context supports all Laboratories or one exact Laboratory and propagates through Dashboard, Monitoring, Device, Asset, Incident, Work Order, Maintenance/Campaign, Schedule, Reservation, Session/ActivityReport, Operational Calendar, and Loan presentation/query boundaries; school-scoped Calendar events remain visible in Laboratory context |
+| Dashboard supported metrics | **S5 merged / canonical:** Laboratory, Device, Incident, and active Work Order APIs with a global Laboratory context; no fabricated realtime telemetry |
+| Monitoring Device inventory | **S5 merged / canonical:** canonical Device API inventory, lifecycle, and technical profile; heartbeat/CPU/RAM/disk/network telemetry remains deferred to S6 |
+| Global Laboratory context | **S5 merged / canonical:** topbar context supports all Laboratories or one exact Laboratory and propagates through Dashboard, Monitoring, Device, Asset, Incident, Work Order, Maintenance/Campaign, Schedule, Reservation, Session/ActivityReport, Operational Calendar, and Loan presentation/query boundaries; school-scoped Calendar events remain visible in Laboratory context |
 
-## Candidate / merge-gated
+## Current development — S5.6 Asset QR Identity & Label Batch
 
-These areas are implemented on the stacked PR #88 → PR #89 candidate but are **not yet merged to main**:
+S5.6 starts from post-merge-green `main@276326946bd4d4b9c6cf7073058886a893279e52` on branch `feat/s5-6-asset-qr-labels`.
 
-- canonical `/work-orders` frontend and server permission guards;
-- Maintenance Campaign / Batch orchestration over exact-Asset Preventive Maintenance authority;
-- Work Order history contract normalization and quantity presentation hardening;
-- Dashboard Work Order visibility;
-- themed global Laboratory selector and cross-page Laboratory context propagation;
-- canonical Monitoring Device inventory view with S6 telemetry explicitly deferred.
+Locked direction:
 
-Exact runtime candidate head `1c4aca20c289526dc912322c7c3fd87413e3869c` has Vercel SUCCESS. Operator evidence is PASS for web typecheck, SourceOfTruthBoundary 23/23, production build, targeted timezone configuration, targeted S4 reconciliation, dedicated Global Lab Context fixture tests 3/3, Activity Report empty-map serialization 1/1, LaboratorySessionApiTest 17/17, and full API regression 735 PASS / 11 SKIP / 0 FAIL / 5894 assertions. Runtime PostgreSQL is pinned to UTC and `WO-2026-000003` proves correct create/cancel timestamps end-to-end. Dedicated non-custody UAT fixtures then proved data-bearing Global Laboratory Context behavior across Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar; Pelaksanaan Lab RPL1/RPL2 isolation was confirmed after the Activity Report map serialization fix. GitHub Actions has no run for this exact stacked head, so full GitHub CI PASS must not be claimed.
+- QR identity belongs to the canonical Asset, never to Loan and never by reusing Device QR identity;
+- QR payload contains only a random non-enumerable public identifier; internal ULIDs, serial number, purchase price, funding source, supplier, borrower identity, audit internals, and technical profile are not encoded;
+- anonymous scan response uses a dedicated safe-minimal projection, never `AssetResource`;
+- authenticated expansion remains permission-gated and resolves live canonical Asset/linked Device/custody state rather than copying mutable data into the QR;
+- token rotation/revocation preserves history and does not increment or bypass Asset version authority;
+- label batches are immutable snapshots with append-only generation/reprint evidence and no Asset/Device/Inventory/custody mutation;
+- initial label templates are 40×25 mm, 50×30 mm (default), and 70×40 mm; PDF/rendering follows after persistence/API authority is proven.
 
 ## Transitional
 
@@ -78,12 +79,10 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 2. S5.1 is locked on merged PR #85 / `8c7f84ee`; preserve [ADR-003](./ADR-003-corrective-work-order-boundary.md) and the [Work Order contract](./work-order-domain-contract.md).
 3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
 4. S5.3 is complete on merged PR #87 / `main@5835b10a`: preserve least-privilege `work-orders.consume-stock`, immutable sourced WorkOrderPartUsage, idempotent issue, Asset-authority verification, drift guards, atomic custody release, contention proofs, and OpenAPI 0.32.
-5. The stacked S5 closure candidate is evidence-complete before merge: PR #88 remains the canonical Work Order frontend base; PR #89 adds Maintenance Campaign, Work Order UAT-driven hardening, Dashboard/Monitoring cleanup, Global Laboratory Context, PostgreSQL UTC pinning, and Activity Report empty-map contract stabilization.
-6. Temporary `WO-2026-000002` was canonically cancelled and its audit trail preserved. A second harmless Draft→Cancelled `WO-2026-000003` proved the PostgreSQL UTC connection fix end-to-end; neither historical record is rewritten.
-7. Dedicated local/testing-only Global Laboratory Context fixtures were seeded without Asset/Device/Inventory mutation or active custody; browser UAT is PASS for Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar context behavior, including school-scope Calendar visibility under a selected Lab.
-8. Merge order, when explicitly authorized, is PR #88 first and PR #89 second after retarget/reverification. Post-merge web/API regression remains part of S5 closure.
-9. After S5 closure, implement S5.6 QR Asset Identity & Label Batch before S6.
-10. Phase S6: PC monitoring telemetry.
+5. S5 is closed on `main@276326946bd4d4b9c6cf7073058886a893279e52`; post-merge CI #341 and Vercel are green. Preserve Work Order exact-Asset custody, Maintenance Campaign orchestration-only semantics, PostgreSQL UTC, Activity Report object-map serialization, and Global Laboratory Context.
+6. S5.6 is active: implement Asset-owned QR identity, safe public scan projection, authenticated RBAC expansion, immutable label batch evidence, and printable labels without introducing a new availability/custody authority.
+7. S5.6 must complete persistence/API tests and browser/physical-scan UAT before S6 telemetry.
+8. 10. Phase S6: PC monitoring telemetry.
 11. Phase S7: Notifications, Reporting, final cross-domain search/summary hardening.
 12. Phase S8: remove remaining browser-local compatibility layers after all consumers migrate.
 

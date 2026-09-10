@@ -24,6 +24,8 @@ class PermissionSeeder extends Seeder
             'link-device' => 'Tautkan Aset ke Perangkat',
             'retire' => 'Pensiunkan Aset',
             'dispose' => 'Hapuskan Aset secara administratif',
+            'manage-qr' => 'Kelola identitas QR Aset',
+            'generate-labels' => 'Buat batch label QR Aset',
         ],
         'loans' => [
             'view' => 'Lihat Peminjaman Barang',
