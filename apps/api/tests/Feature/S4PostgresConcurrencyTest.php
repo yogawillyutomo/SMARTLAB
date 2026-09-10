@@ -563,8 +563,14 @@ class S4PostgresConcurrencyTest extends TestCase
 
         $this->assertSame(1, $this->successCount($results), json_encode($results));
         $this->assertSame(['MAINTENANCE_CAMPAIGN_VERSION_CONFLICT'], $this->failureCodes($results));
-        $this->assertSame(3, MaintenanceExecution::query()->whereDate('scheduled_for', $scheduledFor)->count());
-        $this->assertSame(0, MaintenanceExecution::query()->where('custody_active', true)->count());
+        $this->assertSame(3, MaintenanceExecution::query()
+            ->whereIn('asset_id', $assets->pluck('id'))
+            ->whereDate('scheduled_for', $scheduledFor)
+            ->count());
+        $this->assertSame(0, MaintenanceExecution::query()
+            ->whereIn('asset_id', $assets->pluck('id'))
+            ->where('custody_active', true)
+            ->count());
         $this->assertSame(2, MaintenanceCampaign::query()->findOrFail($campaign->id)->version);
         $this->assertSame(1, MaintenanceCampaignEvent::query()
             ->where('maintenance_campaign_id', $campaign->id)

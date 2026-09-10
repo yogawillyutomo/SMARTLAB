@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Activity,
   Cpu,
-  Eye,
   FlaskConical,
   HardDrive,
   LayoutGrid,
@@ -469,15 +468,6 @@ function CanonicalPcCard({
         {DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]}
       </span>
     </button>
-  );
-}
-
-function DeviceRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="break-words text-right text-ink-secondary">{value}</dd>
-    </div>
   );
 }
 
