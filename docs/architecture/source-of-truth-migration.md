@@ -411,18 +411,18 @@ Delivered by S4.6 on merged `main`:
 - no automatic browser-data import is approved. Classification is limited to `exact_safe_match`, `unmatched`, `ambiguous`, `invalid`, and `blocked_by_dependency`; local/browser IDs never become canonical IDs by inference;
 - storage-cleared core browser evidence plus exact implementation-head impacted retests were recorded as PASS; PR #83 merged to `main@3757e986cbc8a15bcde3cbe92a3ed71f73f64d04`, and post-merge workflow #313 passed `web-ci` and `api-ci`; S4 is closed.
 
-Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders are now canonical through merged S5.2; S5.3 remains separately gated for Inventory + verification integration and S5.4 for frontend cutover/UAT.
+Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders are canonical through merged S5.3; S5.4 separately gates the browser frontend cutover and storage-cleared UAT before S5 closure.
 
 ### Phase S5 - Corrective maintenance
 
-S5.1 is accepted/locked on merged PR #85 / `main@8c7f84ee5ff64787c8df01a70ea5cf23877eee95` through [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). S5.2 is complete on merged PR #86 / `main@91000032b5ced1455ff8c0fd15316f1257692cc6`. S5.3 Inventory + verification is an implementation candidate in PR #87 and must preserve both locks.
+S5.1 is accepted/locked on merged PR #85 / `main@8c7f84ee5ff64787c8df01a70ea5cf23877eee95` through [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). S5.2 is complete on merged PR #86 / `main@91000032b5ced1455ff8c0fd15316f1257692cc6`. S5.3 Inventory + verification is complete on merged PR #87 / `main@5835b10a116c0e9fba0319ce697cfd608824052a`. S5.4 frontend cutover is candidate PR #88 and remains browser-UAT gated.
 
 Planned slices:
 
 - **S5.1 — complete/locked on merged main:** exact-Asset Work Order authority, optional Incident link, corrective custody, assignment/lifecycle, Inventory-only spare-part consumption boundary, Asset-authority verification boundary, and no implicit Device/Incident/Laboratory mutation; merged as PR #85 / `8c7f84ee`;
 - **S5.2 — complete / merged PR #86 (`91000032`):** PostgreSQL WorkOrder/Event persistence, School/year numbering, ETag lifecycle through completed/rework/cancel, assignment, exact Asset subject, Loan/Maintenance/WorkOrder custody exclusion, Asset terminal/unlink guard integration, Asset operational-state `in_repair`, real contention tests, OpenAPI 0.31;
-- **S5.3 — implementation candidate / PR #87:** `work-orders.consume-stock`, immutable WorkOrderPartUsage bound at DB insert to the exact sourced InventoryTransaction, sourceType `work_order`, idempotent clientMutationId replay, Asset condition application through Asset authority, Asset-version drift fail-closed, atomic verification/custody release, PostgreSQL stock and verify-vs-Asset contention proofs, OpenAPI 0.32;
-- **S5.4 — planned:** canonical `/work-orders` frontend, server permission guards, browser-local Work Order mutation removal, storage-cleared UAT, exact-head and merged-head verification.
+- **S5.3 — complete / merged PR #87 (`5835b10a`):** `work-orders.consume-stock`, immutable WorkOrderPartUsage bound at DB insert to the exact sourced InventoryTransaction, sourceType `work_order`, idempotent clientMutationId replay, Asset condition application through Asset authority, Asset-version drift fail-closed, atomic verification/custody release, PostgreSQL stock and verify-vs-Asset contention proofs, OpenAPI 0.32;
+- **S5.4 — implementation candidate / PR #88:** canonical typed Work Order gateway; `/work-orders` and deep link cut over to server authority; exact Asset/Laboratory/optional Incident create; server permission-derived assignees; Inventory-authoritative parts; verify through Work Order/Asset authority; no local cost/Device mutation; route/nav server permission guard; source-of-truth tests; automated CI green; storage-cleared manual browser UAT still pending.
 
 Locked S5 direction:
 

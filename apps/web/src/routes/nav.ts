@@ -53,6 +53,7 @@ const SERVER_VIEW_PERMISSIONS: Partial<Record<ModuleKey, string>> = {
   stock: 'stock.view',
   loans: 'loans.view',
   maintenance: 'maintenance.view',
+  'work-orders': 'work-orders.view',
 };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -75,7 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets', serverPermission: 'assets.view' },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock', serverPermission: 'stock.view' },
       { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, serverPermission: 'incidents.view' },
-      { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders' },
+      { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders', serverPermission: 'work-orders.view' },
       { to: '/maintenance', label: 'Pemeliharaan Berkala', icon: ShieldCheck, module: 'maintenance', serverPermission: 'maintenance.view' },
       { to: '/loans', label: 'Peminjaman Barang', icon: HandHelping, module: 'loans', serverPermission: 'loans.view' },
     ],

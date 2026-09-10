@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-07  
-**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, and closed S4 on merged PR #83 / `main@3757e986cbc8a15bcde3cbe92a3ed71f73f64d04` with recorded browser UAT and exact merged-head CI green
+**Baseline:** repository state including canonical S2 scheduling, S3.2–S3.6 Pelaksanaan Lab, closed S4 on merged PR #83, and canonical S5.1–S5.3 Work Order backend on merged PRs #85–#87 / `main@5835b10a116c0e9fba0319ce697cfd608824052a`; S5.4 frontend cutover is candidate PR #88 with manual browser UAT still gated
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -39,6 +39,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 | Session issue observations | immutable execution evidence scoped to canonical Sessions; Device references are same-Laboratory canonical IDs; Incident creation is an explicit idempotent promotion, never an automatic side effect |
 | ActivityReport attachments | immutable private-file metadata with SHA-256, draft-only upload, ActivityReport version/audit integration, authorized download, and no exposed storage key |
 | ActivityReport offline draft sync | account-scoped seven-day browser working copy + server receipt ledger with stable client mutation IDs, canonical payload hashes, explicit stale-version conflicts, idempotent replay, and three-way rebase UX; server remains authoritative |
+| Corrective Work Order backend | **S5.1–S5.3 merged / canonical:** exact-Asset WorkOrder + append-oriented history, corrective custody, Loan/Preventive-Maintenance/WorkOrder exclusion, sourced immutable Inventory part usage, Asset-authority verification, `in_repair` projection, and OpenAPI 0.32; latest merge PR #87 / `5835b10a` with post-merge CI #332 green |
 | Dashboard supported metrics | Laboratory, Device, and Incident APIs |
 
 ## Transitional
@@ -46,7 +47,7 @@ These areas are backed by Laravel/PostgreSQL or the server authorization/session
 These routes/domains still rely wholly or materially on browser-local repositories, seed data, compatibility state, or incomplete server slices.
 
 - monitoring telemetry;
-- work orders — S5.1 is locked and S5.2 backend/core is merged on `main@91000032`; S5.3 Inventory + verification is an implementation candidate in PR #87, while the current `/work-orders` frontend remains browser-local until S5.4;
+- work orders frontend — backend S5.1–S5.3 is merged on `main@5835b10a`; PR #88 cuts `/work-orders` to canonical APIs and server permissions, but manual storage-cleared browser UAT remains required before the route is declared closed;
 - notifications;
 - reports/analytics;
 - audit-log query UI;
@@ -62,8 +63,8 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 1. S4 is closed on merged PR #83 / `3757e986`; preserve the exact-Asset, immutable-ledger, custody, tenant, and source-of-truth boundaries proven by its automated and browser evidence.
 2. S5.1 is locked on merged PR #85 / `8c7f84ee`; preserve [ADR-003](./ADR-003-corrective-work-order-boundary.md) and the [Work Order contract](./work-order-domain-contract.md).
 3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
-4. Complete S5.3 PR #87: least-privilege `work-orders.consume-stock`, immutable WorkOrderPartUsage bound to sourced InventoryTransaction, idempotent part issue, Asset-authority verification, Asset-version drift guard, atomic custody release, PostgreSQL race proofs, and OpenAPI 0.32.
-5. S5.4: cut over `/work-orders` frontend from browser-local authority and execute storage-cleared browser UAT.
+4. S5.3 is complete on merged PR #87 / `main@5835b10a`: preserve least-privilege `work-orders.consume-stock`, immutable sourced WorkOrderPartUsage, idempotent issue, Asset-authority verification, drift guards, atomic custody release, contention proofs, and OpenAPI 0.32.
+5. Complete S5.4 PR #88: canonical `/work-orders` frontend + server permission guards are implemented and automated CI is green; execute and record the storage-cleared manual browser matrix in `docs/reviews/s5.4-work-order-uat.md` before review/merge and S5 closure.
 6. Track Laboratory-scale Maintenance Campaign / Batch as a future Preventive Maintenance orchestration UX; it must not create ambiguous multi-Asset execution authority or implicitly block the Laboratory.
 7. Phase S6: PC monitoring telemetry.
 8. Phase S7: Notifications, Reporting, final Dashboard/global search.

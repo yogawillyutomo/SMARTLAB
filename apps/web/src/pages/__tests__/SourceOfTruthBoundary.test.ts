@@ -12,6 +12,7 @@ import assetsSource from '@/pages/AssetsPage.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
 import loansSource from '@/pages/LoansPage.tsx?raw';
 import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
+import workOrdersSource from '@/pages/WorkOrdersPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -239,6 +240,28 @@ describe('source-of-truth migration foundation', () => {
     expect(appSource).toContain('RequireServerPermission permission="maintenance.view"');
     expect(navSource).toContain("maintenance: 'maintenance.view'");
     expect(navSource).toContain("serverPermission: 'maintenance.view'");
+  });
+
+
+  it('cuts Corrective Work Orders over to canonical S5 exact-Asset server authority', () => {
+    expect(workOrdersSource).not.toContain('useAppData');
+    expect(workOrdersSource).not.toContain('db.workOrders');
+    expect(workOrdersSource).not.toContain('mutate((d)');
+    expect(workOrdersSource).not.toContain('applyDeviceOperationalStatus');
+    expect(workOrdersSource).not.toContain('stock.create');
+    expect(workOrdersSource).not.toContain('d.stock');
+    expect(workOrdersSource).not.toContain('formatCurrency');
+    expect(workOrdersSource).toContain("from '@/services/workOrderApi'");
+    expect(workOrdersSource).toContain("from '@/services/assetApi'");
+    expect(workOrdersSource).toContain("from '@/services/inventoryApi'");
+    expect(workOrdersSource).toContain('workOrderGateway.listAll()');
+    expect(workOrdersSource).toContain('workOrderGateway.usePart');
+    expect(workOrdersSource).toContain('workOrderGateway.verify');
+    expect(workOrdersSource).toContain('Tidak ada lagi Work Order browser-local');
+    expect(workOrdersSource).toContain('tidak mengubah Device atau Incident secara implisit');
+    expect(appSource).toContain('RequireServerPermission permission="work-orders.view"');
+    expect(navSource).toContain("'work-orders': 'work-orders.view'");
+    expect(navSource).toContain("serverPermission: 'work-orders.view'");
   });
 
   it('closes the S4 production source-of-truth boundary across all four canonical routes', () => {
