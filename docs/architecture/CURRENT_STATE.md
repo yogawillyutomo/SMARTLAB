@@ -55,7 +55,7 @@ These areas are implemented on the stacked PR #88 → PR #89 candidate but are *
 - themed global Laboratory selector and cross-page Laboratory context propagation;
 - canonical Monitoring Device inventory view with S6 telemetry explicitly deferred.
 
-Exact candidate head `ddc2ffff1a35639f64eb815731507abd338a52b1` has Vercel SUCCESS and operator local web parity PASS: typecheck, SourceOfTruthBoundary 23/23, Asset+Maintenance service tests 17/17, and production build. GitHub Actions has no run for this exact stacked head, so full CI PASS must not be claimed.
+Exact runtime candidate head `ac232c45cecfa50af7b0d23e14c975db45c02cd3` has Vercel SUCCESS. Operator local evidence is PASS for web typecheck, SourceOfTruthBoundary 23/23, production build, targeted timezone configuration 1 PASS / 1 PostgreSQL-only SKIP, targeted S4 reconciliation 5/5, and full API regression 731 PASS / 11 SKIP / 0 FAIL / 5876 assertions. The skipped tests are PostgreSQL-only contention/session proofs; runtime PostgreSQL `SHOW TIME ZONE = UTC` and a new Work Order create/cancel browser mutation independently prove the timezone fix on the active UAT database. GitHub Actions has no run for this exact stacked head, so full GitHub CI PASS must not be claimed.
 
 ## Transitional
 
@@ -79,12 +79,13 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
 4. S5.3 is complete on merged PR #87 / `main@5835b10a`: preserve least-privilege `work-orders.consume-stock`, immutable sourced WorkOrderPartUsage, idempotent issue, Asset-authority verification, drift guards, atomic custody release, contention proofs, and OpenAPI 0.32.
 5. Finish the stacked S5 closure candidate: PR #88 remains the canonical Work Order frontend base; PR #89 adds Maintenance Campaign, Work Order UAT-driven hardening, Dashboard/Monitoring cleanup, and Global Laboratory Context. Do not merge either until final impacted browser UAT and exact-head regression evidence are recorded.
-6. After browser context UAT, canonically cancel temporary `WO-2026-000002` rather than deleting/resetting UAT data; preserve its audit trail.
-7. Merge order, when explicitly authorized, is PR #88 first and PR #89 second after retarget/reverification. Post-merge web/API regression remains part of S5 closure.
-8. After S5 closure, implement S5.6 QR Asset Identity & Label Batch before S6.
-9. Phase S6: PC monitoring telemetry.
-10. Phase S7: Notifications, Reporting, final cross-domain search/summary hardening.
-11. Phase S8: remove remaining browser-local compatibility layers after all consumers migrate.
+6. Temporary `WO-2026-000002` was canonically cancelled and its audit trail preserved. A second harmless Draft→Cancelled `WO-2026-000003` proved the PostgreSQL UTC connection fix end-to-end; neither historical record is rewritten.
+7. Remaining browser-data gap: Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar have no representative UAT rows in the active database, so their data-bearing Global Laboratory Context behavior is not manually claimed PASS even though automated API/source-boundary regression is green.
+8. Merge order, when explicitly authorized, is PR #88 first and PR #89 second after retarget/reverification. Post-merge web/API regression remains part of S5 closure.
+9. After S5 closure, implement S5.6 QR Asset Identity & Label Batch before S6.
+10. Phase S6: PC monitoring telemetry.
+11. Phase S7: Notifications, Reporting, final cross-domain search/summary hardening.
+12. Phase S8: remove remaining browser-local compatibility layers after all consumers migrate.
 
 ## Reserved / placeholder
 
