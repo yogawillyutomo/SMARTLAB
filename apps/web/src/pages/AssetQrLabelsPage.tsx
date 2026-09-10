@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Filter, QrCode, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Filter, Printer, QrCode, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AssetQrCode } from '@/components/asset/AssetQrCode';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -131,13 +132,14 @@ export function AssetQrLabelsPage() {
 
   useEffect(() => {
     void laboratoryGateway.list()
-      .then((nextLabs) => setLabs(nextLabs))
+      .then(setLabs)
       .catch((error) => toast(errorMessage(error), 'error'));
   }, []);
 
   useEffect(() => {
     setPage(1);
     setSelected(new Map());
+    setGeneratedBatch(null);
   }, [activeLabId]);
 
   useEffect(() => {
@@ -257,11 +259,15 @@ export function AssetQrLabelsPage() {
     }
   }
 
+  function openPrintableBatch(batchId: string) {
+    navigate(`/assets/qr-labels/${batchId}/print`);
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Asset QR & Label Batch"
-        description="Pilih exact Asset dari authority server, bekukan snapshot label, lalu render output fisik pada tranche PDF berikutnya."
+        description="Pilih exact Asset dari authority server, bekukan immutable snapshot, lalu render QR lokal ke lembar A4."
         icon={<QrCode className="h-5 w-5" />}
         actions={
           <Button variant="secondary" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/assets')}>
@@ -271,7 +277,7 @@ export function AssetQrLabelsPage() {
       />
 
       <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
-        Preview di halaman ini <strong>bukan QR final untuk dicetak atau dipindai</strong>. QR high-error-correction, BP-logo composition, A4 PDF, dan physical phone scan UAT tetap gate S5.6.3/S5.6.4.
+        Draft sebelum generate masih placeholder. Setelah batch dibekukan, preview memakai <strong>QR Version 5 · ECC H · quiet zone 4 modul</strong> yang sama dengan lembar A4. Physical phone scan tetap gate UAT dan tidak disimpulkan dari preview browser.
       </div>
 
       <Card>
@@ -296,51 +302,13 @@ export function AssetQrLabelsPage() {
                 ...labs.filter((lab) => lab.status === 'active').map((lab) => ({ value: lab.id, label: `${lab.code} · ${lab.name}` })),
               ]}
             />
-            <Input
-              label="Search"
-              icon={<Search className="h-4 w-4" />}
-              value={draftFilters.search}
-              placeholder="Kode / nama / kategori..."
-              onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))}
-              onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }}
-            />
-            <Input
-              label="Kategori exact"
-              value={draftFilters.category}
-              placeholder="mis. Komputer"
-              onChange={(event) => setDraftFilters((current) => ({ ...current, category: event.target.value }))}
-              onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }}
-            />
-            <Select
-              label="Kondisi"
-              value={draftFilters.condition}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, condition: event.target.value as FilterState['condition'] }))}
-              options={[{ value: 'all', label: 'Semua' }, ...Object.entries(CONDITION_LABELS).map(([value, label]) => ({ value, label }))]}
-            />
-            <Select
-              label="Lifecycle"
-              value={draftFilters.lifecycleStatus}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, lifecycleStatus: event.target.value as FilterState['lifecycleStatus'] }))}
-              options={[{ value: 'all', label: 'Semua' }, ...Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))]}
-            />
-            <Select
-              label="Device"
-              value={draftFilters.linkStatus}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, linkStatus: event.target.value as FilterState['linkStatus'] }))}
-              options={[{ value: 'all', label: 'Semua' }, { value: 'linked', label: 'Tertaut Device' }, { value: 'unlinked', label: 'Tidak tertaut' }]}
-            />
-            <Select
-              label="QR"
-              value={draftFilters.qrStatus}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, qrStatus: event.target.value as FilterState['qrStatus'] }))}
-              options={[{ value: 'all', label: 'Semua' }, { value: 'active', label: 'QR aktif' }, { value: 'missing', label: 'Belum punya QR' }]}
-            />
-            <Select
-              label="Riwayat label"
-              value={draftFilters.printedStatus}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, printedStatus: event.target.value as FilterState['printedStatus'] }))}
-              options={[{ value: 'all', label: 'Semua' }, { value: 'printed', label: 'Pernah dibatch' }, { value: 'unprinted', label: 'Belum pernah dibatch' }]}
-            />
+            <Input label="Search" icon={<Search className="h-4 w-4" />} value={draftFilters.search} placeholder="Kode / nama / kategori..." onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }} />
+            <Input label="Kategori exact" value={draftFilters.category} placeholder="mis. Komputer" onChange={(event) => setDraftFilters((current) => ({ ...current, category: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }} />
+            <Select label="Kondisi" value={draftFilters.condition} onChange={(event) => setDraftFilters((current) => ({ ...current, condition: event.target.value as FilterState['condition'] }))} options={[{ value: 'all', label: 'Semua' }, ...Object.entries(CONDITION_LABELS).map(([value, label]) => ({ value, label }))]} />
+            <Select label="Lifecycle" value={draftFilters.lifecycleStatus} onChange={(event) => setDraftFilters((current) => ({ ...current, lifecycleStatus: event.target.value as FilterState['lifecycleStatus'] }))} options={[{ value: 'all', label: 'Semua' }, ...Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))]} />
+            <Select label="Device" value={draftFilters.linkStatus} onChange={(event) => setDraftFilters((current) => ({ ...current, linkStatus: event.target.value as FilterState['linkStatus'] }))} options={[{ value: 'all', label: 'Semua' }, { value: 'linked', label: 'Tertaut Device' }, { value: 'unlinked', label: 'Tidak tertaut' }]} />
+            <Select label="QR" value={draftFilters.qrStatus} onChange={(event) => setDraftFilters((current) => ({ ...current, qrStatus: event.target.value as FilterState['qrStatus'] }))} options={[{ value: 'all', label: 'Semua' }, { value: 'active', label: 'QR aktif' }, { value: 'missing', label: 'Belum punya QR' }]} />
+            <Select label="Riwayat label" value={draftFilters.printedStatus} onChange={(event) => setDraftFilters((current) => ({ ...current, printedStatus: event.target.value as FilterState['printedStatus'] }))} options={[{ value: 'all', label: 'Semua' }, { value: 'printed', label: 'Pernah dibatch' }, { value: 'unprinted', label: 'Belum pernah dibatch' }]} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" icon={<Filter className="h-4 w-4" />} onClick={applyFilters}>Terapkan Filter</Button>
@@ -357,15 +325,8 @@ export function AssetQrLabelsPage() {
               <p className="text-xs text-ink-muted">{candidateMeta.total} kandidat · {selectedItems.length} dipilih{missingQrCount > 0 ? ` · ${missingQrCount} QR akan diterbitkan atomik saat generate` : ''}</p>
             </div>
             <div className="flex items-end gap-2">
-              <Select
-                label="Template"
-                value={templateKey}
-                onChange={(event) => setTemplateKey(event.target.value as AssetQrLabelTemplate)}
-                options={ASSET_QR_LABEL_TEMPLATES.map((value) => ({ value, label: TEMPLATE_LABELS[value] }))}
-              />
-              <Button loading={generating} disabled={selectedItems.length === 0 || !canManageQr} onClick={() => void generateBatch()}>
-                Generate Batch
-              </Button>
+              <Select label="Template" value={templateKey} onChange={(event) => setTemplateKey(event.target.value as AssetQrLabelTemplate)} options={ASSET_QR_LABEL_TEMPLATES.map((value) => ({ value, label: TEMPLATE_LABELS[value] }))} />
+              <Button loading={generating} disabled={selectedItems.length === 0 || !canManageQr} onClick={() => void generateBatch()}>Generate Batch</Button>
             </div>
           </div>
 
@@ -376,24 +337,14 @@ export function AssetQrLabelsPage() {
           )}
 
           {candidateError ? (
-            <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger">
-              {candidateError}
-            </div>
+            <div className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger">{candidateError}</div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-base-700/70">
               <table className="w-full text-sm">
                 <thead className="bg-base-800/80 text-left text-ink-secondary">
                   <tr>
-                    <th className="w-12 px-4 py-3">
-                      <input type="checkbox" aria-label="Pilih semua kandidat di halaman ini" checked={allPageSelected} onChange={toggleCurrentPage} />
-                    </th>
-                    <th className="px-4 py-3">Asset</th>
-                    <th className="px-4 py-3">Lab</th>
-                    <th className="px-4 py-3">Kondisi</th>
-                    <th className="px-4 py-3">Lifecycle</th>
-                    <th className="px-4 py-3">Device</th>
-                    <th className="px-4 py-3">QR</th>
-                    <th className="px-4 py-3">Label</th>
+                    <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Pilih semua kandidat di halaman ini" checked={allPageSelected} onChange={toggleCurrentPage} /></th>
+                    <th className="px-4 py-3">Asset</th><th className="px-4 py-3">Lab</th><th className="px-4 py-3">Kondisi</th><th className="px-4 py-3">Lifecycle</th><th className="px-4 py-3">Device</th><th className="px-4 py-3">QR</th><th className="px-4 py-3">Label</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,13 +354,8 @@ export function AssetQrLabelsPage() {
                     <tr><td colSpan={8} className="px-4 py-10 text-center text-ink-muted">Tidak ada Asset yang sesuai filter.</td></tr>
                   ) : candidates.map((candidate) => (
                     <tr key={candidate.id} className="border-t border-base-700/50">
-                      <td className="px-4 py-3">
-                        <input type="checkbox" aria-label={`Pilih ${candidate.assetCode}`} checked={selected.has(candidate.id)} onChange={() => toggleCandidate(candidate)} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-ink-primary">{candidate.assetCode}</div>
-                        <div className="text-xs text-ink-muted">{candidate.name} · {candidate.category}</div>
-                      </td>
+                      <td className="px-4 py-3"><input type="checkbox" aria-label={`Pilih ${candidate.assetCode}`} checked={selected.has(candidate.id)} onChange={() => toggleCandidate(candidate)} /></td>
+                      <td className="px-4 py-3"><div className="font-medium text-ink-primary">{candidate.assetCode}</div><div className="text-xs text-ink-muted">{candidate.name} · {candidate.category}</div></td>
                       <td className="px-4 py-3 text-ink-secondary">{candidate.laboratory ? `${candidate.laboratory.code} · ${candidate.laboratory.name}` : 'Belum ditetapkan'}</td>
                       <td className="px-4 py-3"><Badge tone={conditionTone(candidate.condition)}>{CONDITION_LABELS[candidate.condition]}</Badge></td>
                       <td className="px-4 py-3"><Badge tone={candidate.lifecycleStatus === 'active' ? 'success' : 'muted'}>{LIFECYCLE_LABELS[candidate.lifecycleStatus]}</Badge></td>
@@ -426,12 +372,8 @@ export function AssetQrLabelsPage() {
           <div className="flex items-center justify-between text-xs text-ink-muted">
             <span>Halaman {candidateMeta.page} / {candidateMeta.lastPage}</span>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" aria-label="Halaman kandidat sebelumnya" disabled={page <= 1 || candidateLoading} onClick={() => setPage((value) => Math.max(1, value - 1))}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" aria-label="Halaman kandidat berikutnya" disabled={page >= candidateMeta.lastPage || candidateLoading} onClick={() => setPage((value) => Math.min(candidateMeta.lastPage, value + 1))}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <Button variant="ghost" size="icon" aria-label="Halaman kandidat sebelumnya" disabled={page <= 1 || candidateLoading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Halaman kandidat berikutnya" disabled={page >= candidateMeta.lastPage || candidateLoading} onClick={() => setPage((value) => Math.min(candidateMeta.lastPage, value + 1))}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
         </CardContent>
@@ -439,52 +381,41 @@ export function AssetQrLabelsPage() {
 
       <Card>
         <CardContent className="space-y-4">
-          <div>
-            <h2 className="font-semibold text-ink-primary">3. Preview snapshot label</h2>
-            <p className="text-xs text-ink-muted">
-              {generatedBatch
-                ? `Batch ${generatedBatch.id} · immutable snapshot ${generatedBatch.assetCount} Asset · ${TEMPLATE_LABELS[generatedBatch.templateKey]}`
-                : selectedItems.length > 0
-                  ? `Draft preview ${selectedItems.length} Asset terpilih. Public QR identifier baru tersedia setelah server membekukan batch.`
-                  : 'Pilih Asset untuk draft preview, atau buka batch historis di bawah.'}
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-ink-primary">3. Preview snapshot label</h2>
+              <p className="text-xs text-ink-muted">
+                {generatedBatch
+                  ? `Batch ${generatedBatch.id} · immutable snapshot ${generatedBatch.assetCount} Asset · ${TEMPLATE_LABELS[generatedBatch.templateKey]}`
+                  : selectedItems.length > 0
+                    ? `Draft preview ${selectedItems.length} Asset terpilih. Public QR identifier baru tersedia setelah server membekukan batch.`
+                    : 'Pilih Asset untuk draft preview, atau buka batch historis di bawah.'}
+              </p>
+            </div>
+            {generatedBatch && (
+              <Button size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => openPrintableBatch(generatedBatch.id)}>
+                A4 Print / Save PDF
+              </Button>
+            )}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-            {generatedBatch?.items?.map((item) => (
-              <LabelPreview
-                key={`${generatedBatch.id}-${item.ordinal}`}
-                templateKey={generatedBatch.templateKey}
-                assetCode={item.assetCode}
-                assetName={item.assetName}
-                lab={item.laboratory?.code ?? null}
-                publicId={item.publicId}
-                frozen
-              />
+            {generatedBatch?.items?.slice(0, 12).map((item) => (
+              <LabelPreview key={`${generatedBatch.id}-${item.ordinal}`} templateKey={generatedBatch.templateKey} assetCode={item.assetCode} assetName={item.assetName} lab={item.laboratory?.code ?? null} publicId={item.publicId} frozen />
             ))}
             {!generatedBatch && selectedItems.slice(0, 12).map((candidate) => (
-              <LabelPreview
-                key={candidate.id}
-                templateKey={templateKey}
-                assetCode={candidate.assetCode}
-                assetName={candidate.name}
-                lab={candidate.laboratory?.code ?? null}
-                publicId={null}
-                frozen={false}
-              />
+              <LabelPreview key={candidate.id} templateKey={templateKey} assetCode={candidate.assetCode} assetName={candidate.name} lab={candidate.laboratory?.code ?? null} publicId={null} frozen={false} />
             ))}
           </div>
+          {generatedBatch && generatedBatch.assetCount > 12 && <p className="text-xs text-ink-muted">Preview dibatasi 12 label; lembar A4 memakai seluruh {generatedBatch.assetCount} immutable item.</p>}
           {!generatedBatch && selectedItems.length > 12 && <p className="text-xs text-ink-muted">Preview dibatasi 12 label; seluruh exact selection tetap dikirim ke server saat Generate Batch.</p>}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-accent-content" />
-            <h2 className="font-semibold text-ink-primary">Immutable batch history</h2>
-          </div>
-          <p className="text-xs text-ink-muted">History read-only pada tranche ini. Event reprint baru akan diekspos bersama pipeline render/print nyata agar audit tidak mencatat aksi yang belum terjadi.</p>
+          <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent-content" /><h2 className="font-semibold text-ink-primary">Immutable batch history</h2></div>
+          <p className="text-xs text-ink-muted">Snapshot historis dapat dirender ulang. Event reprint hanya dicatat melalui aksi eksplisit di workspace cetak setelah server memvalidasi bahwa snapshot masih fresh.</p>
           {batchLoading ? <p className="text-sm text-ink-muted">Memuat batch...</p> : batches.length === 0 ? <p className="text-sm text-ink-muted">Belum ada batch pada scope ini.</p> : (
             <div className="overflow-x-auto rounded-xl border border-base-700/70">
               <table className="w-full text-sm">
@@ -495,7 +426,7 @@ export function AssetQrLabelsPage() {
                     <td className="px-4 py-3">{TEMPLATE_LABELS[batch.templateKey]}</td>
                     <td className="px-4 py-3">{batch.assetCount}</td>
                     <td className="px-4 py-3 text-ink-secondary">{batch.generatedByName}</td>
-                    <td className="px-4 py-3"><Button size="sm" variant="secondary" onClick={() => void openBatch(batch.id)}>Lihat Snapshot</Button></td>
+                    <td className="px-4 py-3"><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => void openBatch(batch.id)}>Lihat Snapshot</Button><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => openPrintableBatch(batch.id)}>Print/PDF</Button></div></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -518,21 +449,14 @@ function LabelPreview({ templateKey, assetCode, assetName, lab, publicId, frozen
   return (
     <div className={`w-full ${TEMPLATE_PREVIEW[templateKey]} rounded-lg border border-base-500 bg-white p-2 text-slate-950 shadow-sm`}>
       <div className="grid h-full grid-cols-[34%_1fr] gap-2">
-        <div className="flex min-w-0 flex-col items-center justify-center rounded border-2 border-slate-900 bg-white p-1 text-center">
-          <QrCode className="h-10 w-10" />
-          <span className="mt-1 max-w-full truncate text-[8px] font-semibold">{publicId ? publicId.slice(0, 13) : 'QR SETELAH GENERATE'}</span>
-          <span className="text-[7px] text-slate-500">preview only</span>
+        <div className="flex min-w-0 flex-col items-center justify-center bg-white p-1 text-center">
+          {publicId ? <AssetQrCode publicId={publicId} className="h-auto max-h-full w-full max-w-[116px]" showBpMark /> : <QrCode className="h-10 w-10" />}
+          {!publicId && <span className="mt-1 max-w-full truncate text-[8px] font-semibold">QR SETELAH GENERATE</span>}
+          <span className="text-[7px] text-slate-500">{publicId ? 'ECC H · local render' : 'draft only'}</span>
         </div>
         <div className="flex min-w-0 flex-col justify-between py-0.5">
-          <div>
-            <div className="text-[9px] font-black tracking-wide">SMARTLAB · BP</div>
-            <div className="mt-1 truncate text-sm font-black">{assetCode}</div>
-            <div className="line-clamp-2 text-[10px] font-semibold leading-tight">{assetName}</div>
-          </div>
-          <div className="flex items-end justify-between gap-2 text-[8px]">
-            <span>{lab ?? 'NO HOME LAB'}</span>
-            <span className="font-semibold">{frozen ? 'FROZEN' : 'DRAFT'}</span>
-          </div>
+          <div><div className="text-[9px] font-black tracking-wide">SMARTLAB · BP</div><div className="mt-1 truncate text-sm font-black">{assetCode}</div><div className="line-clamp-2 text-[10px] font-semibold leading-tight">{assetName}</div></div>
+          <div className="flex items-end justify-between gap-2 text-[8px]"><span>{lab ?? 'NO HOME LAB'}</span><span className="font-semibold">{frozen ? 'FROZEN' : 'DRAFT'}</span></div>
         </div>
       </div>
     </div>
