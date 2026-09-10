@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireAssetVersionPrecondition;
+use App\Http\Middleware\RequireAssetQrTokenVersionPrecondition;
 use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
@@ -189,9 +190,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('assets/{assetId}/qr-identities', [AssetQrIdentityController::class, 'store'])
             ->middleware('permission:assets.manage-qr');
         Route::post('assets/{assetId}/qr-identities/rotate', [AssetQrIdentityController::class, 'rotate'])
-            ->middleware('permission:assets.manage-qr');
+            ->middleware(['permission:assets.manage-qr', RequireAssetQrTokenVersionPrecondition::class]);
         Route::post('assets/{assetId}/qr-identities/revoke', [AssetQrIdentityController::class, 'revoke'])
-            ->middleware('permission:assets.manage-qr');
+            ->middleware(['permission:assets.manage-qr', RequireAssetQrTokenVersionPrecondition::class]);
 
         Route::get('devices', [DeviceController::class, 'index'])->middleware('permission:devices.view');
         Route::post('devices', [DeviceController::class, 'store'])->middleware('permission:devices.create');

@@ -50,9 +50,10 @@ class AssetQrIdentityService
         CurrentMembershipContext $context,
         User $actor,
         string $assetId,
+        int $expectedTokenVersion,
         string $reason,
     ): AssetQrIdentity {
-        return DB::transaction(function () use ($context, $actor, $assetId, $reason): AssetQrIdentity {
+        return DB::transaction(function () use ($context, $actor, $assetId, $expectedTokenVersion, $reason): AssetQrIdentity {
             $asset = $this->lockAsset($context, $assetId);
             $active = $this->activeForUpdate($asset);
 
@@ -64,6 +65,7 @@ class AssetQrIdentityService
                 );
             }
 
+            $this->assertTokenVersion($active, $expectedTokenVersion);
             $this->revokeIdentity($context, $actor, $active, $reason);
 
             return $this->createIdentity($context, $actor, $asset);
@@ -74,9 +76,10 @@ class AssetQrIdentityService
         CurrentMembershipContext $context,
         User $actor,
         string $assetId,
+        int $expectedTokenVersion,
         string $reason,
     ): AssetQrIdentity {
-        return DB::transaction(function () use ($context, $actor, $assetId, $reason): AssetQrIdentity {
+        return DB::transaction(function () use ($context, $actor, $assetId, $expectedTokenVersion, $reason): AssetQrIdentity {
             $asset = $this->lockAsset($context, $assetId);
             $active = $this->activeForUpdate($asset);
 
@@ -87,6 +90,8 @@ class AssetQrIdentityService
                     409,
                 );
             }
+
+            $this->assertTokenVersion($active, $expectedTokenVersion);
 
             return $this->revokeIdentity($context, $actor, $active, $reason);
         });
@@ -195,6 +200,17 @@ class AssetQrIdentityService
         $identity->save();
 
         return $identity->refresh();
+    }
+
+    private function assertTokenVersion(AssetQrIdentity $identity, int $expectedTokenVersion): void
+    {
+        if ($identity->token_version !== $expectedTokenVersion) {
+            throw new AssetDomainException(
+                'Asset QR identity has changed since it was loaded.',
+                'ASSET_QR_VERSION_CONFLICT',
+                412,
+            );
+        }
     }
 
     private function publicNotFound(): AssetDomainException

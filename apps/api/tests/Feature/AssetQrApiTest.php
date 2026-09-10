@@ -103,7 +103,7 @@ class AssetQrApiTest extends TestCase
 
         $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [
             'reason' => 'Sticker photographed outside approved use.',
-        ])->assertOk();
+        ], ['If-Match' => '"1"'])->assertOk()->assertHeader('ETag', '"1"');
 
         $this->getJson('/api/v1/public/assets/qr/'.$publicId)->assertNotFound()->assertExactJson($notFound);
     }
@@ -140,6 +140,7 @@ class AssetQrApiTest extends TestCase
 
         $response = $this->postJson('/api/v1/assets/'.$mine->id.'/qr-identities')
             ->assertCreated()
+            ->assertHeader('ETag', '"1"')
             ->assertJsonPath('data.assetId', $mine->id)
             ->assertJsonPath('data.tokenVersion', 1)
             ->assertJsonPath('data.status', 'active');
@@ -172,8 +173,9 @@ class AssetQrApiTest extends TestCase
 
         $second = $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/rotate', [
             'reason' => 'Prevent reuse after label exposure.',
-        ])
+        ], ['If-Match' => '"1"'])
             ->assertCreated()
+            ->assertHeader('ETag', '"2"')
             ->assertJsonPath('data.tokenVersion', 2)
             ->assertJsonPath('data.status', 'active');
 
@@ -195,6 +197,38 @@ class AssetQrApiTest extends TestCase
         $this->assertSame(1, AssetQrIdentity::query()->where('asset_id', $asset->id)->where('status', 'active')->count());
     }
 
+    public function test_rotate_and_revoke_require_exact_current_qr_token_precondition(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['assets.manage-qr']);
+        $asset = Asset::factory()->for($school)->create();
+
+        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities')->assertCreated();
+
+        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/rotate', [
+            'reason' => 'Missing precondition proof.',
+        ])
+            ->assertStatus(428)
+            ->assertJsonPath('code', 'PRECONDITION_REQUIRED');
+
+        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/rotate', [
+            'reason' => 'Stale precondition proof.',
+        ], ['If-Match' => '"2"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'ASSET_QR_VERSION_CONFLICT');
+
+        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [
+            'reason' => 'Stale precondition proof.',
+        ], ['If-Match' => '"2"'])
+            ->assertStatus(412)
+            ->assertJsonPath('code', 'ASSET_QR_VERSION_CONFLICT');
+
+        $this->assertDatabaseHas('asset_qr_identities', [
+            'asset_id' => $asset->id,
+            'token_version' => 1,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_revoke_requires_reason_and_history_remains_queryable_by_manager(): void
     {
         [, $school] = $this->authenticateWithPermissions(['assets.manage-qr']);
@@ -202,14 +236,15 @@ class AssetQrApiTest extends TestCase
 
         $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities')->assertCreated();
 
-        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [])
+        $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [], ['If-Match' => '"1"'])
             ->assertUnprocessable()
             ->assertJsonPath('code', 'VALIDATION_FAILED');
 
         $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [
             'reason' => 'Asset label physically destroyed.',
-        ])
+        ], ['If-Match' => '"1"'])
             ->assertOk()
+            ->assertHeader('ETag', '"1"')
             ->assertJsonPath('data.status', 'revoked');
 
         $this->getJson('/api/v1/assets/'.$asset->id.'/qr-identities')
@@ -220,7 +255,7 @@ class AssetQrApiTest extends TestCase
 
         $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/revoke', [
             'reason' => 'Second revoke must fail.',
-        ])
+        ], ['If-Match' => '"1"'])
             ->assertStatus(409)
             ->assertJsonPath('code', 'ASSET_QR_NOT_ACTIVE');
 
