@@ -1,7 +1,7 @@
 # SmartLab Current Architecture State
 
 **Snapshot date:** 2026-09-10  
-**Baseline:** `main@5835b10a116c0e9fba0319ce697cfd608824052a` with closed S4 and merged S5.1–S5.3 backend; stacked merge candidates are PR #88 (`c9947de27ffebd99d1c4f634086ff18d1163771f`) and PR #89 (`ddc2ffff1a35639f64eb815731507abd338a52b1`). Candidate runtime is server-authoritative for Work Orders, Maintenance Campaign orchestration, Dashboard/Monitoring Device inventory, and global Laboratory context, but the stack remains unmerged and final impacted browser UAT is still gated.
+**Baseline:** `main@5835b10a116c0e9fba0319ce697cfd608824052a` with closed S4 and merged S5.1–S5.3 backend; stacked merge candidates are PR #88 (`c9947de27ffebd99d1c4f634086ff18d1163771f`) and PR #89 runtime `1c4aca20c289526dc912322c7c3fd87413e3869c`. Candidate runtime is server-authoritative for Work Orders, Maintenance Campaign orchestration, Dashboard/Monitoring Device inventory, and global Laboratory context. Browser Global Laboratory Context UAT and exact-head API regression are complete; the stack remains unmerged pending explicit merge authorization.
 
 This document is the concise operational snapshot for contributors. It complements the longer product specification and source-of-truth migration roadmap.
 
@@ -55,7 +55,7 @@ These areas are implemented on the stacked PR #88 → PR #89 candidate but are *
 - themed global Laboratory selector and cross-page Laboratory context propagation;
 - canonical Monitoring Device inventory view with S6 telemetry explicitly deferred.
 
-Exact runtime candidate head `ac232c45cecfa50af7b0d23e14c975db45c02cd3` has Vercel SUCCESS. Operator local evidence is PASS for web typecheck, SourceOfTruthBoundary 23/23, production build, targeted timezone configuration 1 PASS / 1 PostgreSQL-only SKIP, targeted S4 reconciliation 5/5, and full API regression 731 PASS / 11 SKIP / 0 FAIL / 5876 assertions. The skipped tests are PostgreSQL-only contention/session proofs; runtime PostgreSQL `SHOW TIME ZONE = UTC` and a new Work Order create/cancel browser mutation independently prove the timezone fix on the active UAT database. GitHub Actions has no run for this exact stacked head, so full GitHub CI PASS must not be claimed.
+Exact runtime candidate head `1c4aca20c289526dc912322c7c3fd87413e3869c` has Vercel SUCCESS. Operator evidence is PASS for web typecheck, SourceOfTruthBoundary 23/23, production build, targeted timezone configuration, targeted S4 reconciliation, dedicated Global Lab Context fixture tests 3/3, Activity Report empty-map serialization 1/1, LaboratorySessionApiTest 17/17, and full API regression 735 PASS / 11 SKIP / 0 FAIL / 5894 assertions. Runtime PostgreSQL is pinned to UTC and `WO-2026-000003` proves correct create/cancel timestamps end-to-end. Dedicated non-custody UAT fixtures then proved data-bearing Global Laboratory Context behavior across Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar; Pelaksanaan Lab RPL1/RPL2 isolation was confirmed after the Activity Report map serialization fix. GitHub Actions has no run for this exact stacked head, so full GitHub CI PASS must not be claimed.
 
 ## Transitional
 
@@ -78,9 +78,9 @@ The Master Data ↔ TESSELA ↔ SmartLab boundary is locked by [ADR-001](./ADR-0
 2. S5.1 is locked on merged PR #85 / `8c7f84ee`; preserve [ADR-003](./ADR-003-corrective-work-order-boundary.md) and the [Work Order contract](./work-order-domain-contract.md).
 3. S5.2 is complete on merged PR #86 / `main@91000032`: preserve canonical WorkOrder core, corrective custody, cross-domain exclusion, `in_repair`, and OpenAPI 0.31 semantics.
 4. S5.3 is complete on merged PR #87 / `main@5835b10a`: preserve least-privilege `work-orders.consume-stock`, immutable sourced WorkOrderPartUsage, idempotent issue, Asset-authority verification, drift guards, atomic custody release, contention proofs, and OpenAPI 0.32.
-5. Finish the stacked S5 closure candidate: PR #88 remains the canonical Work Order frontend base; PR #89 adds Maintenance Campaign, Work Order UAT-driven hardening, Dashboard/Monitoring cleanup, and Global Laboratory Context. Do not merge either until final impacted browser UAT and exact-head regression evidence are recorded.
+5. The stacked S5 closure candidate is evidence-complete before merge: PR #88 remains the canonical Work Order frontend base; PR #89 adds Maintenance Campaign, Work Order UAT-driven hardening, Dashboard/Monitoring cleanup, Global Laboratory Context, PostgreSQL UTC pinning, and Activity Report empty-map contract stabilization.
 6. Temporary `WO-2026-000002` was canonically cancelled and its audit trail preserved. A second harmless Draft→Cancelled `WO-2026-000003` proved the PostgreSQL UTC connection fix end-to-end; neither historical record is rewritten.
-7. Remaining browser-data gap: Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar have no representative UAT rows in the active database, so their data-bearing Global Laboratory Context behavior is not manually claimed PASS even though automated API/source-boundary regression is green.
+7. Dedicated local/testing-only Global Laboratory Context fixtures were seeded without Asset/Device/Inventory mutation or active custody; browser UAT is PASS for Incident, Schedule, Reservation, Session/ActivityReport, and Operational Calendar context behavior, including school-scope Calendar visibility under a selected Lab.
 8. Merge order, when explicitly authorized, is PR #88 first and PR #89 second after retarget/reverification. Post-merge web/API regression remains part of S5 closure.
 9. After S5 closure, implement S5.6 QR Asset Identity & Label Batch before S6.
 10. Phase S6: PC monitoring telemetry.
