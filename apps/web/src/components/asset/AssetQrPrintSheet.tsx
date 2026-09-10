@@ -1,24 +1,14 @@
 import { Fragment } from 'react';
 import { AssetQrCode } from '@/components/asset/AssetQrCode';
-import type { AssetQrLabelBatch, AssetQrLabelTemplate } from '@/services/assetQrApi';
+import {
+  ASSET_QR_A4_PRINT_HEIGHT_MM,
+  ASSET_QR_A4_PRINT_WIDTH_MM,
+  ASSET_QR_LABEL_LAYOUT,
+  assetQrLabelsPerA4,
+} from '@/lib/assetQrLabelLayout';
+import type { AssetQrLabelBatch } from '@/services/assetQrApi';
 
-const TEMPLATE_LAYOUT: Record<AssetQrLabelTemplate, {
-  widthMm: number;
-  heightMm: number;
-  columns: number;
-  rows: number;
-  paddingMm: number;
-  qrMm: number;
-}> = {
-  '40x25': { widthMm: 40, heightMm: 25, columns: 4, rows: 11, paddingMm: 1.5, qrMm: 20 },
-  '50x30': { widthMm: 50, heightMm: 30, columns: 3, rows: 9, paddingMm: 2, qrMm: 24 },
-  '70x40': { widthMm: 70, heightMm: 40, columns: 2, rows: 6, paddingMm: 2.5, qrMm: 32 },
-};
-
-export function assetQrLabelsPerA4(templateKey: AssetQrLabelTemplate): number {
-  const layout = TEMPLATE_LAYOUT[templateKey];
-  return layout.columns * layout.rows;
-}
+export { assetQrLabelsPerA4 } from '@/lib/assetQrLabelLayout';
 
 function chunks<T>(items: T[], size: number): T[][] {
   const result: T[][] = [];
@@ -30,7 +20,7 @@ export function AssetQrPrintSheet({ batch }: { batch: AssetQrLabelBatch }) {
   const items = batch.items ?? [];
   if (items.length === 0) return null;
 
-  const layout = TEMPLATE_LAYOUT[batch.templateKey];
+  const layout = ASSET_QR_LABEL_LAYOUT[batch.templateKey];
   const pages = chunks(items, assetQrLabelsPerA4(batch.templateKey));
 
   return (
@@ -46,13 +36,13 @@ export function AssetQrPrintSheet({ batch }: { batch: AssetQrLabelBatch }) {
             display: block !important;
             position: absolute;
             inset: 0 auto auto 0;
-            width: 190mm;
+            width: ${ASSET_QR_A4_PRINT_WIDTH_MM}mm;
             color: #000;
             background: #fff;
           }
           .asset-qr-print-page {
-            width: 190mm;
-            min-height: 277mm;
+            width: ${ASSET_QR_A4_PRINT_WIDTH_MM}mm;
+            min-height: ${ASSET_QR_A4_PRINT_HEIGHT_MM}mm;
             display: grid;
             align-content: start;
             justify-content: center;
