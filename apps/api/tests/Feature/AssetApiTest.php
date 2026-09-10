@@ -282,7 +282,7 @@ class AssetApiTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/assets'))
             ->values();
 
-        $this->assertCount(9, $routes);
+        $this->assertCount(13, $routes);
 
         [, $school] = $this->authenticateWithPermissions(['assets.update']);
         $asset = Asset::factory()->for($school)->create();

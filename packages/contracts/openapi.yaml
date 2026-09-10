@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.33.0
-  description: Canonical SmartLab API v1 contract. Version 0.33 adds S5.5 Maintenance Campaign / Batch orchestration while preserving exact-Asset MaintenancePlan and MaintenanceExecution as the only preventive-maintenance execution and custody authorities.
+  version: 0.34.0
+  description: Canonical SmartLab API v1 contract. Version 0.34 starts S5.6 Asset QR Identity with history-preserving token lifecycle and a dedicated safe-minimal anonymous scan projection; Asset/Device/custody authorities remain unchanged.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -61,6 +61,10 @@ paths:
   /assets/{assetId}/device-unlink: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1device-unlink' }
   /assets/{assetId}/retire: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1retire' }
   /assets/{assetId}/dispose: { $ref: './openapi-assets.yaml#/paths/~1assets~1{assetId}~1dispose' }
+  /public/assets/qr/{publicId}: { $ref: './openapi-asset-qr.yaml#/paths/~1public~1assets~1qr~1{publicId}' }
+  /assets/{assetId}/qr-identities: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities' }
+  /assets/{assetId}/qr-identities/rotate: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities~1rotate' }
+  /assets/{assetId}/qr-identities/revoke: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities~1revoke' }
   /devices: { $ref: './openapi-0.11.yaml#/paths/~1devices' }
   /devices/{deviceId}: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}' }
   /devices/{deviceId}/transfers: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}~1transfers' }
