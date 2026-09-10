@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import appSource from '@/App.tsx?raw';
 import dashboardSource from '@/pages/DashboardPage.tsx?raw';
+import monitoringSource from '@/pages/MonitoringPage.tsx?raw';
 import masterDataSource from '@/pages/MasterDataPage.tsx?raw';
 import schedulesSource from '@/pages/SchedulesPage.tsx?raw';
 import calendarSource from '@/pages/CalendarPage.tsx?raw';
@@ -9,10 +10,14 @@ import priorityEventsSource from '@/pages/PriorityEventsPage.tsx?raw';
 import sessionsSource from '@/pages/SessionsPage.tsx?raw';
 import journalsSource from '@/pages/JournalsPage.tsx?raw';
 import assetsSource from '@/pages/AssetsPage.tsx?raw';
+import devicesSource from '@/pages/DeviceApiPages.tsx?raw';
+import incidentsSource from '@/pages/IncidentApiPages.tsx?raw';
 import stockSource from '@/pages/StockPage.tsx?raw';
 import loansSource from '@/pages/LoansPage.tsx?raw';
 import maintenanceSource from '@/pages/MaintenancePage.tsx?raw';
+import maintenanceCampaignSource from '@/components/maintenance/MaintenanceCampaignPanel.tsx?raw';
 import workOrdersSource from '@/pages/WorkOrdersPage.tsx?raw';
+import usersSource from '@/pages/UsersPage.tsx?raw';
 import navSource from '@/routes/nav.ts?raw';
 import sidebarSource from '@/components/layout/AppSidebar.tsx?raw';
 import topbarSource from '@/components/layout/AppTopbar.tsx?raw';
@@ -28,7 +33,20 @@ describe('source-of-truth migration foundation', () => {
     expect(dashboardSource).toContain("from '@/services/laboratoryApi'");
     expect(dashboardSource).toContain("from '@/services/deviceApi'");
     expect(dashboardSource).toContain("from '@/services/incidentApi'");
-    expect(dashboardSource).toContain('Dashboard tidak lagi mengambil nilai seed/browser');
+    expect(dashboardSource).toContain("from '@/services/workOrderApi'");
+    expect(dashboardSource).toContain('workOrderGateway.listAll()');
+    expect(dashboardSource).toContain('Work Order Saya');
+    expect(dashboardSource).toContain('Work Order Aktif');
+    expect(dashboardSource).toContain('workOrder.assigneeMembershipId === user?.membership.id');
+    expect(dashboardSource).toContain('to={`/work-orders/${workOrder.id}`}');
+    expect(dashboardSource).not.toContain("  'Tugas Perbaikan',");
+    expect(dashboardSource).not.toContain("'Aset Tetap',");
+    expect(dashboardSource).not.toContain("'Stok & Spare Part',");
+    expect(dashboardSource).not.toContain("'Pemeliharaan Berkala',");
+    expect(dashboardSource).not.toContain("'Peminjaman Barang',");
+    expect(dashboardSource).toContain('Semua Laboratorium');
+    expect(dashboardSource).toContain('Telemetri realtime tetap ditahan sampai S6');
+    expect(dashboardSource).toContain('Dashboard tidak mengisi kekosongan dengan data seed/browser');
   });
 
   it('does not show browser-local badge counts from the production sidebar', () => {
@@ -46,7 +64,35 @@ describe('source-of-truth migration foundation', () => {
     expect(topbarSource).not.toContain('db.incidents');
     expect(topbarSource).toContain("from '@/services/laboratoryApi'");
     expect(topbarSource).toContain('laboratoryGateway.list()');
+    expect(topbarSource).toContain('Semua Laboratorium');
+    expect(topbarSource).toContain('role="listbox"');
+    expect(topbarSource).toContain('aria-haspopup="listbox"');
+    expect(topbarSource).not.toContain('<select');
+    expect(topbarSource).toContain("activeLabId !== ''");
     expect(topbarSource).toContain('Notifikasi server belum tersedia');
+  });
+
+  it('cuts Monitoring Perangkat over to canonical Device inventory while keeping S6 telemetry deferred', () => {
+    expect(monitoringSource).not.toContain('useAppData');
+    expect(monitoringSource).not.toContain('services/repositories');
+    expect(monitoringSource).not.toContain('deviceRepository');
+    expect(monitoringSource).not.toContain('simulateHeartbeat');
+    expect(monitoringSource).not.toContain('mutate((d)');
+    expect(monitoringSource).not.toContain('applyDeviceOperationalStatus');
+    expect(monitoringSource).not.toContain('createIncidentFromDevice');
+    expect(monitoringSource).not.toContain('scheduleMaintenance');
+    expect(monitoringSource).toContain("from '@/services/deviceApi'");
+    expect(monitoringSource).toContain('deviceGateway.list');
+    expect(monitoringSource).toContain('activeLabId');
+    expect(monitoringSource).toContain('Monitoring realtime belum aktif');
+    expect(monitoringSource).toContain('CanonicalPcCard');
+    expect(monitoringSource).toContain('DEVICE_LIFECYCLE_LABELS[device.lifecycleStatus]');
+    expect(monitoringSource).toContain('grid-cols-3');
+    expect(monitoringSource).toContain('tidak ada simulasi atau mutation browser-local');
+    expect(monitoringSource).toContain('S6 akan menambahkan telemetry tanpa mengubah Device/Asset authority');
+    expect(appSource).toContain('path="/monitoring" element={<RequireServerPermission permission="devices.view"');
+    expect(navSource).toContain("to: '/monitoring', label: 'Monitoring Perangkat'");
+    expect(navSource).toContain("serverPermission: 'devices.view'");
   });
 
   it('keeps Academic Master Data server-authoritative and removes local CRUD from the production page', () => {
@@ -76,6 +122,9 @@ describe('source-of-truth migration foundation', () => {
     expect(schedulesSource).not.toContain('ConfirmDialog');
     expect(schedulesSource).toContain("from '@/services/scheduleOccurrenceApi'");
     expect(schedulesSource).toContain('scheduleOccurrenceGateway.listAll');
+    expect(schedulesSource).toContain("from '@/stores/uiStore'");
+    expect(schedulesSource).toContain('laboratoryId: activeLabId');
+    expect(schedulesSource).not.toContain('label="Laboratorium Operasional"');
     expect(schedulesSource).toContain("from '@/services/scheduleExceptionApi'");
     expect(schedulesSource).toContain('scheduleExceptionGateway.create');
     expect(schedulesSource).toContain("hasServerPermission(user, 'schedule-exceptions.create')");
@@ -92,6 +141,9 @@ describe('source-of-truth migration foundation', () => {
     expect(calendarSource).not.toContain('mutate((d)');
     expect(calendarSource).toContain("from '@/services/calendarApi'");
     expect(calendarSource).toContain('calendarEventGateway.list');
+    expect(calendarSource).toContain("from '@/stores/uiStore'");
+    expect(calendarSource).toContain("event.scope==='school'||event.laboratory?.id===activeLabId");
+    expect(calendarSource).toContain("scope:'laboratory',laboratoryId:activeLabId");
     expect(appSource).toContain('RequireServerPermission permission="calendar.view"');
     expect(navSource).toContain("calendar: 'calendar.view'");
     expect(navSource).toContain("serverPermission: 'calendar.view'");
@@ -104,6 +156,9 @@ describe('source-of-truth migration foundation', () => {
     expect(bookingsSource).not.toContain('checkConflict');
     expect(bookingsSource).toContain("from '@/services/laboratoryReservationApi'");
     expect(bookingsSource).toContain('laboratoryReservationGateway');
+    expect(bookingsSource).toContain("from '@/stores/uiStore'");
+    expect(bookingsSource).toContain('laboratoryId: activeLabId');
+    expect(bookingsSource).toContain('contextLabs');
     expect(bookingsSource).toContain('laboratoryAvailabilityGateway.check');
     expect(appSource).toContain('RequireServerPermission permission="bookings.view"');
     expect(navSource).toContain("bookings: 'bookings.view'");
@@ -130,6 +185,9 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).toContain("from '@/services/laboratorySessionApi'");
     expect(sessionsSource).toContain("from '@/services/activityReportApi'");
     expect(sessionsSource).toContain('laboratorySessionGateway.sources');
+    expect(sessionsSource).toContain("from '@/stores/uiStore'");
+    expect(sessionsSource).toContain('laboratoryId: activeLabId');
+    expect(sessionsSource).toContain('activityReportGateway.listAll');
     expect(sessionsSource).toContain('activityReportGateway');
     expect(sessionsSource).toContain('Tidak ada lagi Session/Journal browser-local');
     expect(journalsSource).toContain("'/sessions?tab=history'");
@@ -165,6 +223,25 @@ describe('source-of-truth migration foundation', () => {
     expect(sessionsSource).not.toContain('queueAttachment');
   });
 
+  it('propagates the global Laboratory context through Device, Asset, and Incident pages', () => {
+    expect(devicesSource).toContain("from '@/stores/uiStore'");
+    expect(devicesSource).toContain('homeLaboratoryId: activeLabId');
+    expect(devicesSource).toContain('setActiveLab(next.homeLaboratoryId)');
+    expect(assetsSource).toContain("from '@/stores/uiStore'");
+    expect(assetsSource).toContain('assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})');
+    expect(incidentsSource).toContain("from '@/stores/uiStore'");
+    expect(incidentsSource).toContain('activeLabId || undefined');
+    expect(incidentsSource).toContain('scopedLaboratories');
+    expect(workOrdersSource).toContain("from '@/stores/uiStore'");
+    expect(workOrdersSource).toContain('workOrder.laboratoryId === activeLabId');
+    expect(workOrdersSource).toContain('data={scopedWorkOrders}');
+    expect(workOrdersSource).toContain('scopedAssets.filter');
+    expect(maintenanceSource).toContain("from '@/stores/uiStore'");
+    expect(maintenanceSource).toContain('scopedAssetIds.has(plan.assetId)');
+    expect(maintenanceSource).toContain('scopedAssetIds.has(execution.assetId)');
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.listAllCampaigns(activeLabId || undefined)');
+  });
+
   it('cuts fixed Assets over to canonical S4.2 API authority', () => {
     expect(assetsSource).not.toContain('useAppData');
     expect(assetsSource).not.toContain('db.assets');
@@ -174,7 +251,7 @@ describe('source-of-truth migration foundation', () => {
     expect(assetsSource).not.toContain('Mutasi Aset');
     expect(assetsSource).not.toContain('Hapus aset');
     expect(assetsSource).toContain("from '@/services/assetApi'");
-    expect(assetsSource).toContain('assetGateway.listAll()');
+    expect(assetsSource).toContain('assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})');
     expect(assetsSource).toContain('assetGateway.linkDevice');
     expect(assetsSource).toContain('Tidak ada lagi mutation Asset browser-local');
     expect(appSource).toContain('RequireServerPermission permission="assets.view"');
@@ -213,10 +290,18 @@ describe('source-of-truth migration foundation', () => {
     expect(loansSource).toContain("from '@/services/loanApi'");
     expect(loansSource).toContain("from '@/services/assetApi'");
     expect(loansSource).toContain('loanGateway.listAll()');
+    expect(loansSource).toContain("from '@/stores/uiStore'");
+    expect(loansSource).toContain('homeLaboratoryId: activeLabId');
+    expect(loansSource).toContain('loan.items.some((item) => scopedAssetIds.has(item.assetId))');
+    expect(loansSource).toContain('label="Cari Asset"');
+    expect(loansSource).toContain('filteredEligibleAssets');
+    expect(assetsSource).toContain('Home Laboratory = Belum ditetapkan');
     expect(loansSource).toContain('loanGateway.checkout');
     expect(loansSource).toContain('loanGateway.returnLoan');
     expect(loansSource).toContain('satu LoanItem → satu Asset ULID exact');
-    expect(loansSource).toContain('Kerusakan tidak membuat Incident');
+    expect(loansSource).toContain('Return melepaskan custody Loan dan menyimpan evidence.');
+    expect(loansSource).toContain('Asset condition, atau Incident secara implisit.');
+    expect(loansSource).toContain('Incident dan perubahan kondisi Asset harus dilakukan eksplisit melalui authority masing-masing.');
     expect(appSource).toContain('RequireServerPermission permission="loans.view"');
     expect(navSource).toContain("loans: 'loans.view'");
     expect(navSource).toContain("serverPermission: 'loans.view'");
@@ -235,6 +320,9 @@ describe('source-of-truth migration foundation', () => {
     expect(maintenanceSource).toContain('maintenanceGateway.listAllPlans()');
     expect(maintenanceSource).toContain('maintenanceGateway.startExecution');
     expect(maintenanceSource).toContain('maintenanceGateway.completeExecution');
+    expect(maintenanceSource).toContain('checklistReadyForCompletion');
+    expect(maintenanceSource).toContain('Seluruh checklist harus selesai sebelum Maintenance dapat diselesaikan.');
+    expect(maintenanceSource).toContain('variant="danger"');
     expect(maintenanceSource).toContain('satu Asset canonical');
     expect(maintenanceSource).toContain('Corrective repair tetap S5 Work Order');
     expect(appSource).toContain('RequireServerPermission permission="maintenance.view"');
@@ -242,6 +330,31 @@ describe('source-of-truth migration foundation', () => {
     expect(navSource).toContain("serverPermission: 'maintenance.view'");
   });
 
+
+  it('keeps Maintenance Campaign as Lab-level orchestration over exact-Asset Maintenance authority', () => {
+    expect(maintenanceCampaignSource).not.toContain('useAppData');
+    expect(maintenanceCampaignSource).not.toContain('mutate((d)');
+    expect(maintenanceCampaignSource).not.toContain('db.maintenance');
+    expect(maintenanceCampaignSource).not.toContain('db.assets');
+    expect(maintenanceCampaignSource).not.toContain('custody_active');
+    expect(maintenanceCampaignSource).toContain("from '@/services/maintenanceApi'");
+    expect(maintenanceCampaignSource).toContain("from '@/services/laboratoryApi'");
+    expect(maintenanceCampaignSource).toContain("from '@/services/assetApi'");
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.createCampaign');
+    expect(maintenanceCampaignSource).toContain('maintenanceGateway.scheduleCampaign');
+    expect(maintenanceCampaignSource).toContain("asset.homeLaboratoryId === form.laboratoryId");
+    expect(maintenanceCampaignSource).toContain('Campaign bukan custody dan tidak menutup Laboratorium');
+    expect(maintenanceCampaignSource).toContain('MaintenanceExecution exact-Asset');
+    expect(maintenanceCampaignSource).toContain("campaign.status === 'active' ? 'warning' : 'success'");
+    expect(maintenanceSource).toContain('MaintenanceCampaignPanel');
+    expect(maintenanceSource).toContain('Campaign & Batch');
+  });
+
+  it('requires explicit role selection when creating a School membership', () => {
+    expect(usersSource).toContain('setForm(emptyForm())');
+    expect(usersSource).not.toContain("roleKeys: roles.some((role) => role.key === 'siswa') ? ['siswa'] : []");
+    expect(usersSource).toContain("if (form.roleKeys.length === 0) errors.roleKeys = 'Minimal satu role wajib dipilih.';");
+  });
 
   it('cuts Corrective Work Orders over to canonical S5 exact-Asset server authority', () => {
     expect(workOrdersSource).not.toContain('useAppData');
@@ -257,6 +370,8 @@ describe('source-of-truth migration foundation', () => {
     expect(workOrdersSource).toContain('workOrderGateway.listAll()');
     expect(workOrdersSource).toContain('workOrderGateway.usePart');
     expect(workOrdersSource).toContain('workOrderGateway.verify');
+    expect(workOrdersSource).toContain('event.payload.assignee');
+    expect(workOrdersSource).toContain("event.eventType === 'work_order.assigned' ? 'Teknisi ditugaskan' : 'Teknisi diganti'");
     expect(workOrdersSource).toContain('Tidak ada lagi Work Order browser-local');
     expect(workOrdersSource).toContain('tidak mengubah Device atau Incident secara implisit');
     expect(appSource).toContain('RequireServerPermission permission="work-orders.view"');

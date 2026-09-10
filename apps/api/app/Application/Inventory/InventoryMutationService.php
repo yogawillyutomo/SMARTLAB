@@ -3,6 +3,7 @@
 namespace App\Application\Inventory;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Domain\Inventory\InventoryCatalog;
 use App\Domain\Inventory\InventoryDomainException;
 use App\Models\InventoryItem;
 use App\Models\InventoryItemChangeEvent;
@@ -267,6 +268,16 @@ class InventoryMutationService
                 $quantityMilli = $this->toMilli($data['quantity']);
                 $beforeMilli = $this->toMilli($item->on_hand_quantity);
                 $kind = (string) $data['kind'];
+
+                if (in_array($item->unit, InventoryCatalog::DISCRETE_UNITS, true)
+                    && ! in_array($kind, ['adjustment_in', 'adjustment_out'], true)
+                    && $quantityMilli % 1000 !== 0) {
+                    throw new InventoryDomainException(
+                        'Discrete stock units require whole-number quantities for normal movements.',
+                        'STOCK_DISCRETE_QUANTITY_REQUIRED',
+                        422,
+                    );
+                }
 
                 if ($kind === 'opening') {
                     if ($beforeMilli !== 0 || InventoryTransaction::query()

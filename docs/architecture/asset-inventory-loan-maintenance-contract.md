@@ -414,6 +414,8 @@ While an execution is `in_progress`, operators with `maintenance.complete` may s
 - does not mutate Asset condition or Inventory;
 - remains distinct from immutable `checklistResults`, which are captured only by the final completion action.
 
+Final completion is fail-closed on the frozen checklist: every item must have `done = true`. A zero-complete or partially complete checklist returns `MAINTENANCE_CHECKLIST_INCOMPLETE` and must not release custody, consume Inventory, mutate Asset condition, advance the plan next-due date, or write a completion event.
+
 ### 7.4 Maintenance custody
 
 During `in_progress`, the Asset is under Maintenance custody and unavailable for new Loan checkout.

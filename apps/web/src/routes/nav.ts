@@ -72,7 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Aset dan Pemeliharaan',
     items: [
       { to: '/devices', label: 'Perangkat', icon: Laptop, serverPermission: 'devices.view' },
-      { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring' },
+      { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring', serverPermission: 'devices.view' },
       { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets', serverPermission: 'assets.view' },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock', serverPermission: 'stock.view' },
       { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, serverPermission: 'incidents.view' },

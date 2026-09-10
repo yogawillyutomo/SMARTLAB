@@ -11,4 +11,28 @@ class InventoryCatalog
         'adjustment_in',
         'adjustment_out',
     ];
+
+    public const UNITS = [
+        'pcs',
+        'unit',
+        'set',
+        'box',
+        'pack',
+        'roll',
+        'meter',
+        'liter',
+        'kg',
+        'gram',
+        'botol',
+    ];
+
+    public const DISCRETE_UNITS = [
+        'pcs',
+        'unit',
+        'set',
+        'box',
+        'pack',
+        'roll',
+        'botol',
+    ];
 }

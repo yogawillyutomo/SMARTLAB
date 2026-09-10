@@ -35,13 +35,15 @@ class InventoryApiTest extends TestCase
 
         $response = $this->postJson('/api/v1/stock-items', $this->validItemPayload([
             'itemCode' => ' stk-0001 ',
-            'minimumStock' => '2.500',
+            'minimumStock' => 2,
+            'unitPriceSnapshot' => 650000,
         ]))
             ->assertCreated()
             ->assertHeader('ETag', '"1"')
             ->assertJsonPath('data.schoolId', $school->id)
             ->assertJsonPath('data.itemCode', 'STK-0001')
-            ->assertJsonPath('data.minimumStock', 2.5)
+            ->assertJsonPath('data.minimumStock', 2)
+            ->assertJsonPath('data.unitPriceSnapshot', 650000)
             ->assertJsonPath('data.onHandQuantity', 0)
             ->assertJsonPath('data.version', 1);
 
@@ -129,10 +131,60 @@ class InventoryApiTest extends TestCase
         ]);
     }
 
+
+    public function test_item_metadata_requires_whole_minimum_and_rupiah_price(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['stock.create', 'stock.update']);
+
+        $this->postJson('/api/v1/stock-items', $this->validItemPayload(['minimumStock' => '2.500']))
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $this->postJson('/api/v1/stock-items', $this->validItemPayload(['unitPriceSnapshot' => '650000.50']))
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $item = InventoryItem::factory()->for($school)->create();
+        $this->patchJson('/api/v1/stock-items/'.$item->id, ['minimumStock' => 1.5], ['If-Match' => '"1"'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+        $this->patchJson('/api/v1/stock-items/'.$item->id, ['unitPriceSnapshot' => 1000.25], ['If-Match' => '"1"'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $this->assertSame('0.000', $item->fresh()->minimum_stock);
+        $this->assertNull($item->fresh()->unit_price_snapshot);
+    }
+
+    public function test_discrete_normal_movements_require_whole_quantities_but_adjustments_can_reconcile_residue(): void
+    {
+        [, $school] = $this->authenticateWithPermissions(['stock.transact']);
+        $item = InventoryItem::factory()->for($school)->create(['unit' => 'pcs']);
+
+        $this->postJson('/api/v1/stock-transactions', $this->movement($item, 'opening', '8.000'))
+            ->assertCreated()
+            ->assertJsonPath('data.balanceAfter', 8);
+
+        $this->postJson('/api/v1/stock-transactions', $this->movement($item, 'receipt', '0.001'))
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'STOCK_DISCRETE_QUANTITY_REQUIRED');
+
+        $this->postJson('/api/v1/stock-transactions', $this->movement($item, 'adjustment_in', '0.001'))
+            ->assertCreated()
+            ->assertJsonPath('data.balanceAfter', 8.001);
+
+        $this->postJson('/api/v1/stock-transactions', $this->movement($item, 'adjustment_out', '2.001'))
+            ->assertCreated()
+            ->assertJsonPath('data.balanceAfter', 6);
+
+        $this->assertSame('6.000', $item->fresh()->on_hand_quantity);
+        $this->assertDatabaseCount('inventory_transactions', 3);
+    }
+
     public function test_fractional_receipt_and_issue_update_balance_atomically(): void
     {
         [, $school] = $this->authenticateWithPermissions(['stock.transact']);
-        $item = InventoryItem::factory()->for($school)->create();
+        $item = InventoryItem::factory()->for($school)->create(['unit' => 'meter']);
 
         $this->postJson('/api/v1/stock-transactions', $this->movement($item, 'receipt', '2.750'))
             ->assertCreated()
@@ -172,7 +224,7 @@ class InventoryApiTest extends TestCase
     public function test_same_mutation_replays_without_duplicate_balance_change(): void
     {
         [, $school] = $this->authenticateWithPermissions(['stock.transact']);
-        $item = InventoryItem::factory()->for($school)->create();
+        $item = InventoryItem::factory()->for($school)->create(['unit' => 'meter']);
         $mutationId = (string) Str::uuid();
         $payload = $this->movement($item, 'receipt', '3.500', $mutationId);
 
@@ -312,6 +364,20 @@ class InventoryApiTest extends TestCase
         try {
             InventoryItem::factory()->for($school)->create(['item_code' => 'STK-UNIQUE']);
             $this->fail('Expected school-scoped item code uniqueness violation.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+
+        try {
+            InventoryItem::factory()->for($school)->create(['minimum_stock' => '0.500']);
+            $this->fail('Expected whole-number minimum stock constraint.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+
+        try {
+            InventoryItem::factory()->for($school)->create(['unit_price_snapshot' => '1000.50']);
+            $this->fail('Expected whole-number Rupiah price constraint.');
         } catch (QueryException) {
             $this->addToAssertionCount(1);
         }

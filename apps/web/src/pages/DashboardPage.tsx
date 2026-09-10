@@ -2,15 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  BookOpen,
   Boxes,
   FlaskConical,
-  HandHelping,
-  Monitor,
-  Package,
   Plus,
   RefreshCw,
-  ShieldCheck,
+  Wrench,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -26,12 +22,14 @@ import { laboratoryGateway, type LaboratoryDto } from '@/services/laboratoryApi'
 import { deviceGateway } from '@/services/deviceApi';
 import { incidentGateway, type IncidentListItem } from '@/services/incidentApi';
 import { INCIDENT_PRIORITY_LABELS, INCIDENT_STATUS_LABELS, incidentPriorityTone, incidentStatusTone } from '@/lib/incidentPresentation';
+import { workOrderGateway, type WorkOrderDto, type WorkOrderPriority, type WorkOrderStatus } from '@/services/workOrderApi';
 
 interface DashboardCanonicalState {
   laboratories: LaboratoryDto[];
   deviceTotal: number;
   incidentTotal: number;
   recentIncidents: IncidentListItem[];
+  activeWorkOrders: WorkOrderDto[];
 }
 
 const EMPTY_STATE: DashboardCanonicalState = {
@@ -39,19 +37,64 @@ const EMPTY_STATE: DashboardCanonicalState = {
   deviceTotal: 0,
   incidentTotal: 0,
   recentIncidents: [],
+  activeWorkOrders: [],
 };
 
+const ACTIVE_WORK_ORDER_STATUSES = ['draft', 'assigned', 'in_progress', 'on_hold', 'waiting_part', 'completed'] as const;
+
+const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
+  draft: 'Draft',
+  assigned: 'Ditugaskan',
+  in_progress: 'Berlangsung',
+  on_hold: 'Ditahan',
+  waiting_part: 'Menunggu Part',
+  completed: 'Selesai Teknis',
+  verified: 'Terverifikasi',
+  cancelled: 'Dibatalkan',
+};
+
+const WORK_ORDER_PRIORITY_LABELS: Record<WorkOrderPriority, string> = {
+  low: 'Rendah',
+  normal: 'Normal',
+  high: 'Tinggi',
+  critical: 'Kritis',
+};
+
+const WORK_ORDER_PRIORITY_WEIGHT: Record<WorkOrderPriority, number> = {
+  low: 1,
+  normal: 2,
+  high: 3,
+  critical: 4,
+};
+
+const WORK_ORDER_STATUS_WEIGHT: Record<WorkOrderStatus, number> = {
+  draft: 1,
+  assigned: 3,
+  in_progress: 6,
+  on_hold: 4,
+  waiting_part: 5,
+  completed: 2,
+  verified: 0,
+  cancelled: 0,
+};
+
+function workOrderStatusTone(status: WorkOrderStatus): 'muted' | 'info' | 'warning' | 'success' | 'danger' {
+  if (status === 'verified') return 'success';
+  if (status === 'completed' || status === 'assigned') return 'info';
+  if (status === 'in_progress' || status === 'waiting_part' || status === 'on_hold') return 'warning';
+  if (status === 'cancelled') return 'danger';
+  return 'muted';
+}
+
+function workOrderPriorityTone(priority: WorkOrderPriority): 'muted' | 'info' | 'warning' | 'danger' {
+  if (priority === 'critical') return 'danger';
+  if (priority === 'high') return 'warning';
+  if (priority === 'normal') return 'info';
+  return 'muted';
+}
+
 const PENDING_SERVER_DOMAINS = [
-  'Jadwal Reguler & Ketersediaan',
-  'Reservasi Lab',
-  'Pelaksanaan Lab & Jurnal',
   'Monitoring Telemetri',
-  'Aset Tetap',
-  'Stok & Spare Part',
-  'Tugas Perbaikan',
-  'Pemeliharaan Berkala',
-  'Peminjaman Barang',
-  'Kalender Akademik',
   'Notifikasi',
   'Laporan & Analitik',
   'Audit Log',
@@ -69,6 +112,11 @@ export function DashboardPage() {
   const canViewDevices = hasServerPermission(user, 'devices.view');
   const canViewIncidents = hasServerPermission(user, 'incidents.view');
   const canViewLaboratories = hasServerPermission(user, 'laboratories.view');
+  const canViewWorkOrders = hasServerPermission(user, 'work-orders.view');
+  const canUpdateWorkOrders = hasServerPermission(user, 'work-orders.update');
+  const canAssignWorkOrders = hasServerPermission(user, 'work-orders.assign');
+  const canApproveWorkOrders = hasServerPermission(user, 'work-orders.approve');
+  const personalWorkOrderScope = canViewWorkOrders && canUpdateWorkOrders && !canAssignWorkOrders && !canApproveWorkOrders;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,7 +128,7 @@ export function DashboardPage() {
         ? activeLabId
         : undefined;
 
-      const [devicePage, incidentPage] = await Promise.all([
+      const [devicePage, incidentPage, workOrders] = await Promise.all([
         canViewDevices
           ? deviceGateway.list({
               page: 1,
@@ -95,13 +143,24 @@ export function DashboardPage() {
               ...(selectedLaboratoryId ? { laboratoryId: selectedLaboratoryId } : {}),
             })
           : Promise.resolve(null),
+        canViewWorkOrders ? workOrderGateway.listAll() : Promise.resolve([]),
       ]);
+
+      const activeWorkOrders = workOrders
+        .filter((workOrder) => (ACTIVE_WORK_ORDER_STATUSES as readonly WorkOrderStatus[]).includes(workOrder.status))
+        .filter((workOrder) => !selectedLaboratoryId || workOrder.laboratoryId === selectedLaboratoryId)
+        .filter((workOrder) => !personalWorkOrderScope || workOrder.assigneeMembershipId === user?.membership.id)
+        .sort((left, right) =>
+          WORK_ORDER_PRIORITY_WEIGHT[right.priority] - WORK_ORDER_PRIORITY_WEIGHT[left.priority]
+          || WORK_ORDER_STATUS_WEIGHT[right.status] - WORK_ORDER_STATUS_WEIGHT[left.status]
+          || Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 
       setState({
         laboratories,
         deviceTotal: devicePage?.meta.total ?? 0,
         incidentTotal: incidentPage?.meta.total ?? 0,
         recentIncidents: incidentPage?.data ?? [],
+        activeWorkOrders,
       });
     } catch {
       setState(EMPTY_STATE);
@@ -109,7 +168,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeLabId, canViewDevices, canViewIncidents, canViewLaboratories]);
+  }, [activeLabId, canViewDevices, canViewIncidents, canViewLaboratories, canViewWorkOrders, personalWorkOrderScope, user?.membership.id]);
 
   useEffect(() => {
     void load();
@@ -127,8 +186,14 @@ export function DashboardPage() {
       { metric: 'Laboratorium Aktif', value: activeLaboratories.length },
       { metric: selectedLaboratory ? `Perangkat Terkelola - ${selectedLaboratory.name}` : 'Perangkat Terkelola', value: state.deviceTotal },
       { metric: selectedLaboratory ? `Tiket Kerusakan - ${selectedLaboratory.name}` : 'Tiket Kerusakan', value: state.incidentTotal },
+      ...(canViewWorkOrders ? [{ metric: personalWorkOrderScope ? 'Work Order Saya' : 'Work Order Aktif', value: state.activeWorkOrders.length }] : []),
     ]);
   }
+
+  const workOrderPanelTitle = personalWorkOrderScope ? 'Work Order Saya' : 'Work Order Aktif';
+  const workOrderPanelDescription = personalWorkOrderScope
+    ? 'Pekerjaan aktif yang ditugaskan pada membership Anda.'
+    : 'Pekerjaan aktif dalam scope Laboratorium yang sedang dipilih.';
 
   const hour = new Date().getHours();
   const greeting = hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
@@ -177,25 +242,79 @@ export function DashboardPage() {
           to={canViewLaboratories ? '/laboratories' : undefined}
         />
         <StatCard
-          label={selectedLaboratory ? 'Perangkat Terkelola (Lab ini)' : 'Perangkat Terkelola'}
+          label={selectedLaboratory ? 'Perangkat (Lab ini)' : 'Perangkat Terkelola'}
           value={canViewDevices && !error ? state.deviceTotal : '—'}
           icon={<Boxes className="h-5 w-5" />}
           tone="success"
           to={canViewDevices ? '/devices' : undefined}
         />
         <StatCard
-          label={selectedLaboratory ? 'Tiket Kerusakan (Lab ini)' : 'Tiket Kerusakan'}
+          label={selectedLaboratory ? 'Tiket Aktif (Lab ini)' : 'Tiket Kerusakan'}
           value={canViewIncidents && !error ? state.incidentTotal : '—'}
           icon={<AlertTriangle className="h-5 w-5" />}
           tone="warning"
           to={canViewIncidents ? '/incidents' : undefined}
         />
-        <StatCard label="Monitoring Realtime" value="—" icon={<Monitor className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Jadwal Reguler Hari Ini" value="—" icon={<BookOpen className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Pemeliharaan Jatuh Tempo" value="—" icon={<ShieldCheck className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Barang Dipinjam" value="—" icon={<HandHelping className="h-5 w-5" />} tone="neutral" />
-        <StatCard label="Stok Hampir Habis" value="—" icon={<Package className="h-5 w-5" />} tone="neutral" />
+        <StatCard
+          label={personalWorkOrderScope ? 'Work Order Saya' : selectedLaboratory ? 'Work Order Aktif (Lab ini)' : 'Work Order Aktif'}
+          value={canViewWorkOrders && !error ? state.activeWorkOrders.length : '—'}
+          icon={<Wrench className="h-5 w-5" />}
+          tone={state.activeWorkOrders.length > 0 ? 'warning' : 'neutral'}
+          to={canViewWorkOrders ? '/work-orders' : undefined}
+        />
       </div>
+
+      {canViewWorkOrders && (
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>{workOrderPanelTitle}</CardTitle>
+              <p className="mt-1 text-xs text-ink-muted">{workOrderPanelDescription}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge tone={state.activeWorkOrders.length > 0 ? 'warning' : 'muted'}>{state.activeWorkOrders.length}</Badge>
+              <Link to="/work-orders" className="text-xs text-accent-content hover:underline">Lihat semua</Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {state.activeWorkOrders.length === 0 ? (
+              <EmptyState
+                title={personalWorkOrderScope ? 'Tidak ada Work Order untuk saya' : 'Tidak ada Work Order aktif'}
+                description={personalWorkOrderScope
+                  ? 'Work Order baru akan muncul setelah membership ini ditugaskan sebagai teknisi.'
+                  : 'Work Order draft, ditugaskan, berlangsung, tertahan, menunggu part, atau selesai teknis akan muncul di sini.'}
+                className="py-8"
+              />
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {state.activeWorkOrders.slice(0, 5).map((workOrder) => (
+                  <Link
+                    key={workOrder.id}
+                    to={`/work-orders/${workOrder.id}`}
+                    className="rounded-xl border border-base-700/70 bg-base-800/50 p-4 transition-colors hover:border-base-600"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-accent-content">{workOrder.workOrderNumber}</p>
+                        <p className="mt-1 truncate text-xs text-ink-secondary">{workOrder.assetCodeSnapshot} · {workOrder.assetNameSnapshot}</p>
+                        <p className="mt-1 truncate text-xs text-ink-muted">{workOrder.laboratoryNameSnapshot} · {workOrder.scheduledFor ?? 'Tanpa jadwal'}</p>
+                      </div>
+                      <Wrench className="h-4 w-4 shrink-0 text-ink-muted" />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <Badge tone={workOrderPriorityTone(workOrder.priority)}>{WORK_ORDER_PRIORITY_LABELS[workOrder.priority]}</Badge>
+                      <Badge tone={workOrderStatusTone(workOrder.status)}>{WORK_ORDER_STATUS_LABELS[workOrder.status]}</Badge>
+                    </div>
+                    {!personalWorkOrderScope && workOrder.assigneeNameSnapshot && (
+                      <p className="mt-2 truncate text-[11px] text-ink-muted">Teknisi: {workOrder.assigneeNameSnapshot}</p>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
@@ -239,8 +358,9 @@ export function DashboardPage() {
             <Badge tone="success">Server</Badge>
           </CardHeader>
           <CardContent className="space-y-3 text-xs text-ink-muted">
-            <p>Laboratorium, perangkat, dan tiket pada Dashboard berasal dari API Laravel + PostgreSQL.</p>
-            <p>Angka `—` berarti domain tersebut belum memiliki API canonical; Dashboard tidak lagi mengambil nilai seed/browser untuk mengisi kekosongan.</p>
+            <p>Laboratorium, perangkat, tiket, dan Work Order pada Dashboard berasal dari API Laravel + PostgreSQL.</p>
+            <p>Konteks Lab mengikuti selector global di topbar. Pilih “Semua Laboratorium” untuk ringkasan sekolah.</p>
+            <p>Telemetri realtime tetap ditahan sampai S6; Dashboard tidak mengisi kekosongan dengan data seed/browser.</p>
           </CardContent>
         </Card>
       </div>
@@ -281,8 +401,8 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Domain Dalam Migrasi API</CardTitle>
-            <Badge tone="warning">Bertahap</Badge>
+            <CardTitle>Domain Belum Canonical</CardTitle>
+            <Badge tone="warning">Roadmap</Badge>
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2">

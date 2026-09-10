@@ -77,9 +77,11 @@ describe('Inventory contract parser', () => {
     expect(parseInventoryTransaction(transaction())).toEqual(transaction());
   });
 
-  it('rejects malformed balance math and protected legacy fields', () => {
+  it('rejects malformed balance math, fractional metadata, and protected legacy fields', () => {
     expect(() => parseInventoryItem({ ...item(), quantity: 2.5 })).toThrow(InventoryContractError);
     expect(() => parseInventoryItem({ ...item(), onHandQuantity: -1 })).toThrow(InventoryContractError);
+    expect(() => parseInventoryItem({ ...item(), minimumStock: 1.5 })).toThrow(InventoryContractError);
+    expect(() => parseInventoryItem({ ...item(), unitPriceSnapshot: 1000.5 })).toThrow(InventoryContractError);
     expect(() => parseInventoryTransaction({ ...transaction(), balanceAfter: 9 })).toThrow(InventoryContractError);
     expect(() => parseInventoryTransaction({ ...transaction(), signedDelta: 2 })).toThrow(InventoryContractError);
   });

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.32.0
-  description: Canonical SmartLab API v1 contract. Version 0.32 adds S5.3 Work Order spare-part consumption through immutable Inventory authority plus managerial verification through Asset authority with atomic corrective-custody release.
+  version: 0.33.0
+  description: Canonical SmartLab API v1 contract. Version 0.33 adds S5.5 Maintenance Campaign / Batch orchestration while preserving exact-Asset MaintenancePlan and MaintenanceExecution as the only preventive-maintenance execution and custody authorities.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -26,6 +26,12 @@ paths:
   /work-orders/{workOrderId}/verify: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1verify' }
   /work-orders/{workOrderId}/rework: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1rework' }
   /work-orders/{workOrderId}/cancel: { $ref: './openapi-work-orders.yaml#/paths/~1work-orders~1{workOrderId}~1cancel' }
+  /maintenance-campaigns: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns' }
+  /maintenance-campaigns/{campaignId}: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns~1{campaignId}' }
+  /maintenance-campaigns/{campaignId}/history: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns~1{campaignId}~1history' }
+  /maintenance-campaigns/{campaignId}/activate: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns~1{campaignId}~1activate' }
+  /maintenance-campaigns/{campaignId}/deactivate: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns~1{campaignId}~1deactivate' }
+  /maintenance-campaigns/{campaignId}/executions: { $ref: './openapi-maintenance-campaigns.yaml#/paths/~1maintenance-campaigns~1{campaignId}~1executions' }
   /maintenance-plans: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans' }
   /maintenance-plans/{planId}: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}' }
   /maintenance-plans/{planId}/activate: { $ref: './openapi-maintenance.yaml#/paths/~1maintenance-plans~1{planId}~1activate' }

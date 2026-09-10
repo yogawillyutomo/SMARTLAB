@@ -69,7 +69,7 @@ export type UpdateAssetInput = Omit<Partial<CreateAssetInput>, 'assetCode'>;
 
 export interface AssetGateway {
   list: (filters?: AssetListFilters) => Promise<AssetPage>;
-  listAll: () => Promise<AssetDto[]>;
+  listAll: (filters?: Omit<AssetListFilters, 'page' | 'perPage'>) => Promise<AssetDto[]>;
   show: (assetId: string) => Promise<AssetDto>;
   create: (input: CreateAssetInput) => Promise<AssetDto>;
   update: (assetId: string, expectedVersion: number, input: UpdateAssetInput) => Promise<AssetDto>;
@@ -287,12 +287,12 @@ export function createAssetGateway(client: ApiClient): AssetGateway {
     async list(filters = {}) {
       return parseAssetCollectionResponse(await client.get<unknown>(buildAssetListPath(filters)));
     },
-    async listAll() {
-      const first = parseAssetCollectionResponse(await client.get<unknown>(buildAssetListPath({ page: 1, perPage: 500 })));
+    async listAll(filters = {}) {
+      const first = parseAssetCollectionResponse(await client.get<unknown>(buildAssetListPath({ ...filters, page: 1, perPage: 500 })));
       if (first.meta.lastPage === 1) return first.data;
       const pages = await Promise.all(
         Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
-          client.get<unknown>(buildAssetListPath({ page: index + 2, perPage: 500 }))),
+          client.get<unknown>(buildAssetListPath({ ...filters, page: index + 2, perPage: 500 }))),
       );
       return [...first.data, ...pages.flatMap((page) => parseAssetCollectionResponse(page).data)];
     },

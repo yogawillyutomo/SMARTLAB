@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Application\Identity\CurrentMembershipContext;
+use App\Domain\Inventory\InventoryCatalog;
 use App\Http\Requests\Concerns\RejectsUnknownFields;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -56,11 +57,11 @@ class CreateInventoryItemRequest extends FormRequest
             ],
             'name' => ['required', 'string', 'min:1', 'max:255'],
             'category' => ['required', 'string', 'min:1', 'max:120'],
-            'unit' => ['required', 'string', 'min:1', 'max:32'],
-            'minimumStock' => ['sometimes', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999999.999'],
+            'unit' => ['required', Rule::in(InventoryCatalog::UNITS)],
+            'minimumStock' => ['sometimes', 'integer', 'min:0', 'max:999999999999'],
             'storageLocation' => ['sometimes', 'nullable', 'string', 'max:255'],
             'supplierName' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'unitPriceSnapshot' => ['sometimes', 'nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999999999.99'],
+            'unitPriceSnapshot' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9999999999999'],
         ];
 
         foreach (self::PROHIBITED as $field) {

@@ -344,6 +344,71 @@ class MaintenanceApiTest extends TestCase
         $this->assertSame('in_progress', MaintenanceExecution::query()->findOrFail($executionId)->status);
     }
 
+    public function test_completion_requires_every_frozen_checklist_item_before_any_authority_side_effects(): void
+    {
+        [, $school] = $this->authenticateWithPermissions([
+            'assets.view', 'maintenance.create-plan', 'maintenance.schedule', 'maintenance.start',
+            'maintenance.complete', 'maintenance.consume-stock',
+            'stock.create', 'stock.transact',
+        ]);
+        $asset = $this->asset($school, ['condition' => 'good', 'version' => 2]);
+        $stock = $this->stockWithOpening('3.000');
+
+        $plan = $this->postJson('/api/v1/maintenance-plans', $this->planPayload($asset->id, [
+            'frequencyKind' => 'monthly',
+            'nextDueDate' => now()->toDateString(),
+            'checklistTemplate' => ['Cek kondisi fisik', 'Bersihkan debu dan fan'],
+        ]))->assertCreated();
+        $planId = (string) $plan->json('data.id');
+        $dueBefore = (string) $plan->json('data.nextDueDate');
+
+        $execution = $this->schedule($planId, 1)->assertCreated();
+        $executionId = (string) $execution->json('data.id');
+        $started = $this->postJson("/api/v1/maintenance-executions/{$executionId}/start", [], ['If-Match' => '"1"'])
+            ->assertOk()
+            ->assertJsonPath('data.custodyActive', true);
+
+        foreach ([[false, false], [true, false]] as $checks) {
+            $mutationId = (string) Str::uuid();
+
+            $this->postJson("/api/v1/maintenance-executions/{$executionId}/complete", [
+                'checklistResults' => $checks,
+                'findings' => 'UAT incomplete checklist guard.',
+                'actionTaken' => 'Attempted completion must fail closed.',
+                'conditionAfter' => 'minor_damage',
+                'inventoryIssues' => [[
+                    'inventoryItemId' => $stock->id,
+                    'clientMutationId' => $mutationId,
+                    'quantity' => 1,
+                ]],
+            ], ['If-Match' => '"'.$started->json('data.version').'"'])
+                ->assertStatus(409)
+                ->assertJsonPath('code', 'MAINTENANCE_CHECKLIST_INCOMPLETE');
+
+            $this->assertDatabaseMissing('inventory_transactions', [
+                'client_mutation_id' => $mutationId,
+            ]);
+        }
+
+        $executionModel = MaintenanceExecution::query()->findOrFail($executionId);
+        $asset->refresh();
+        $stock->refresh();
+        $planModel = MaintenancePlan::query()->findOrFail($planId);
+
+        $this->assertSame('in_progress', $executionModel->status);
+        $this->assertTrue($executionModel->custody_active);
+        $this->assertNull($executionModel->checklist_results);
+        $this->assertNull($executionModel->condition_after);
+        $this->assertSame('good', $asset->condition);
+        $this->assertSame(2, $asset->version);
+        $this->assertSame('3.000', $stock->on_hand_quantity);
+        $this->assertSame($dueBefore, $planModel->next_due_date->toDateString());
+        $this->assertDatabaseMissing('maintenance_events', [
+            'maintenance_execution_id' => $executionId,
+            'event_type' => 'maintenance_execution.completed',
+        ]);
+    }
+
     public function test_completion_atomically_updates_asset_condition_consumes_inventory_and_advances_plan(): void
     {
         [, $school] = $this->authenticateWithPermissions([
@@ -606,7 +671,8 @@ class MaintenanceApiTest extends TestCase
     public function test_maintenance_routes_use_server_permissions_and_version_preconditions(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/maintenance-plans')
+                || str_starts_with($route->uri(), 'api/v1/maintenance-executions'))
             ->values();
 
         $this->assertCount(13, $routes);

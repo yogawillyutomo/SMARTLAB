@@ -23,6 +23,7 @@ import {
   Link2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -356,6 +357,7 @@ function reportTimelineLabel(event: ActivityReportDto['timeline'][number]): stri
 
 export function SessionsPage() {
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -488,23 +490,38 @@ export function SessionsPage() {
       const scopeSessions = canViewAllSessions ? 'all' : 'mine';
       const scopeReports = canViewAllReports ? 'all' : 'mine';
       const [sourceRows, sessionRows, reportRows, labRows] = await Promise.all([
-        laboratorySessionGateway.sources({ from: today, to: today, scope: scopeSessions }),
-        laboratorySessionGateway.listAll({ from: historyFrom, to: historyTo, scope: scopeSessions }),
+        laboratorySessionGateway.sources({
+          from: today,
+          to: today,
+          scope: scopeSessions,
+          ...(activeLabId ? { laboratoryId: activeLabId } : {}),
+        }),
+        laboratorySessionGateway.listAll({
+          from: historyFrom,
+          to: historyTo,
+          scope: scopeSessions,
+          ...(activeLabId ? { laboratoryId: activeLabId } : {}),
+        }),
         canViewReports
-          ? activityReportGateway.listAll({ from: historyFrom, to: historyTo, scope: scopeReports })
+          ? activityReportGateway.listAll({
+              from: historyFrom,
+              to: historyTo,
+              scope: scopeReports,
+              ...(activeLabId ? { laboratoryId: activeLabId } : {}),
+            })
           : Promise.resolve([]),
         canBackfill ? laboratoryGateway.list() : Promise.resolve([]),
       ]);
       setSources(sourceRows);
       setSessions(sessionRows);
       setReports(reportRows);
-      setLabs(labRows);
+      setLabs(activeLabId ? labRows.filter((lab) => lab.id === activeLabId) : labRows);
     } catch (cause) {
       setError(issueMessage(cause));
     } finally {
       setLoading(false);
     }
-  }, [canBackfill, canViewAllReports, canViewAllSessions, canViewReports, historyFrom, historyTo, today]);
+  }, [activeLabId, canBackfill, canViewAllReports, canViewAllSessions, canViewReports, historyFrom, historyTo, today]);
 
   useEffect(() => {
     void load();
@@ -1298,7 +1315,7 @@ export function SessionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pelaksanaan Lab"
-        description="Satu workflow canonical dari sumber kegiatan, pelaksanaan aktual, hingga laporan terverifikasi."
+        description="Workflow canonical mengikuti konteks Lab global di topbar, dari sumber kegiatan hingga laporan terverifikasi."
         icon={<BookOpen className="h-5 w-5" />}
         actions={
           <>
@@ -1340,7 +1357,7 @@ export function SessionsPage() {
       <Card>
         <CardContent>
           <p className="text-sm text-ink-secondary">
-            Data pada halaman ini berasal dari API canonical SmartLab. Sumber normal hanya Jadwal TESSELA, Reservasi yang disetujui, atau Kegiatan Prioritas yang disetujui. Tidak ada lagi Session/Journal browser-local pada route ini.
+            Data halaman mengikuti konteks Lab global di topbar dan berasal dari API canonical SmartLab. Sumber normal hanya Jadwal TESSELA, Reservasi yang disetujui, atau Kegiatan Prioritas yang disetujui. Tidak ada lagi Session/Journal browser-local pada route ini.
           </p>
         </CardContent>
       </Card>

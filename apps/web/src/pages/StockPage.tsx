@@ -14,8 +14,11 @@ import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { downloadCSV, formatCurrency } from '@/utils';
 import {
+  INVENTORY_CATEGORIES,
   INVENTORY_TRANSACTION_KINDS,
+  INVENTORY_UNITS,
   inventoryGateway,
+  isDiscreteInventoryUnit,
   type CreateInventoryItemInput,
   type InventoryItemDto,
   type InventoryTransactionDto,
@@ -54,7 +57,7 @@ type MovementForm = {
 const EMPTY_ITEM: ItemForm = {
   itemCode: '',
   name: '',
-  category: '',
+  category: 'Spare Part Komputer',
   unit: 'pcs',
   minimumStock: '0',
   storageLocation: '',
@@ -75,6 +78,17 @@ function messageFrom(error: unknown): string {
 function nullIfBlank(value: string): string | null {
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function formatRupiahInput(value: string): string {
+  if (value === '') return '';
+  const amount = Number(value);
+  if (!Number.isSafeInteger(amount) || amount < 0) return '';
+  return `Rp ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(amount)}`;
 }
 
 function toItemForm(item: InventoryItemDto): ItemForm {
@@ -189,6 +203,17 @@ export function StockPage() {
       return;
     }
 
+    const minimumStock = Number(itemForm.minimumStock || 0);
+    const unitPrice = itemForm.unitPriceSnapshot === '' ? null : Number(itemForm.unitPriceSnapshot);
+    if (!Number.isSafeInteger(minimumStock) || minimumStock < 0) {
+      toast('Minimum stok harus bilangan bulat 0 atau lebih.', 'error');
+      return;
+    }
+    if (unitPrice !== null && (!Number.isSafeInteger(unitPrice) || unitPrice < 0)) {
+      toast('Harga satuan harus Rupiah bulat tanpa desimal.', 'error');
+      return;
+    }
+
     try {
       if (editing) {
         await inventoryGateway.updateItem(editing.id, editing.version, updateItemInput(itemForm));
@@ -228,8 +253,16 @@ export function StockPage() {
 
   async function submitMovement() {
     const quantity = Number(movement.quantity);
+    const selectedItem = items.find((item) => item.id === movement.inventoryItemId);
+    const adjustment = movement.kind === 'adjustment_in' || movement.kind === 'adjustment_out';
+    const wholeQuantityRequired = Boolean(selectedItem && isDiscreteInventoryUnit(selectedItem.unit) && !adjustment);
+
     if (!movement.inventoryItemId || !Number.isFinite(quantity) || quantity <= 0 || movement.reason.trim().length < 3) {
       toast('Item, jumlah positif, dan alasan minimal 3 karakter wajib diisi.', 'error');
+      return;
+    }
+    if (wholeQuantityRequired && !Number.isSafeInteger(quantity)) {
+      toast(`Satuan ${selectedItem?.unit ?? ''} hanya menerima jumlah bulat untuk transaksi normal.`, 'error');
       return;
     }
 
@@ -270,6 +303,26 @@ export function StockPage() {
       HargaSnapshot: item.unitPriceSnapshot ?? '',
     })));
   }
+
+  const selectedMovementItem = items.find((item) => item.id === movement.inventoryItemId);
+  const movementIsAdjustment = movement.kind === 'adjustment_in' || movement.kind === 'adjustment_out';
+  const movementRequiresWholeQuantity = Boolean(
+    selectedMovementItem
+      && isDiscreteInventoryUnit(selectedMovementItem.unit)
+      && !movementIsAdjustment,
+  );
+  const categoryOptions = [
+    ...INVENTORY_CATEGORIES.map((category) => ({ value: category, label: category })),
+    ...(itemForm.category && !(INVENTORY_CATEGORIES as readonly string[]).includes(itemForm.category)
+      ? [{ value: itemForm.category, label: `${itemForm.category} (legacy)` }]
+      : []),
+  ];
+  const unitOptions = [
+    ...INVENTORY_UNITS.map((unit) => ({ value: unit, label: unit })),
+    ...(itemForm.unit && !(INVENTORY_UNITS as readonly string[]).includes(itemForm.unit)
+      ? [{ value: itemForm.unit, label: `${itemForm.unit} (legacy)` }]
+      : []),
+  ];
 
   const itemColumns: Column<InventoryItemDto>[] = [
     { key: 'code', header: 'Kode', sortable: true, render: (item) => <span className="font-medium text-ink-primary">{item.itemCode}</span> },
@@ -346,12 +399,12 @@ export function StockPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Kode Item" value={itemForm.itemCode} disabled={Boolean(editing)} onChange={(event) => setItemForm({ ...itemForm, itemCode: event.target.value })} />
           <Input label="Nama Item" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} />
-          <Input label="Kategori" value={itemForm.category} onChange={(event) => setItemForm({ ...itemForm, category: event.target.value })} />
-          <Input label="Satuan" value={itemForm.unit} disabled={Boolean(editing && transactionCountByItem.get(editing.id))} onChange={(event) => setItemForm({ ...itemForm, unit: event.target.value })} />
-          <Input label="Minimum Stok" type="number" min="0" step="0.001" value={itemForm.minimumStock} onChange={(event) => setItemForm({ ...itemForm, minimumStock: event.target.value })} />
+          <Select label="Kategori" value={itemForm.category} onChange={(event) => setItemForm({ ...itemForm, category: event.target.value })} options={categoryOptions} />
+          <Select label="Satuan" value={itemForm.unit} disabled={Boolean(editing && transactionCountByItem.get(editing.id))} onChange={(event) => setItemForm({ ...itemForm, unit: event.target.value })} options={unitOptions} />
+          <Input label="Minimum Stok" type="number" min="0" step="1" value={itemForm.minimumStock} onChange={(event) => setItemForm({ ...itemForm, minimumStock: event.target.value })} hint="Bilangan bulat; tidak menerima desimal." />
           <Input label="Lokasi Simpan" value={itemForm.storageLocation} onChange={(event) => setItemForm({ ...itemForm, storageLocation: event.target.value })} />
           <Input label="Supplier" value={itemForm.supplierName} onChange={(event) => setItemForm({ ...itemForm, supplierName: event.target.value })} />
-          <Input label="Harga Satuan Snapshot" type="number" min="0" step="0.01" value={itemForm.unitPriceSnapshot} onChange={(event) => setItemForm({ ...itemForm, unitPriceSnapshot: event.target.value })} />
+          <Input label="Harga Satuan Snapshot" type="text" inputMode="numeric" value={formatRupiahInput(itemForm.unitPriceSnapshot)} onChange={(event) => setItemForm({ ...itemForm, unitPriceSnapshot: digitsOnly(event.target.value) })} hint="Rupiah bulat, contoh Rp 650.000." />
           {!editing && <p className="sm:col-span-2 rounded-lg border border-base-700 bg-base-800/60 p-3 text-xs text-ink-muted">Jumlah tidak diisi di form metadata. Saldo awal harus dicatat sebagai transaksi <strong>opening</strong> agar history dapat direkonstruksi.</p>}
         </div>
       </FormDialog>
@@ -360,7 +413,19 @@ export function StockPage() {
         <div className="space-y-4">
           <Select label="Item" value={movement.inventoryItemId} onChange={(event) => updateMovement({ inventoryItemId: event.target.value })} options={items.map((item) => ({ value: item.id, label: `${item.itemCode} · ${item.name} (${item.onHandQuantity} ${item.unit})` }))} />
           <Select label="Jenis" value={movement.kind} onChange={(event) => updateMovement({ kind: event.target.value as InventoryTransactionKind })} options={INVENTORY_TRANSACTION_KINDS.map((kind) => ({ value: kind, label: KIND_LABELS[kind] }))} />
-          <Input label="Jumlah" type="number" min="0.001" step="0.001" value={movement.quantity} onChange={(event) => updateMovement({ quantity: event.target.value })} />
+          <Input
+            label="Jumlah"
+            type="number"
+            min={movementRequiresWholeQuantity ? 1 : 0.001}
+            step={movementRequiresWholeQuantity ? 1 : 0.001}
+            value={movement.quantity}
+            onChange={(event) => updateMovement({ quantity: event.target.value })}
+            hint={movementRequiresWholeQuantity
+              ? `Satuan ${selectedMovementItem?.unit ?? ''}: transaksi normal wajib bilangan bulat.`
+              : movementIsAdjustment && selectedMovementItem && isDiscreteInventoryUnit(selectedMovementItem.unit)
+                ? 'Penyesuaian boleh pecahan untuk rekonsiliasi residue historis; gunakan alasan yang eksplisit.'
+                : 'Satuan ukur mendukung hingga 3 angka desimal.'}
+          />
           <Textarea label="Alasan" value={movement.reason} onChange={(event) => updateMovement({ reason: event.target.value })} />
           <p className="text-xs text-ink-muted">Retry submit yang sama memakai clientMutationId yang sama. Jika payload diubah setelah percobaan, UI membuat mutation ID baru.</p>
         </div>

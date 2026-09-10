@@ -61,6 +61,7 @@ export function AppTopbar() {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [labOpen, setLabOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [laboratories, setLaboratories] = useState<LaboratoryDto[]>([]);
@@ -69,6 +70,7 @@ export function AppTopbar() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const labRef = useRef<HTMLDivElement>(null);
 
   const searchFn = useGlobalSearch();
   const searchResults = searchOpen ? searchFn(searchQuery) : [];
@@ -98,8 +100,8 @@ export function AppTopbar() {
       if (activeLabId !== '') setActiveLab('');
       return;
     }
-    if (!laboratories.some((laboratory) => laboratory.id === activeLabId)) {
-      setActiveLab(laboratories[0].id);
+    if (activeLabId !== '' && !laboratories.some((laboratory) => laboratory.id === activeLabId)) {
+      setActiveLab('');
     }
   }, [activeLabId, laboratories, laboratoriesError, laboratoriesLoading, setActiveLab]);
 
@@ -130,6 +132,7 @@ export function AppTopbar() {
     const onClick = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) setProfileOpen(false);
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) setNotifOpen(false);
+      if (labRef.current && !labRef.current.contains(event.target as Node)) setLabOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -144,6 +147,8 @@ export function AppTopbar() {
   }, [searchOpen]);
 
   const crumbs = buildCrumbs(location.pathname);
+  const activeLaboratory = laboratories.find((laboratory) => laboratory.id === activeLabId) ?? null;
+  const activeLaboratoryLabel = activeLaboratory?.name ?? 'Semua Laboratorium';
 
   return (
     <>
@@ -178,26 +183,66 @@ export function AppTopbar() {
           <kbd className="hidden rounded border border-base-600 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted 2xl:inline">⌘K</kbd>
         </button>
 
-        <div className="hidden items-center gap-2 rounded-lg border border-base-700 bg-base-800 px-3 py-2 text-sm 2xl:flex">
-          <FlaskConical className="h-4 w-4 text-accent-content" />
-          {laboratoriesError ? (
-            <button type="button" onClick={() => void loadLaboratories()} className="text-xs text-danger hover:underline">Gagal memuat lab</button>
-          ) : (
-            <select
-              value={activeLabId}
-              onChange={(event) => setActiveLab(event.target.value)}
-              disabled={laboratoriesLoading || laboratories.length === 0}
-              className="max-w-44 bg-transparent text-ink-secondary outline-none disabled:cursor-not-allowed disabled:text-ink-muted"
-              aria-label="Pilih laboratorium aktif"
+        <div ref={labRef} className="relative hidden 2xl:block">
+          <div className="flex items-center gap-2 rounded-lg border border-base-600/70 bg-base-800 px-2.5 py-1.5 text-sm shadow-soft">
+            <FlaskConical className="h-4 w-4 shrink-0 text-accent-content" />
+            {laboratoriesError ? (
+              <button type="button" onClick={() => void loadLaboratories()} className="px-1 text-xs text-danger hover:underline">Gagal memuat lab</button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setLabOpen((open) => !open)}
+                disabled={laboratoriesLoading}
+                className="flex min-w-0 max-w-52 items-center gap-2 rounded-md px-1.5 py-1 text-left text-ink-secondary outline-none transition-colors hover:bg-base-700/70 hover:text-ink-primary disabled:cursor-wait disabled:text-ink-muted"
+                aria-label="Pilih laboratorium aktif"
+                aria-haspopup="listbox"
+                aria-expanded={labOpen}
+              >
+                <span className="truncate">{laboratoriesLoading ? 'Memuat laboratorium...' : activeLaboratoryLabel}</span>
+                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', labOpen && 'rotate-180')} />
+              </button>
+            )}
+          </div>
+
+          {labOpen && !laboratoriesError && !laboratoriesLoading && (
+            <div
+              role="listbox"
+              aria-label="Konteks laboratorium"
+              className="absolute right-0 top-[calc(100%+0.5rem)] z-50 min-w-64 overflow-hidden rounded-xl border border-base-600/70 bg-base-800 p-1.5 shadow-elevated"
             >
-              {laboratoriesLoading && <option value="">Memuat laboratorium...</option>}
-              {!laboratoriesLoading && laboratories.length === 0 && <option value="">Belum ada laboratorium</option>}
+              <button
+                type="button"
+                role="option"
+                aria-selected={activeLabId === ''}
+                onClick={() => { setActiveLab(''); setLabOpen(false); }}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                  activeLabId === '' ? 'bg-accent-primary/15 font-medium text-accent-content' : 'text-ink-secondary hover:bg-base-700/70 hover:text-ink-primary',
+                )}
+              >
+                <span>Semua Laboratorium</span>
+                {activeLabId === '' && <span className="text-xs">Aktif</span>}
+              </button>
               {laboratories.map((laboratory) => (
-                <option key={laboratory.id} value={laboratory.id} className="bg-base-800">
-                  {laboratory.name}
-                </option>
+                <button
+                  key={laboratory.id}
+                  type="button"
+                  role="option"
+                  aria-selected={activeLabId === laboratory.id}
+                  onClick={() => { setActiveLab(laboratory.id); setLabOpen(false); }}
+                  className={cn(
+                    'mt-1 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                    activeLabId === laboratory.id ? 'bg-accent-primary/15 font-medium text-accent-content' : 'text-ink-secondary hover:bg-base-700/70 hover:text-ink-primary',
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{laboratory.name}</span>
+                    <span className="block truncate text-[10px] text-ink-muted">{laboratory.code} · {laboratory.location}</span>
+                  </span>
+                  {activeLabId === laboratory.id && <span className="shrink-0 text-xs">Aktif</span>}
+                </button>
               ))}
-            </select>
+            </div>
           )}
         </div>
 

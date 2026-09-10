@@ -149,7 +149,9 @@ export function UsersPage() {
   function openCreate() {
     if (!canCreate) return;
     setEditing(null);
-    setForm({ ...emptyForm(), roleKeys: roles.some((role) => role.key === 'siswa') ? ['siswa'] : [] });
+    // RBAC must be an explicit administrator choice. Do not silently grant
+    // a default role to a new membership.
+    setForm(emptyForm());
     setFormErrors({});
     setFormOpen(true);
   }

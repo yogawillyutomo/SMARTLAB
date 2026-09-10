@@ -104,6 +104,7 @@ describe('Asset API contract', () => {
     }));
 
     await gateway.listAll();
+    await gateway.listAll({ homeLaboratoryId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' });
     await gateway.show('asset/id');
     await gateway.create({ assetCode: 'AST-1', name: 'A', category: 'C' });
     await gateway.update('asset/id', 2, { condition: 'good' });
@@ -112,7 +113,11 @@ describe('Asset API contract', () => {
     await gateway.retire('asset/id', 5, 'End of life');
     await gateway.dispose('asset/id', 6, 'Approved disposal');
 
-    expect(get.mock.calls.map(([path]) => path)).toEqual(['/assets?page=1&perPage=500', '/assets/asset%2Fid']);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      '/assets?page=1&perPage=500',
+      '/assets?page=1&perPage=500&homeLaboratoryId=01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      '/assets/asset%2Fid',
+    ]);
     expect(patch).toHaveBeenCalledWith('/assets/asset%2Fid', { condition: 'good' }, { ifMatch: '"2"' });
     expect(post).toHaveBeenCalledWith('/assets/asset%2Fid/device-link', { deviceId: 'device/id' }, { ifMatch: '"3"' });
     expect(post).toHaveBeenCalledWith('/assets/asset%2Fid/device-unlink', { reason: 'Correction' }, { ifMatch: '"4"' });

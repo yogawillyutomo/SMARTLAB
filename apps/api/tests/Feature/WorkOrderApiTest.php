@@ -464,6 +464,15 @@ class WorkOrderApiTest extends TestCase
 
         $this->postJson("/api/v1/work-orders/{$id}/resume", [], ['If-Match' => '"4"'])->assertOk();
 
+        $history = $this->getJson("/api/v1/work-orders/{$id}/history")->assertOk();
+        $historyPayload = json_decode((string) $history->getContent());
+        $resumedEvent = collect($historyPayload->data ?? [])
+            ->first(fn ($event): bool => ($event->eventType ?? null) === 'work_order.resumed');
+
+        $this->assertNotNull($resumedEvent);
+        $this->assertInstanceOf(\stdClass::class, $resumedEvent->payload);
+        $this->assertSame([], get_object_vars($resumedEvent->payload));
+
         $this->postJson("/api/v1/work-orders/{$id}/parts", [
             'inventoryItemId' => $item->id,
             'clientMutationId' => (string) Str::uuid(),

@@ -696,6 +696,33 @@ class LaboratorySessionApiTest extends TestCase
         );
     }
 
+    public function test_empty_activity_report_maps_serialize_as_json_objects(): void
+    {
+        [$admin, $school] = $this->actingAsRole(
+            School::factory()->create(['timezone' => 'Asia/Jakarta']),
+            'admin-lab',
+        );
+        $fixture = $this->fixture($school);
+
+        $response = $this->postJson('/api/v1/activity-reports/backfill', [
+            'reportType' => 'general',
+            'laboratoryId' => $fixture['labA']->id,
+            'occurredOn' => '2026-09-01',
+            'manualBackfillReason' => 'UAT empty map serialization contract.',
+            'responsibleName' => $admin->name,
+            'activityDescription' => 'Membuktikan map kosong diserialisasi sebagai object JSON.',
+            'plannedParticipantCount' => 1,
+            'presentCount' => 1,
+            'absentCount' => 0,
+        ])->assertCreated();
+
+        $json = (string) $response->getContent();
+
+        $this->assertStringContainsString('"typeSpecificContent":{}', $json);
+        $this->assertStringContainsString('"commonContent":{', $json);
+        $this->assertStringNotContainsString('"typeSpecificContent":[]', $json);
+    }
+
     public function test_manual_backfill_is_elevated_audited_and_never_creates_a_fake_session(): void
     {
         [$admin, $school] = $this->actingAsRole(

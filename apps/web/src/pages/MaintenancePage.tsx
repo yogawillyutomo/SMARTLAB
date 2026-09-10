@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, Pencil, Play, Plus, ShieldCheck, StopCircle, Wrench } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
+import { MaintenanceCampaignPanel } from '@/components/maintenance/MaintenanceCampaignPanel';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Textarea } from '@/components/ui/Input';
@@ -92,6 +94,15 @@ function checklistBooleans(execution: MaintenanceExecutionDto): boolean[] {
     evidence?.[index]?.item === item ? evidence[index].done : false);
 }
 
+function checklistReadyForCompletion(execution: MaintenanceExecutionDto): boolean {
+  const evidence = execution.checklistProgress ?? execution.checklistResults;
+  return Boolean(
+    evidence
+      && evidence.length === execution.checklistSnapshot.length
+      && evidence.every((item, index) => item.item === execution.checklistSnapshot[index] && item.done),
+  );
+}
+
 function defaultPlanForm(): PlanForm {
   return {
     assetId: '',
@@ -107,6 +118,7 @@ function defaultPlanForm(): PlanForm {
 
 export function MaintenancePage() {
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
   const canViewAssets = hasServerPermission(user, 'assets.view');
   const canCreatePlan = hasServerPermission(user, 'maintenance.create-plan') && canViewAssets;
   const canUpdatePlan = hasServerPermission(user, 'maintenance.update-plan');
@@ -117,7 +129,7 @@ export function MaintenancePage() {
   const canConsumeStock = hasServerPermission(user, 'maintenance.consume-stock') && hasServerPermission(user, 'stock.view');
   const canExport = hasServerPermission(user, 'maintenance.export');
 
-  const [tab, setTab] = useState<'plans' | 'executions'>('plans');
+  const [tab, setTab] = useState<'plans' | 'executions' | 'campaigns'>('plans');
   const [plans, setPlans] = useState<MaintenancePlanDto[]>([]);
   const [executions, setExecutions] = useState<MaintenanceExecutionDto[]>([]);
   const [assets, setAssets] = useState<AssetDto[]>([]);
@@ -140,7 +152,9 @@ export function MaintenancePage() {
       const [nextPlans, nextExecutions, nextAssets, nextStock] = await Promise.all([
         maintenanceGateway.listAllPlans(),
         maintenanceGateway.listAllExecutions(),
-        canViewAssets ? assetGateway.listAll() : Promise.resolve([]),
+        canViewAssets
+          ? assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})
+          : Promise.resolve([]),
         canConsumeStock ? inventoryGateway.listAllItems() : Promise.resolve([]),
       ]);
       setPlans(nextPlans);
@@ -152,20 +166,29 @@ export function MaintenancePage() {
     } finally {
       setLoading(false);
     }
-  }, [canConsumeStock, canViewAssets]);
+  }, [activeLabId, canConsumeStock, canViewAssets]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const activeAssets = useMemo(() => assets.filter((asset) => asset.lifecycleStatus === 'active'), [assets]);
+  const scopedAssetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
+  const scopedPlans = useMemo(
+    () => activeLabId ? plans.filter((plan) => scopedAssetIds.has(plan.assetId)) : plans,
+    [activeLabId, plans, scopedAssetIds],
+  );
+  const scopedExecutions = useMemo(
+    () => activeLabId ? executions.filter((execution) => scopedAssetIds.has(execution.assetId)) : executions,
+    [activeLabId, executions, scopedAssetIds],
+  );
   const stats = useMemo(() => ({
-    overdue: plans.filter((plan) => plan.isOverdue).length,
-    activePlans: plans.filter((plan) => plan.status === 'active').length,
-    scheduled: executions.filter((execution) => execution.status === 'scheduled').length,
-    inProgress: executions.filter((execution) => execution.status === 'in_progress').length,
-    completed: executions.filter((execution) => execution.status === 'completed').length,
-  }), [executions, plans]);
+    overdue: scopedPlans.filter((plan) => plan.isOverdue).length,
+    activePlans: scopedPlans.filter((plan) => plan.status === 'active').length,
+    scheduled: scopedExecutions.filter((execution) => execution.status === 'scheduled').length,
+    inProgress: scopedExecutions.filter((execution) => execution.status === 'in_progress').length,
+    completed: scopedExecutions.filter((execution) => execution.status === 'completed').length,
+  }), [scopedExecutions, scopedPlans]);
 
   function openCreatePlan() {
     setEditingPlan(null);
@@ -339,7 +362,12 @@ export function MaintenancePage() {
   }
 
   async function completeExecution() {
-    if (!completeState || completeState.actionTaken.trim().length < 3) {
+    if (!completeState) return;
+    if (!completeState.checklistResults.every(Boolean)) {
+      toast('Seluruh checklist harus selesai sebelum Maintenance dapat diselesaikan.', 'error');
+      return;
+    }
+    if (completeState.actionTaken.trim().length < 3) {
       toast('Tindakan preventif wajib dicatat.', 'error');
       return;
     }
@@ -375,7 +403,7 @@ export function MaintenancePage() {
   }
 
   function exportCsv() {
-    downloadCSV('preventive-maintenance-canonical.csv', plans.map((plan) => ({
+    downloadCSV('preventive-maintenance-canonical.csv', scopedPlans.map((plan) => ({
       Plan: plan.planCode,
       Asset: `${plan.assetCodeSnapshot} · ${plan.assetNameSnapshot}`,
       Nama: plan.name,
@@ -393,7 +421,7 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Pemeliharaan Berkala"
-        description="Preventive Maintenance exact-Asset. Custody, kondisi Asset, dan spare part tetap memakai authority canonical masing-masing."
+        description="Preventive Maintenance exact-Asset mengikuti konteks Lab global di topbar. Custody, kondisi Asset, dan spare part tetap pada authority canonical masing-masing."
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCsv}>Export</Button>}
@@ -418,11 +446,12 @@ export function MaintenancePage() {
       <div className="flex gap-2 border-b border-base-700">
         <button onClick={() => setTab('plans')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'plans' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Rencana</button>
         <button onClick={() => setTab('executions')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'executions' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Eksekusi & History</button>
+        <button onClick={() => setTab('campaigns')} className={`border-b-2 px-4 py-2.5 text-sm font-medium ${tab === 'campaigns' ? 'border-accent-content text-accent-content' : 'border-transparent text-ink-muted'}`}>Campaign & Batch</button>
       </div>
 
       {tab === 'plans' ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {plans.length === 0 ? <Card className="lg:col-span-2"><EmptyState title="Belum ada rencana Preventive Maintenance" /></Card> : plans.map((plan) => (
+          {scopedPlans.length === 0 ? <Card className="lg:col-span-2"><EmptyState title="Belum ada rencana Preventive Maintenance pada konteks ini" /></Card> : scopedPlans.map((plan) => (
             <Card key={plan.id}>
               <CardContent className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
@@ -452,15 +481,15 @@ export function MaintenancePage() {
                     technicianName: plan.assignedTechnicianNameSnapshot ?? '',
                   })}>Jadwalkan Eksekusi</Button>}
                   {canUpdatePlan && <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => openEditPlan(plan)}>Edit</Button>}
-                  {canUpdatePlan && <Button size="sm" variant="secondary" onClick={() => void togglePlan(plan)}>{plan.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>}
+                  {canUpdatePlan && <Button size="sm" variant={plan.status === 'active' ? 'warning' : 'success'} onClick={() => void togglePlan(plan)}>{plan.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-      ) : (
+      ) : tab === 'executions' ? (
         <Card>
-          {executions.length === 0 ? <EmptyState title="Belum ada execution Preventive Maintenance" /> : (
+          {scopedExecutions.length === 0 ? <EmptyState title="Belum ada execution Preventive Maintenance pada konteks ini" /> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-base-700 text-left text-ink-muted">
@@ -474,7 +503,7 @@ export function MaintenancePage() {
                   <th className="px-4 py-3 font-medium">Aksi</th>
                 </tr></thead>
                 <tbody>
-                  {executions.map((execution) => (
+                  {scopedExecutions.map((execution) => (
                     <tr key={execution.id} className="border-b border-base-700/40">
                       <td className="px-4 py-3 font-medium text-ink-primary">{execution.executionNumber}</td>
                       <td className="px-4 py-3 text-ink-secondary">{execution.assetCodeSnapshot}<div className="text-xs text-ink-muted">{execution.assetNameSnapshot}</div></td>
@@ -487,8 +516,15 @@ export function MaintenancePage() {
                         <div className="flex flex-wrap gap-1">
                           {canStart && execution.status === 'scheduled' && <Button size="sm" icon={<Play className="h-3.5 w-3.5" />} onClick={() => void startExecution(execution)}>Mulai</Button>}
                           {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="secondary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => openChecklistProgress(execution)}>Checklist</Button>}
-                          {canComplete && execution.status === 'in_progress' && <Button size="sm" variant="success" icon={<Wrench className="h-3.5 w-3.5" />} onClick={() => openComplete(execution)}>Selesaikan</Button>}
-                          {canCancel && (execution.status === 'scheduled' || execution.status === 'in_progress') && <Button size="sm" variant="ghost" icon={<StopCircle className="h-3.5 w-3.5" />} onClick={() => setCancelState({ execution, reason: '' })}>Batalkan</Button>}
+                          {canComplete && execution.status === 'in_progress' && <Button
+                            size="sm"
+                            variant="success"
+                            icon={<Wrench className="h-3.5 w-3.5" />}
+                            disabled={!checklistReadyForCompletion(execution)}
+                            title={checklistReadyForCompletion(execution) ? 'Selesaikan Maintenance' : 'Lengkapi dan simpan seluruh checklist terlebih dahulu'}
+                            onClick={() => openComplete(execution)}
+                          >Selesaikan</Button>}
+                          {canCancel && (execution.status === 'scheduled' || execution.status === 'in_progress') && <Button size="sm" variant="danger" icon={<StopCircle className="h-3.5 w-3.5" />} onClick={() => setCancelState({ execution, reason: '' })}>Batalkan</Button>}
                         </div>
                       </td>
                     </tr>
@@ -498,6 +534,8 @@ export function MaintenancePage() {
             </div>
           )}
         </Card>
+      ) : (
+        <MaintenanceCampaignPanel activeLabId={activeLabId} onChanged={load} />
       )}
 
       <FormDialog open={planOpen} onClose={() => setPlanOpen(false)} title={editingPlan ? 'Edit Rencana Preventive Maintenance' : 'Rencana Preventive Maintenance Baru'} onSubmit={() => void savePlan()} size="lg">
@@ -620,9 +658,12 @@ export function MaintenancePage() {
         open={Boolean(completeState)}
         onClose={() => setCompleteState(null)}
         title="Selesaikan Preventive Maintenance"
-        description="Completion atomik: checklist evidence, audited Asset condition, immutable stock issue, custody release, dan plan next-due."
+        description="Seluruh checklist frozen wajib selesai. Setelah itu completion atomik menyimpan evidence, Asset condition, Inventory issue, custody release, dan plan next-due."
         size="xl"
-        footer={<><Button variant="ghost" onClick={() => setCompleteState(null)}>Batal</Button><Button onClick={() => void completeExecution()}>Selesaikan</Button></>}
+        footer={<>
+          <Button variant="ghost" onClick={() => setCompleteState(null)}>Batal</Button>
+          <Button variant="success" disabled={!completeState?.checklistResults.every(Boolean)} onClick={() => void completeExecution()}>Selesaikan Maintenance</Button>
+        </>}
       >
         {completeState && <div className="space-y-5">
           <div className="rounded-lg border border-base-700 p-3 text-sm">
@@ -662,7 +703,7 @@ export function MaintenancePage() {
                   next[index] = { ...next[index], quantity: Number(event.target.value) };
                   setCompleteState({ ...completeState, inventoryIssues: next });
                 }} />
-                <Button variant="ghost" size="sm" onClick={() => setCompleteState({ ...completeState, inventoryIssues: completeState.inventoryIssues.filter((_, itemIndex) => itemIndex !== index) })}>Hapus</Button>
+                <Button variant="danger" size="sm" onClick={() => setCompleteState({ ...completeState, inventoryIssues: completeState.inventoryIssues.filter((_, itemIndex) => itemIndex !== index) })}>Hapus</Button>
               </div>
             ))}</div>
           </div>}
@@ -675,7 +716,7 @@ export function MaintenancePage() {
         onClose={() => setCancelState(null)}
         title="Batalkan Execution"
         description="Jika execution sedang in-progress, Maintenance custody dilepas tanpa mengubah kondisi Asset."
-        footer={<><Button variant="ghost" onClick={() => setCancelState(null)}>Kembali</Button><Button onClick={() => void cancelExecution()}>Batalkan Execution</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setCancelState(null)}>Kembali</Button><Button variant="danger" onClick={() => void cancelExecution()}>Batalkan Execution</Button></>}
       >
         {cancelState && <Textarea label="Alasan" required value={cancelState.reason} onChange={(event) => setCancelState({ ...cancelState, reason: event.target.value })} />}
       </Modal>

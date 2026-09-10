@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Download, HandHelping, PackageCheck, Plus, RotateCcw, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarClock, Check, ClipboardCheck, Download, HandHelping, PackageCheck, Plus, RotateCcw, UserRound, XCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { ApiClientError } from '@/lib/apiClient';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -71,6 +72,27 @@ function futureDateTimeInput(): string {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
 }
 
+function formatLoanDateTime(value: string | null): string {
+  if (!value) return 'Belum';
+  return new Date(value).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function loanTimeline(loan: LoanDto) {
+  return [
+    { label: 'Diajukan', at: loan.createdAt, actor: loan.requestedByNameSnapshot },
+    { label: 'Disetujui', at: loan.approvedAt, actor: loan.approvedByNameSnapshot },
+    { label: 'Diserahkan', at: loan.handedOverAt, actor: loan.handedOverByNameSnapshot },
+    { label: 'Dikembalikan', at: loan.returnedAt, actor: loan.returnedByNameSnapshot },
+    { label: 'Pemeriksaan selesai', at: loan.inspectedAt, actor: loan.inspectedByNameSnapshot },
+  ];
+}
+
 type CreateForm = {
   borrowerName: string;
   borrowerUnit: string;
@@ -84,6 +106,8 @@ type ReasonAction = { kind: 'reject' | 'cancel'; loan: LoanDto } | null;
 
 export function LoansPage() {
   const user = useAuthStore((state) => state.user);
+  const activeLabId = useUIStore((state) => state.activeLabId);
+  const canViewAssets = hasServerPermission(user, 'assets.view');
   const canCreate = hasServerPermission(user, 'loans.create');
   const canApprove = hasServerPermission(user, 'loans.approve');
   const canCheckout = hasServerPermission(user, 'loans.checkout');
@@ -97,6 +121,7 @@ export function LoansPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
   const [detail, setDetail] = useState<LoanDto | null>(null);
   const [reasonAction, setReasonAction] = useState<ReasonAction>(null);
   const [reason, setReason] = useState('');
@@ -117,7 +142,9 @@ export function LoansPage() {
     try {
       const [nextLoans, nextAssets] = await Promise.all([
         loanGateway.listAll(),
-        canCreate ? assetGateway.listAll() : Promise.resolve([]),
+        canViewAssets
+          ? assetGateway.listAll(activeLabId ? { homeLaboratoryId: activeLabId } : {})
+          : Promise.resolve([]),
       ]);
       setLoans(nextLoans);
       setAssets(nextAssets);
@@ -127,7 +154,7 @@ export function LoansPage() {
     } finally {
       setLoading(false);
     }
-  }, [canCreate]);
+  }, [activeLabId, canViewAssets]);
 
   useEffect(() => {
     void load();
@@ -139,14 +166,45 @@ export function LoansPage() {
       && (asset.condition === 'good' || asset.condition === 'minor_damage')),
     [assets],
   );
+  const filteredEligibleAssets = useMemo(() => {
+    const query = assetSearch.trim().toLocaleLowerCase('id-ID');
+    if (query === '') return eligibleAssets;
+    return eligibleAssets.filter((asset) =>
+      [
+        asset.assetCode,
+        asset.name,
+        asset.category,
+        asset.brand ?? '',
+        asset.model ?? '',
+        asset.serialNumber ?? '',
+      ].some((value) => value.toLocaleLowerCase('id-ID').includes(query)));
+  }, [assetSearch, eligibleAssets]);
+  const scopedAssetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
+  const scopedLoans = useMemo(
+    () => activeLabId
+      ? loans.filter((loan) => loan.items.some((item) => scopedAssetIds.has(item.assetId)))
+      : loans,
+    [activeLabId, loans, scopedAssetIds],
+  );
 
-  const stats = useMemo(() => ({
-    active: loans.filter((loan) => loan.status === 'checked_out').length,
-    overdue: loans.filter((loan) => loan.isOverdue).length,
-    returned: loans.filter((loan) => loan.status === 'returned' || loan.status === 'closed').length,
-  }), [loans]);
+  const stats = useMemo(() => {
+    const returned = scopedLoans.filter((loan) => loan.status === 'returned').length;
+    const closed = scopedLoans.filter((loan) => loan.status === 'closed').length;
+
+    return {
+      active: scopedLoans.filter((loan) => loan.status === 'checked_out').length,
+      overdue: scopedLoans.filter((loan) => loan.isOverdue).length,
+      returned,
+      closed,
+      completedHistory: returned + closed,
+    };
+  }, [scopedLoans]);
+
+  const detailCustodyCount = detail?.items.filter((item) => item.custodyActive).length ?? 0;
+  const detailTimeline = detail ? loanTimeline(detail) : [];
 
   function resetCreate() {
+    setAssetSearch('');
     setForm({
       borrowerName: '',
       borrowerUnit: '',
@@ -266,7 +324,7 @@ export function LoansPage() {
   }
 
   function exportCSV() {
-    downloadCSV('peminjaman-canonical.csv', loans.map((loan) => ({
+    downloadCSV('peminjaman-canonical.csv', scopedLoans.map((loan) => ({
       Nomor: loan.loanNumber,
       Peminjam: loan.borrowerNameSnapshot,
       Unit: loan.borrowerUnitSnapshot ?? '',
@@ -289,7 +347,7 @@ export function LoansPage() {
     <div className="space-y-6">
       <PageHeader
         title="Peminjaman Barang"
-        description="Satu LoanItem selalu menunjuk satu Asset canonical. Checkout hanya mengubah custody Loan, bukan home Laboratory atau lifecycle Asset/Device."
+        description="Peminjaman mengikuti konteks Lab melalui exact Asset binding. Checkout tetap hanya mengubah custody Loan, bukan home Laboratory atau lifecycle Asset/Device."
         icon={<HandHelping className="h-5 w-5" />}
         actions={<>
           {canExport && <Button variant="secondary" size="sm" icon={<Download className="h-4 w-4" />} onClick={exportCSV}>Export</Button>}
@@ -300,7 +358,13 @@ export function LoansPage() {
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent><p className="text-2xl font-bold text-accent-content">{stats.active}</p><p className="text-xs text-ink-muted">Custody Aktif</p></CardContent></Card>
         <Card><CardContent><p className="text-2xl font-bold text-danger">{stats.overdue}</p><p className="text-xs text-ink-muted">Terlambat (derived)</p></CardContent></Card>
-        <Card><CardContent><p className="text-2xl font-bold text-success-foreground">{stats.returned}</p><p className="text-xs text-ink-muted">Dikembalikan / Selesai</p></CardContent></Card>
+        <Card>
+          <CardContent>
+            <p className="text-2xl font-bold text-success-foreground">{stats.completedHistory}</p>
+            <p className="text-xs text-ink-muted">Riwayat pengembalian</p>
+            <p className="mt-1 text-[11px] text-ink-muted">{stats.returned} menunggu pemeriksaan · {stats.closed} selesai</p>
+          </CardContent>
+        </Card>
       </div>
 
       {stats.overdue > 0 && (
@@ -310,7 +374,7 @@ export function LoansPage() {
       )}
 
       <Card>
-        {loans.length === 0 ? <EmptyState title="Belum ada peminjaman" /> : (
+        {scopedLoans.length === 0 ? <EmptyState title="Belum ada peminjaman pada konteks ini" /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -324,7 +388,7 @@ export function LoansPage() {
                 </tr>
               </thead>
               <tbody>
-                {loans.map((loan) => (
+                {scopedLoans.map((loan) => (
                   <tr key={loan.id} className="cursor-pointer border-b border-base-700/40 hover:bg-base-700/30" onClick={() => setDetail(loan)}>
                     <td className="px-4 py-3 font-medium text-ink-primary">{loan.loanNumber}</td>
                     <td className="px-4 py-3 text-ink-secondary">
@@ -367,11 +431,22 @@ export function LoansPage() {
           <Textarea label="Tujuan" required value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} />
 
           <div>
-            <p className="mb-2 text-sm font-medium text-ink-secondary">Asset canonical yang dipinjam</p>
-            <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-base-700 p-3">
+            <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+              <p className="text-sm font-medium text-ink-secondary">Asset canonical yang dipinjam</p>
+              <p className="text-xs text-ink-muted">{form.assetIds.length} dipilih</p>
+            </div>
+            <Input
+              label="Cari Asset"
+              value={assetSearch}
+              onChange={(event) => setAssetSearch(event.target.value)}
+              placeholder="Kode, nama, kategori, brand, model, atau serial"
+            />
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-base-700 p-3">
               {eligibleAssets.length === 0 ? (
                 <p className="text-sm text-ink-muted">Tidak ada Asset active dengan kondisi Baik/Rusak Ringan yang dapat dipilih.</p>
-              ) : eligibleAssets.map((asset) => (
+              ) : filteredEligibleAssets.length === 0 ? (
+                <p className="text-sm text-ink-muted">Tidak ada Asset yang cocok dengan pencarian.</p>
+              ) : filteredEligibleAssets.map((asset) => (
                 <label key={asset.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-700 bg-base-800/60 p-3">
                   <input
                     type="checkbox"
@@ -391,44 +466,16 @@ export function LoansPage() {
         </div>
       </FormDialog>
 
-      <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} title={detail?.loanNumber} description={detail?.borrowerNameSnapshot} width="max-w-xl">
-        {detail && (
-          <div className="space-y-5 text-sm">
-            <div className="flex flex-wrap gap-2">
-              <Badge tone={statusTone(detail.status)}>{STATUS_LABELS[detail.status]}</Badge>
-              {detail.isOverdue && <Badge tone="danger">Terlambat (derived)</Badge>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div><p className="text-xs text-ink-muted">Peminjam</p><p className="text-ink-primary">{detail.borrowerNameSnapshot}</p></div>
-              <div><p className="text-xs text-ink-muted">Unit/Kelas</p><p className="text-ink-primary">{detail.borrowerUnitSnapshot ?? '-'}</p></div>
-              <div><p className="text-xs text-ink-muted">Diminta oleh</p><p className="text-ink-primary">{detail.requestedByNameSnapshot}</p></div>
-              <div><p className="text-xs text-ink-muted">Rencana kembali</p><p className="text-ink-primary">{new Date(detail.requestedReturnAt).toLocaleString('id-ID')}</p></div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs text-ink-muted">Asset exact</p>
-              <div className="space-y-2">
-                {detail.items.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-base-700 bg-base-800/60 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium text-ink-primary">{item.assetCodeSnapshot} · {item.assetNameSnapshot}</p>
-                        <p className="text-xs text-ink-muted">{item.custodyActive ? 'Custody aktif' : 'Custody tidak aktif'}</p>
-                      </div>
-                      {item.conditionOut && <Badge tone={conditionTone(item.conditionOut)}>Keluar: {CONDITION_LABELS[item.conditionOut]}</Badge>}
-                    </div>
-                    {item.conditionReturn && <div className="mt-2"><Badge tone={conditionTone(item.conditionReturn)}>Kembali: {CONDITION_LABELS[item.conditionReturn]}</Badge></div>}
-                    {item.returnNotes && <p className="mt-2 text-xs text-ink-secondary">{item.returnNotes}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div><p className="text-xs text-ink-muted">Tujuan</p><p className="text-ink-secondary">{detail.purpose}</p></div>
-            {detail.terminalReason && <div><p className="text-xs text-ink-muted">Alasan terminal</p><p className="text-ink-secondary">{detail.terminalReason}</p></div>}
-
-            <div className="flex flex-wrap gap-2 border-t border-base-700 pt-3">
+      <Drawer
+        open={Boolean(detail)}
+        onClose={() => setDetail(null)}
+        title={detail?.loanNumber}
+        description={detail ? `${detail.borrowerNameSnapshot} · ${detail.borrowerUnitSnapshot ?? 'Tanpa unit'}` : undefined}
+        width="max-w-2xl"
+        footer={detail ? (
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-ink-muted">Version {detail.version} · {detailCustodyCount}/{detail.items.length} Asset dalam custody aktif</p>
+            <div className="flex flex-wrap justify-end gap-2">
               {canApprove && detail.status === 'submitted' && <>
                 <Button size="sm" variant="success" icon={<Check className="h-4 w-4" />} onClick={() => void runAction(detail, 'approve')}>Setujui</Button>
                 <Button size="sm" variant="secondary" icon={<XCircle className="h-4 w-4" />} onClick={() => { setReason(''); setReasonAction({ kind: 'reject', loan: detail }); }}>Tolak</Button>
@@ -438,6 +485,106 @@ export function LoansPage() {
               {canClose && detail.status === 'returned' && <Button size="sm" onClick={() => void runAction(detail, 'close')}>Tutup Setelah Pemeriksaan</Button>}
               {canCancel && (detail.status === 'submitted' || detail.status === 'approved') && <Button size="sm" variant="ghost" onClick={() => { setReason(''); setReasonAction({ kind: 'cancel', loan: detail }); }}>Batalkan</Button>}
             </div>
+          </div>
+        ) : undefined}
+      >
+        {detail && (
+          <div className="space-y-5 text-sm">
+            <div className="rounded-xl border border-base-700 bg-base-900/30 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone={statusTone(detail.status)}>{STATUS_LABELS[detail.status]}</Badge>
+                  <Badge tone={detailCustodyCount > 0 ? 'accent' : 'muted'}>{detailCustodyCount > 0 ? 'Custody aktif' : 'Custody tidak aktif'}</Badge>
+                  {detail.isOverdue && <Badge tone="danger">Terlambat (derived)</Badge>}
+                </div>
+                <p className="text-xs text-ink-muted">Dibuat {formatLoanDateTime(detail.createdAt)}</p>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-ink-muted">Rencana kembali</p>
+                  <p className={detail.isOverdue ? 'mt-1 font-medium text-danger' : 'mt-1 text-ink-primary'}>{formatLoanDateTime(detail.requestedReturnAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-muted">Jumlah Asset</p>
+                  <p className="mt-1 text-ink-primary">{detail.items.length} exact Asset</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-muted">Referensi peminjam</p>
+                  <p className="mt-1 text-ink-primary">{detail.borrowerReference ?? '-'}</p>
+                </div>
+              </div>
+            </div>
+
+            <section>
+              <div className="mb-2 flex items-center gap-2">
+                <UserRound className="h-4 w-4 text-ink-muted" />
+                <h3 className="font-medium text-ink-primary">Informasi peminjam</h3>
+              </div>
+              <div className="grid gap-3 rounded-xl border border-base-700 bg-base-800/40 p-4 sm:grid-cols-2">
+                <div><p className="text-xs text-ink-muted">Peminjam</p><p className="mt-1 text-ink-primary">{detail.borrowerNameSnapshot}</p></div>
+                <div><p className="text-xs text-ink-muted">Unit/Kelas</p><p className="mt-1 text-ink-primary">{detail.borrowerUnitSnapshot ?? '-'}</p></div>
+                <div><p className="text-xs text-ink-muted">Diminta oleh</p><p className="mt-1 text-ink-primary">{detail.requestedByNameSnapshot}</p></div>
+                <div><p className="text-xs text-ink-muted">Tujuan</p><p className="mt-1 text-ink-secondary">{detail.purpose}</p></div>
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-2 flex items-center gap-2">
+                <PackageCheck className="h-4 w-4 text-ink-muted" />
+                <h3 className="font-medium text-ink-primary">Asset & custody</h3>
+              </div>
+              <div className="space-y-2">
+                {detail.items.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-base-700 bg-base-800/45 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-ink-primary">{item.assetCodeSnapshot}</p>
+                        <p className="mt-0.5 text-sm text-ink-secondary">{item.assetNameSnapshot}</p>
+                      </div>
+                      <Badge tone={item.custodyActive ? 'accent' : 'muted'}>{item.custodyActive ? 'Custody aktif' : 'Custody dilepas'}</Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-ink-muted">Kondisi</span>
+                      <Badge tone={conditionTone(item.conditionOut)}>{item.conditionOut ? `Keluar: ${CONDITION_LABELS[item.conditionOut]}` : 'Keluar: belum disnapshot'}</Badge>
+                      <ArrowRight className="h-3.5 w-3.5 text-ink-muted" />
+                      <Badge tone={conditionTone(item.conditionReturn)}>{item.conditionReturn ? `Kembali: ${CONDITION_LABELS[item.conditionReturn]}` : 'Kembali: belum ada evidence'}</Badge>
+                    </div>
+                    {item.returnNotes && (
+                      <div className="mt-3 rounded-lg border border-base-700/70 bg-base-900/30 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-wide text-ink-muted">Catatan pengembalian</p>
+                        <p className="mt-1 text-xs text-ink-secondary">{item.returnNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-2 flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-ink-muted" />
+                <h3 className="font-medium text-ink-primary">Lifecycle Loan</h3>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {detailTimeline.map((step) => (
+                  <div key={step.label} className="flex gap-3 rounded-lg border border-base-700/70 bg-base-800/35 p-3">
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${step.at ? 'bg-success' : 'bg-base-600'}`} />
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink-secondary">{step.label}</p>
+                      <p className="mt-0.5 text-xs text-ink-muted">{formatLoanDateTime(step.at)}</p>
+                      {step.actor && <p className="mt-0.5 truncate text-xs text-ink-muted">oleh {step.actor}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {detail.terminalReason && (
+              <div className="rounded-xl border border-warning/30 bg-warning/10 p-3">
+                <p className="text-xs font-medium text-warning-foreground">Alasan terminal</p>
+                <p className="mt-1 text-xs text-ink-secondary">{detail.terminalReason}</p>
+              </div>
+            )}
           </div>
         )}
       </Drawer>
@@ -458,30 +605,64 @@ export function LoansPage() {
         open={Boolean(returnLoan)}
         onClose={() => setReturnLoan(null)}
         title="Pengembalian Asset"
-        description="Catat kondisi setiap Asset. Kerusakan tidak membuat Incident atau mengubah Asset condition secara otomatis."
-        size="xl"
+        description="Konfirmasi evidence kondisi saat Asset kembali. Return melepas custody Loan saja."
+        size="lg"
         footer={<>
           <Button variant="ghost" onClick={() => setReturnLoan(null)}>Batal</Button>
-          <Button onClick={() => void submitReturn()}>Catat Pengembalian</Button>
+          <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => void submitReturn()}>Simpan Pengembalian</Button>
         </>}
       >
         <div className="space-y-4">
+          {returnLoan && (
+            <div className="grid gap-3 rounded-xl border border-base-700 bg-base-900/30 p-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-ink-muted">Loan</p>
+                <p className="mt-1 font-medium text-ink-primary">{returnLoan.loanNumber}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-muted">Peminjam</p>
+                <p className="mt-1 text-ink-primary">{returnLoan.borrowerNameSnapshot}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-muted">Asset dalam return</p>
+                <p className="mt-1 text-ink-primary">{returnLoan.items.length} exact Asset</p>
+              </div>
+            </div>
+          )}
+
           {returnLoan?.items.map((loanItem) => {
             const evidence = returnItems.find((item) => item.loanItemId === loanItem.id);
+            const conditionChanged = Boolean(
+              loanItem.conditionOut
+              && evidence?.conditionReturn
+              && loanItem.conditionOut !== evidence.conditionReturn,
+            );
+
             return (
-              <div key={loanItem.id} className="rounded-xl border border-base-700 bg-base-800/55 p-5">
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div key={loanItem.id} className="rounded-xl border border-base-700 bg-base-800/45 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium text-ink-primary">{loanItem.assetCodeSnapshot} · {loanItem.assetNameSnapshot}</p>
-                    <p className="mt-1 text-xs text-ink-muted">Catat evidence pengembalian untuk Asset exact ini.</p>
+                    <p className="text-xs uppercase tracking-wide text-ink-muted">Asset exact</p>
+                    <p className="mt-1 font-medium text-ink-primary">{loanItem.assetCodeSnapshot}</p>
+                    <p className="mt-0.5 text-sm text-ink-secondary">{loanItem.assetNameSnapshot}</p>
                   </div>
-                  <Badge tone={conditionTone(loanItem.conditionOut ?? 'unknown')}>
-                    Keluar: {loanItem.conditionOut ? CONDITION_LABELS[loanItem.conditionOut] : '-'}
-                  </Badge>
+                  <Badge tone={loanItem.custodyActive ? 'accent' : 'muted'}>{loanItem.custodyActive ? 'Custody aktif' : 'Custody tidak aktif'}</Badge>
                 </div>
-                <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+
+                <div className="mt-4 grid items-start gap-3 md:grid-cols-[minmax(0,180px)_auto_minmax(0,220px)]">
+                  <div className="rounded-lg border border-base-700/70 bg-base-900/30 p-3">
+                    <p className="text-xs text-ink-muted">Kondisi saat keluar</p>
+                    <div className="mt-2">
+                      <Badge tone={conditionTone(loanItem.conditionOut)}>
+                        {loanItem.conditionOut ? CONDITION_LABELS[loanItem.conditionOut] : 'Belum disnapshot'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <ArrowRight className="mt-7 hidden h-4 w-4 text-ink-muted md:block" />
+
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-medium text-ink-secondary">Kondisi Kembali</label>
+                    <label className="block text-sm font-medium text-ink-secondary">Kondisi saat kembali</label>
                     <select
                       value={evidence?.conditionReturn ?? 'good'}
                       onChange={(event) => updateReturnItem(loanItem.id, { conditionReturn: event.target.value as AssetCondition })}
@@ -489,8 +670,11 @@ export function LoansPage() {
                     >
                       {ASSET_CONDITIONS.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition]}</option>)}
                     </select>
-                    <p className="text-xs text-ink-muted">Kondisi ini disimpan sebagai return evidence, bukan direct Asset mutation.</p>
+                    <p className="text-xs text-ink-muted">Evidence saja; tidak melakukan direct Asset mutation.</p>
                   </div>
+                </div>
+
+                <div className="mt-4">
                   <Textarea
                     label="Catatan Pengembalian"
                     rows={3}
@@ -498,11 +682,19 @@ export function LoansPage() {
                     onChange={(event) => updateReturnItem(loanItem.id, { returnNotes: event.target.value || null })}
                   />
                 </div>
+
+                {conditionChanged && (
+                  <div className="mt-3 flex gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink-secondary">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
+                    <span>Kondisi kembali berbeda dari kondisi keluar. Perubahan ini tetap hanya return evidence; Incident dan perubahan kondisi Asset harus dilakukan eksplisit melalui authority masing-masing.</span>
+                  </div>
+                )}
               </div>
             );
           })}
+
           <div className="rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-xs text-ink-secondary">
-            Return hanya melepas custody Loan dan menyimpan evidence. Jika ditemukan kerusakan yang perlu ditindaklanjuti, Incident tetap harus dibuat melalui domain Incident secara eksplisit.
+            Return melepaskan custody Loan dan menyimpan evidence. Tidak ada perubahan home Laboratory, lifecycle Asset/Device, Asset condition, atau Incident secara implisit.
           </div>
         </div>
       </Modal>

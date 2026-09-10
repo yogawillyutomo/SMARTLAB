@@ -31,6 +31,52 @@ export interface MaintenancePlanDto {
   updatedAt: string;
 }
 
+export interface MaintenanceCampaignItemDto {
+  id: string;
+  assetId: string;
+  assetCodeSnapshot: string;
+  assetNameSnapshot: string;
+  maintenancePlanId: string;
+  planCodeSnapshot: string;
+  createdAt: string;
+}
+
+export interface MaintenanceCampaignDto {
+  id: string;
+  schoolId: string;
+  campaignCode: string;
+  laboratoryId: string;
+  laboratoryCodeSnapshot: string;
+  laboratoryNameSnapshot: string;
+  name: string;
+  description: string | null;
+  frequencyKind: MaintenanceFrequency;
+  intervalDays: number | null;
+  checklistTemplate: string[];
+  assignedTechnicianReference: string | null;
+  assignedTechnicianNameSnapshot: string | null;
+  nextDueDate: string;
+  status: MaintenancePlanStatus;
+  itemCount: number;
+  items: MaintenanceCampaignItemDto[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceCampaignEventDto {
+  id: string;
+  campaignId: string;
+  actorUserIdSnapshot: string;
+  actorMembershipIdSnapshot: string;
+  actorNameSnapshot: string;
+  eventType: string;
+  beforeStatus: MaintenancePlanStatus | null;
+  afterStatus: MaintenancePlanStatus | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface MaintenanceInventoryTransactionDto {
   id: string;
   inventoryItemId: string;
@@ -87,6 +133,32 @@ export interface MaintenancePage<T> {
   meta: { page: number; perPage: number; total: number; lastPage: number };
 }
 
+export interface CreateMaintenanceCampaignInput {
+  laboratoryId: string;
+  name: string;
+  description?: string | null;
+  frequencyKind: MaintenanceFrequency;
+  intervalDays?: number | null;
+  checklistTemplate: string[];
+  assignedTechnicianReference?: string | null;
+  assignedTechnicianName?: string | null;
+  nextDueDate: string;
+  assetIds: string[];
+}
+
+export interface ScheduleMaintenanceCampaignInput {
+  scheduledFor: string;
+  technicianReference?: string | null;
+  technicianName: string;
+  assetIds?: string[];
+}
+
+export interface MaintenanceCampaignBatchResult {
+  campaign: MaintenanceCampaignDto;
+  executions: MaintenanceExecutionDto[];
+  executionCount: number;
+}
+
 export interface CreateMaintenancePlanInput {
   assetId: string;
   name: string;
@@ -133,6 +205,14 @@ export interface CompleteMaintenanceExecutionInput {
 }
 
 export interface MaintenanceGateway {
+  listCampaigns: () => Promise<MaintenancePage<MaintenanceCampaignDto>>;
+  listAllCampaigns: (laboratoryId?: string) => Promise<MaintenanceCampaignDto[]>;
+  showCampaign: (campaignId: string) => Promise<MaintenanceCampaignDto>;
+  campaignHistory: (campaignId: string) => Promise<MaintenanceCampaignEventDto[]>;
+  createCampaign: (input: CreateMaintenanceCampaignInput) => Promise<MaintenanceCampaignDto>;
+  activateCampaign: (campaignId: string, expectedVersion: number) => Promise<MaintenanceCampaignDto>;
+  deactivateCampaign: (campaignId: string, expectedVersion: number) => Promise<MaintenanceCampaignDto>;
+  scheduleCampaign: (campaignId: string, expectedVersion: number, input: ScheduleMaintenanceCampaignInput) => Promise<MaintenanceCampaignBatchResult>;
   listPlans: () => Promise<MaintenancePage<MaintenancePlanDto>>;
   listAllPlans: () => Promise<MaintenancePlanDto[]>;
   showPlan: (planId: string) => Promise<MaintenancePlanDto>;
@@ -252,6 +332,99 @@ export function parseMaintenancePlan(value: unknown): MaintenancePlanDto {
   };
 }
 
+
+const CAMPAIGN_ITEM_FIELDS = [
+  'id', 'assetId', 'assetCodeSnapshot', 'assetNameSnapshot',
+  'maintenancePlanId', 'planCodeSnapshot', 'createdAt',
+] as const;
+
+export function parseMaintenanceCampaignItem(value: unknown): MaintenanceCampaignItemDto {
+  if (!isRecord(value)) throw new MaintenanceContractError();
+  exactKeys(value, CAMPAIGN_ITEM_FIELDS);
+  return {
+    id: ulidField(value, 'id'),
+    assetId: ulidField(value, 'assetId'),
+    assetCodeSnapshot: stringField(value, 'assetCodeSnapshot', 64),
+    assetNameSnapshot: stringField(value, 'assetNameSnapshot', 255),
+    maintenancePlanId: ulidField(value, 'maintenancePlanId'),
+    planCodeSnapshot: stringField(value, 'planCodeSnapshot', 48),
+    createdAt: dateTime(value.createdAt) as string,
+  };
+}
+
+const CAMPAIGN_FIELDS = [
+  'id', 'schoolId', 'campaignCode', 'laboratoryId', 'laboratoryCodeSnapshot',
+  'laboratoryNameSnapshot', 'name', 'description', 'frequencyKind', 'intervalDays',
+  'checklistTemplate', 'assignedTechnicianReference', 'assignedTechnicianNameSnapshot',
+  'nextDueDate', 'status', 'itemCount', 'items', 'version', 'createdAt', 'updatedAt',
+] as const;
+
+export function parseMaintenanceCampaign(value: unknown): MaintenanceCampaignDto {
+  if (!isRecord(value)) throw new MaintenanceContractError();
+  exactKeys(value, CAMPAIGN_FIELDS);
+  if (!(MAINTENANCE_FREQUENCIES as readonly unknown[]).includes(value.frequencyKind)) throw new MaintenanceContractError();
+  if (!(MAINTENANCE_PLAN_STATUSES as readonly unknown[]).includes(value.status)) throw new MaintenanceContractError();
+  if (value.intervalDays !== null && !positiveInteger(value.intervalDays)) throw new MaintenanceContractError();
+  if (!Array.isArray(value.checklistTemplate) || value.checklistTemplate.length < 1
+      || value.checklistTemplate.some((item) => typeof item !== 'string' || item.trim() === '')) throw new MaintenanceContractError();
+  if (!Array.isArray(value.items) || !nonNegativeInteger(value.itemCount) || value.itemCount !== value.items.length) {
+    throw new MaintenanceContractError();
+  }
+  if (!positiveInteger(value.version)) throw new MaintenanceContractError();
+
+  return {
+    id: ulidField(value, 'id'),
+    schoolId: ulidField(value, 'schoolId'),
+    campaignCode: stringField(value, 'campaignCode', 48),
+    laboratoryId: ulidField(value, 'laboratoryId'),
+    laboratoryCodeSnapshot: stringField(value, 'laboratoryCodeSnapshot', 50),
+    laboratoryNameSnapshot: stringField(value, 'laboratoryNameSnapshot', 255),
+    name: stringField(value, 'name', 180),
+    description: nullableString(value, 'description', 2000),
+    frequencyKind: value.frequencyKind as MaintenanceFrequency,
+    intervalDays: value.intervalDays as number | null,
+    checklistTemplate: [...value.checklistTemplate] as string[],
+    assignedTechnicianReference: nullableString(value, 'assignedTechnicianReference', 255),
+    assignedTechnicianNameSnapshot: nullableString(value, 'assignedTechnicianNameSnapshot', 255),
+    nextDueDate: dateField(value, 'nextDueDate'),
+    status: value.status as MaintenancePlanStatus,
+    itemCount: value.itemCount,
+    items: value.items.map(parseMaintenanceCampaignItem),
+    version: value.version,
+    createdAt: dateTime(value.createdAt) as string,
+    updatedAt: dateTime(value.updatedAt) as string,
+  };
+}
+
+const CAMPAIGN_EVENT_FIELDS = [
+  'id', 'campaignId', 'actorUserIdSnapshot', 'actorMembershipIdSnapshot',
+  'actorNameSnapshot', 'eventType', 'beforeStatus', 'afterStatus', 'payload', 'createdAt',
+] as const;
+
+export function parseMaintenanceCampaignEvent(value: unknown): MaintenanceCampaignEventDto {
+  if (!isRecord(value)) throw new MaintenanceContractError();
+  exactKeys(value, CAMPAIGN_EVENT_FIELDS);
+  for (const field of ['beforeStatus', 'afterStatus'] as const) {
+    if (value[field] !== null && !(MAINTENANCE_PLAN_STATUSES as readonly unknown[]).includes(value[field])) {
+      throw new MaintenanceContractError();
+    }
+  }
+  if (!isRecord(value.payload)) throw new MaintenanceContractError();
+
+  return {
+    id: ulidField(value, 'id'),
+    campaignId: ulidField(value, 'campaignId'),
+    actorUserIdSnapshot: ulidField(value, 'actorUserIdSnapshot'),
+    actorMembershipIdSnapshot: ulidField(value, 'actorMembershipIdSnapshot'),
+    actorNameSnapshot: stringField(value, 'actorNameSnapshot', 255),
+    eventType: stringField(value, 'eventType', 120),
+    beforeStatus: value.beforeStatus as MaintenancePlanStatus | null,
+    afterStatus: value.afterStatus as MaintenancePlanStatus | null,
+    payload: { ...value.payload },
+    createdAt: dateTime(value.createdAt) as string,
+  };
+}
+
 const INVENTORY_EVIDENCE_FIELDS = [
   'id', 'inventoryItemId', 'clientMutationId', 'quantity', 'signedDelta',
   'balanceBefore', 'balanceAfter', 'itemCodeSnapshot', 'itemNameSnapshot',
@@ -365,6 +538,35 @@ function parsePage<T>(value: unknown, parser: (input: unknown) => T): Maintenanc
   return { data: value.data.map(parser), meta: { page, perPage, total, lastPage } };
 }
 
+
+function parseCampaignResponse(value: unknown): MaintenanceCampaignDto {
+  if (!isRecord(value)) throw new MaintenanceContractError('Envelope MaintenanceCampaign tidak valid.');
+  exactKeys(value, ['data']);
+  return parseMaintenanceCampaign(value.data);
+}
+
+function parseCampaignHistoryResponse(value: unknown): MaintenanceCampaignEventDto[] {
+  if (!isRecord(value)) throw new MaintenanceContractError('Envelope history MaintenanceCampaign tidak valid.');
+  exactKeys(value, ['data']);
+  if (!Array.isArray(value.data)) throw new MaintenanceContractError('Envelope history MaintenanceCampaign tidak valid.');
+  return value.data.map(parseMaintenanceCampaignEvent);
+}
+
+function parseCampaignBatchResponse(value: unknown): MaintenanceCampaignBatchResult {
+  if (!isRecord(value)) throw new MaintenanceContractError('Envelope batch MaintenanceCampaign tidak valid.');
+  exactKeys(value, ['data', 'executions', 'meta']);
+  if (!Array.isArray(value.executions) || !isRecord(value.meta)) throw new MaintenanceContractError();
+  exactKeys(value.meta, ['executionCount']);
+  if (!nonNegativeInteger(value.meta.executionCount) || value.meta.executionCount !== value.executions.length) {
+    throw new MaintenanceContractError();
+  }
+  return {
+    campaign: parseMaintenanceCampaign(value.data),
+    executions: value.executions.map(parseMaintenanceExecution),
+    executionCount: value.meta.executionCount,
+  };
+}
+
 function parsePlanResponse(value: unknown): MaintenancePlanDto {
   if (!isRecord(value)) throw new MaintenanceContractError('Envelope MaintenancePlan tidak valid.');
   exactKeys(value, ['data']);
@@ -382,6 +584,21 @@ export function maintenanceIfMatch(version: number): string {
   return `"${version}"`;
 }
 
+function campaignPath(campaignId: string): string {
+  if (!isUlid(campaignId)) throw new MaintenanceContractError('ID MaintenanceCampaign tidak valid.');
+  return `/maintenance-campaigns/${encodeURIComponent(campaignId)}`;
+}
+
+function campaignCollectionPath(page: number, laboratoryId?: string): string {
+  if (!positiveInteger(page)) throw new MaintenanceContractError('Halaman MaintenanceCampaign tidak valid.');
+  const parameters = new URLSearchParams({ perPage: '100', page: String(page) });
+  if (laboratoryId !== undefined) {
+    if (!isUlid(laboratoryId)) throw new MaintenanceContractError('Filter Laboratory MaintenanceCampaign tidak valid.');
+    parameters.set('laboratoryId', laboratoryId);
+  }
+  return `/maintenance-campaigns?${parameters.toString()}`;
+}
+
 function planPath(planId: string): string {
   if (!isUlid(planId)) throw new MaintenanceContractError('ID MaintenancePlan tidak valid.');
   return `/maintenance-plans/${encodeURIComponent(planId)}`;
@@ -394,6 +611,46 @@ function executionPath(executionId: string): string {
 
 export function createMaintenanceGateway(client: ApiClient): MaintenanceGateway {
   return {
+    async listCampaigns() {
+      return parsePage(await client.get<unknown>('/maintenance-campaigns?perPage=100'), parseMaintenanceCampaign);
+    },
+    async listAllCampaigns(laboratoryId) {
+      const first = parsePage(await client.get<unknown>(campaignCollectionPath(1, laboratoryId)), parseMaintenanceCampaign);
+      if (first.meta.lastPage === 1) return first.data;
+      const pages = await Promise.all(Array.from({ length: first.meta.lastPage - 1 }, (_, index) =>
+        client.get<unknown>(campaignCollectionPath(index + 2, laboratoryId))));
+      return [...first.data, ...pages.flatMap((page) => parsePage(page, parseMaintenanceCampaign).data)];
+    },
+    async showCampaign(campaignId) {
+      return parseCampaignResponse(await client.get<unknown>(campaignPath(campaignId)));
+    },
+    async campaignHistory(campaignId) {
+      return parseCampaignHistoryResponse(await client.get<unknown>(`${campaignPath(campaignId)}/history`));
+    },
+    async createCampaign(input) {
+      return parseCampaignResponse(await client.post<unknown>('/maintenance-campaigns', input));
+    },
+    async activateCampaign(campaignId, expectedVersion) {
+      return parseCampaignResponse(await client.post<unknown>(
+        `${campaignPath(campaignId)}/activate`,
+        {},
+        { ifMatch: maintenanceIfMatch(expectedVersion) },
+      ));
+    },
+    async deactivateCampaign(campaignId, expectedVersion) {
+      return parseCampaignResponse(await client.post<unknown>(
+        `${campaignPath(campaignId)}/deactivate`,
+        {},
+        { ifMatch: maintenanceIfMatch(expectedVersion) },
+      ));
+    },
+    async scheduleCampaign(campaignId, expectedVersion, input) {
+      return parseCampaignBatchResponse(await client.post<unknown>(
+        `${campaignPath(campaignId)}/executions`,
+        input,
+        { ifMatch: maintenanceIfMatch(expectedVersion) },
+      ));
+    },
     async listPlans() {
       return parsePage(await client.get<unknown>('/maintenance-plans?perPage=200'), parseMaintenancePlan);
     },

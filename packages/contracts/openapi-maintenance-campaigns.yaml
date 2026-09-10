@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Maintenance Campaign API module
+  version: 0.33.0
+  description: >
+    Lab-level orchestration over canonical exact-Asset MaintenancePlan and MaintenanceExecution authorities.
+    MaintenanceCampaign never owns Asset custody, never represents a multi-Asset execution, and never blocks a whole Laboratory.
+paths:
+  /maintenance-campaigns:
+    get:
+      operationId: listMaintenanceCampaigns
+      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive] } }
+        - { name: laboratoryId, in: query, schema: { type: string, format: ulid } }
+        - { name: search, in: query, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200':
+          description: Same-School Campaign collection with exact Asset-to-Plan item evidence
+    post:
+      operationId: createMaintenanceCampaign
+      summary: Atomically provision one exact MaintenancePlan for every selected same-Laboratory Asset
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMaintenanceCampaignInput' }
+      responses:
+        '201':
+          description: Campaign plus immutable Asset-to-Plan item evidence; no execution or custody is created
+        '403': { description: Missing Maintenance create-plan, Asset view, or Laboratory view authority }
+        '409': { description: One selected Asset is not eligible for canonical preventive MaintenancePlan creation }
+        '422': { description: Validation, School scope, or selected-Laboratory membership failure }
+  /maintenance-campaigns/{campaignId}:
+    parameters:
+      - &campaignId { name: campaignId, in: path, required: true, schema: { type: string, format: ulid } }
+    get:
+      operationId: getMaintenanceCampaign
+      security: *auth
+      responses:
+        '200': { description: Campaign detail with immutable exact Asset-to-Plan item evidence and ETag }
+        '404': { description: Unknown or cross-School Campaign }
+  /maintenance-campaigns/{campaignId}/history:
+    parameters: [*campaignId]
+    get:
+      operationId: getMaintenanceCampaignHistory
+      security: *auth
+      responses:
+        '200': { description: Append-only Campaign orchestration events }
+        '404': { description: Unknown or cross-School Campaign }
+  /maintenance-campaigns/{campaignId}/activate:
+    parameters:
+      - *campaignId
+      - &ifMatch { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    post:
+      operationId: activateMaintenanceCampaign
+      summary: Enable Campaign batch orchestration without mutating child MaintenancePlans
+      security: *auth
+      responses:
+        '200': { description: Active Campaign with incremented version }
+        '412': { description: Campaign version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /maintenance-campaigns/{campaignId}/deactivate:
+    parameters: [*campaignId, *ifMatch]
+    post:
+      operationId: deactivateMaintenanceCampaign
+      summary: Disable Campaign batch orchestration without deactivating child MaintenancePlans
+      security: *auth
+      responses:
+        '200': { description: Inactive Campaign with incremented version }
+        '412': { description: Campaign version conflict }
+        '428': { description: Missing or invalid If-Match }
+  /maintenance-campaigns/{campaignId}/executions:
+    parameters: [*campaignId, *ifMatch]
+    post:
+      operationId: scheduleMaintenanceCampaignBatch
+      summary: Atomically schedule ordinary exact-Asset MaintenanceExecutions for all or a selected subset of Campaign items
+      description: >
+        The Campaign itself acquires no custody. Each generated MaintenanceExecution remains scheduled with custody inactive.
+        Existing Maintenance execution uniqueness and later start-time Loan/Maintenance/WorkOrder custody guards remain authoritative.
+      security: *auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScheduleMaintenanceCampaignInput' }
+      responses:
+        '201':
+          description: Campaign version increment plus exact generated MaintenanceExecutions
+        '409': { description: Campaign inactive or child Maintenance scheduling conflict }
+        '412': { description: Campaign version conflict }
+        '422': { description: Invalid subset or one child schedule fails; entire new batch rolls back }
+        '428': { description: Missing or invalid If-Match }
+components:
+  schemas:
+    FrequencyKind:
+      type: string
+      enum: [weekly, monthly, quarterly, semester, yearly, custom_interval]
+    CreateMaintenanceCampaignInput:
+      type: object
+      additionalProperties: false
+      required: [laboratoryId, name, frequencyKind, checklistTemplate, nextDueDate, assetIds]
+      properties:
+        laboratoryId: { type: string, format: ulid }
+        name: { type: string, minLength: 3, maxLength: 180 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+        frequencyKind: { $ref: '#/components/schemas/FrequencyKind' }
+        intervalDays: { type: [integer, 'null'], minimum: 1, maximum: 3650 }
+        checklistTemplate:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 255 }
+        assignedTechnicianReference: { type: [string, 'null'], maxLength: 255 }
+        assignedTechnicianName: { type: [string, 'null'], maxLength: 255 }
+        nextDueDate: { type: string, format: date }
+        assetIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items: { type: string, format: ulid }
+    ScheduleMaintenanceCampaignInput:
+      type: object
+      additionalProperties: false
+      required: [scheduledFor, technicianName]
+      properties:
+        scheduledFor: { type: string, format: date }
+        technicianReference: { type: [string, 'null'], maxLength: 255 }
+        technicianName: { type: string, minLength: 2, maxLength: 255 }
+        assetIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items: { type: string, format: ulid }
+  securitySchemes:
+    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
+    sanctumBearer: { type: http, scheme: bearer }

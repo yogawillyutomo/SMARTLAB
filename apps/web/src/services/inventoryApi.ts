@@ -4,6 +4,37 @@ import { isUlid } from '@/lib/ulid';
 export const INVENTORY_TRANSACTION_KINDS = ['opening', 'receipt', 'issue', 'adjustment_in', 'adjustment_out'] as const;
 export type InventoryTransactionKind = (typeof INVENTORY_TRANSACTION_KINDS)[number];
 
+export const INVENTORY_CATEGORIES = [
+  'Spare Part Komputer',
+  'Periferal',
+  'Jaringan',
+  'Elektronik',
+  'Bahan Habis Pakai',
+  'Bahan Praktikum',
+  'Alat',
+  'Lainnya',
+] as const;
+
+export const INVENTORY_UNITS = [
+  'pcs',
+  'unit',
+  'set',
+  'box',
+  'pack',
+  'roll',
+  'meter',
+  'liter',
+  'kg',
+  'gram',
+  'botol',
+] as const;
+
+export const DISCRETE_INVENTORY_UNITS = ['pcs', 'unit', 'set', 'box', 'pack', 'roll', 'botol'] as const;
+
+export function isDiscreteInventoryUnit(unit: string): boolean {
+  return (DISCRETE_INVENTORY_UNITS as readonly string[]).includes(unit);
+}
+
 export interface InventoryItemDto {
   id: string;
   schoolId: string;
@@ -185,8 +216,8 @@ export function parseInventoryItem(value: unknown): InventoryItemDto {
   if (!isRecord(value)) throw new InventoryContractError();
   assertExactKeys(value, ITEM_FIELDS);
   if (typeof value.itemCode !== 'string' || !/^[A-Z0-9][A-Z0-9-]{2,31}$/.test(value.itemCode)) throw new InventoryContractError();
-  if (!finiteNonNegative(value.minimumStock) || !finiteNonNegative(value.onHandQuantity)) throw new InventoryContractError();
-  if (value.unitPriceSnapshot !== null && !finiteNonNegative(value.unitPriceSnapshot)) throw new InventoryContractError();
+  if (!nonNegativeInteger(value.minimumStock) || !finiteNonNegative(value.onHandQuantity)) throw new InventoryContractError();
+  if (value.unitPriceSnapshot !== null && !nonNegativeInteger(value.unitPriceSnapshot)) throw new InventoryContractError();
   if (!positiveInteger(value.version)) throw new InventoryContractError();
 
   return {
