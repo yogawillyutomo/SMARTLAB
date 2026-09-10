@@ -2,10 +2,16 @@ openapi: 3.1.0
 info:
   title: SmartLab Asset QR API module
   version: 0.34.0
+
 paths:
   /public/assets/qr/{publicId}:
     parameters:
-      - { name: publicId, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: publicId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     get:
       operationId: resolvePublicAssetQr
       summary: Resolve one active Asset QR identifier to a safe anonymous projection
@@ -20,251 +26,133 @@ paths:
                 additionalProperties: false
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/PublicAssetQr' }
-        '404': { description: Malformed, unknown, or revoked QR identifier }
+                  data:
+                    $ref: '#/components/schemas/PublicAssetQr'
+        '404':
+          description: Malformed, unknown, or revoked QR identifier
+
   /assets/{assetId}/qr-identities:
     parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
     get:
       operationId: listAssetQrIdentities
       summary: List QR identity history for one exact Asset
-      security: &auth [{ sanctumSession: [] }, { sanctumBearer: [] }]
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
       responses:
-        '200': { description: QR identity history, newest token version first }
-        '404': { description: Unknown or cross-School Asset }
+        '200':
+          description: QR identity history, newest token version first
+        '404':
+          description: Unknown or cross-School Asset
     post:
       operationId: issueAssetQrIdentity
       summary: Issue the first/current QR identity without mutating Asset version
-      security: *auth
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
       responses:
-        '201': { description: New active QR identity }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset already has an active QR identity }
+        '201':
+          description: New active QR identity
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset already has an active QR identity
+
   /assets/{assetId}/qr-identities/rotate:
     parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
     post:
       operationId: rotateAssetQrIdentity
-      parameters:
-        - &qrIfMatch
-          name: If-Match
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^"[1-9][0-9]*"      summary: Revoke the current token and issue a replacement atomically
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '201': { description: Replacement active QR identity }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-        '412': { description: QR token version conflict }
-        '428': { description: Missing or invalid QR token If-Match }
-  /assets/{assetId}/qr-identities/revoke:
-    parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
-    post:
-      operationId: revokeAssetQrIdentity
-      parameters:
-        - *qrIfMatch
-      summary: Revoke the current QR identity without replacing it
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '200': { description: Revoked QR identity evidence }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-        '412': { description: QR token version conflict }
-        '428': { description: Missing or invalid QR token If-Match }
-components:
-  schemas:
-    QrReasonInput:
-      type: object
-      additionalProperties: false
-      required: [reason]
-      properties:
-        reason: { type: string, minLength: 3, maxLength: 1000 }
-    PublicAssetQr:
-      type: object
-      additionalProperties: false
-      required: [school, asset]
-      properties:
-        school:
-          type: object
-          additionalProperties: false
-          required: [code, name]
-          properties:
-            code: { type: string }
-            name: { type: string }
-        asset:
-          type: object
-          additionalProperties: false
-          required: [assetCode, name, category, condition, lifecycleStatus, homeLaboratory]
-          properties:
-            assetCode: { type: string }
-            name: { type: string }
-            category: { type: string }
-            condition: { type: string, enum: [good, minor_damage, moderate_damage, major_damage, unknown] }
-            lifecycleStatus: { type: string, enum: [active, retired, disposed] }
-            homeLaboratory:
-              oneOf:
-                - type: 'null'
-                - type: object
-                  additionalProperties: false
-                  required: [code, name]
-                  properties:
-                    code: { type: string }
-                    name: { type: string }
-    AssetQrIdentity:
-      type: object
-      additionalProperties: false
-      required: [id, assetId, publicId, tokenVersion, status, issuedAt, revokedReason, revokedAt]
-      properties:
-        id: { type: string, format: ulid }
-        assetId: { type: string, format: ulid }
-        publicId: { type: string, format: uuid }
-        tokenVersion: { type: integer, minimum: 1 }
-        status: { type: string, enum: [active, revoked] }
-        issuedAt: { type: string, format: date-time }
-        revokedReason: { type: [string, 'null'] }
-        revokedAt: { type: [string, 'null'], format: date-time }
-  securitySchemes:
-    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
-    sanctumBearer: { type: http, scheme: bearer }
- } }
       summary: Revoke the current token and issue a replacement atomically
-      security: *auth
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/QrIfMatch'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
+            schema:
+              $ref: '#/components/schemas/QrReasonInput'
       responses:
-        '201': { description: Replacement active QR identity }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-  /assets/{assetId}/qr-identities/revoke:
-    parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
-    post:
-      operationId: revokeAssetQrIdentity
-      summary: Revoke the current QR identity without replacing it
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '200': { description: Revoked QR identity evidence }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-components:
-  schemas:
-    QrReasonInput:
-      type: object
-      additionalProperties: false
-      required: [reason]
-      properties:
-        reason: { type: string, minLength: 3, maxLength: 1000 }
-    PublicAssetQr:
-      type: object
-      additionalProperties: false
-      required: [school, asset]
-      properties:
-        school:
-          type: object
-          additionalProperties: false
-          required: [code, name]
-          properties:
-            code: { type: string }
-            name: { type: string }
-        asset:
-          type: object
-          additionalProperties: false
-          required: [assetCode, name, category, condition, lifecycleStatus, homeLaboratory]
-          properties:
-            assetCode: { type: string }
-            name: { type: string }
-            category: { type: string }
-            condition: { type: string, enum: [good, minor_damage, moderate_damage, major_damage, unknown] }
-            lifecycleStatus: { type: string, enum: [active, retired, disposed] }
-            homeLaboratory:
-              oneOf:
-                - type: 'null'
-                - type: object
-                  additionalProperties: false
-                  required: [code, name]
-                  properties:
-                    code: { type: string }
-                    name: { type: string }
-    AssetQrIdentity:
-      type: object
-      additionalProperties: false
-      required: [id, assetId, publicId, tokenVersion, status, issuedAt, revokedReason, revokedAt]
-      properties:
-        id: { type: string, format: ulid }
-        assetId: { type: string, format: ulid }
-        publicId: { type: string, format: uuid }
-        tokenVersion: { type: integer, minimum: 1 }
-        status: { type: string, enum: [active, revoked] }
-        issuedAt: { type: string, format: date-time }
-        revokedReason: { type: [string, 'null'] }
-        revokedAt: { type: [string, 'null'], format: date-time }
-  securitySchemes:
-    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
-    sanctumBearer: { type: http, scheme: bearer }
+        '201':
+          description: Replacement active QR identity
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset has no active QR identity
+        '412':
+          description: QR token version conflict
+        '428':
+          description: Missing or invalid QR token If-Match
 
-      summary: Revoke the current token and issue a replacement atomically
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '201': { description: Replacement active QR identity }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-        '412': { description: QR token version conflict }
-        '428': { description: Missing or invalid QR token If-Match }
   /assets/{assetId}/qr-identities/revoke:
     parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
     post:
       operationId: revokeAssetQrIdentity
+      summary: Revoke the current QR identity without replacing it
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
       parameters:
-        - *qrIfMatch
-      summary: Revoke the current QR identity without replacing it
-      security: *auth
+        - $ref: '#/components/parameters/QrIfMatch'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
+            schema:
+              $ref: '#/components/schemas/QrReasonInput'
       responses:
-        '200': { description: Revoked QR identity evidence }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-        '412': { description: QR token version conflict }
-        '428': { description: Missing or invalid QR token If-Match }
+        '200':
+          description: Revoked QR identity evidence
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset has no active QR identity
+        '412':
+          description: QR token version conflict
+        '428':
+          description: Missing or invalid QR token If-Match
+
 components:
+  parameters:
+    QrIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+
   schemas:
     QrReasonInput:
       type: object
       additionalProperties: false
       required: [reason]
       properties:
-        reason: { type: string, minLength: 3, maxLength: 1000 }
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+
     PublicAssetQr:
       type: object
       additionalProperties: false
@@ -275,18 +163,27 @@ components:
           additionalProperties: false
           required: [code, name]
           properties:
-            code: { type: string }
-            name: { type: string }
+            code:
+              type: string
+            name:
+              type: string
         asset:
           type: object
           additionalProperties: false
           required: [assetCode, name, category, condition, lifecycleStatus, homeLaboratory]
           properties:
-            assetCode: { type: string }
-            name: { type: string }
-            category: { type: string }
-            condition: { type: string, enum: [good, minor_damage, moderate_damage, major_damage, unknown] }
-            lifecycleStatus: { type: string, enum: [active, retired, disposed] }
+            assetCode:
+              type: string
+            name:
+              type: string
+            category:
+              type: string
+            condition:
+              type: string
+              enum: [good, minor_damage, moderate_damage, major_damage, unknown]
+            lifecycleStatus:
+              type: string
+              enum: [active, retired, disposed]
             homeLaboratory:
               oneOf:
                 - type: 'null'
@@ -294,104 +191,45 @@ components:
                   additionalProperties: false
                   required: [code, name]
                   properties:
-                    code: { type: string }
-                    name: { type: string }
+                    code:
+                      type: string
+                    name:
+                      type: string
+
     AssetQrIdentity:
       type: object
       additionalProperties: false
       required: [id, assetId, publicId, tokenVersion, status, issuedAt, revokedReason, revokedAt]
       properties:
-        id: { type: string, format: ulid }
-        assetId: { type: string, format: ulid }
-        publicId: { type: string, format: uuid }
-        tokenVersion: { type: integer, minimum: 1 }
-        status: { type: string, enum: [active, revoked] }
-        issuedAt: { type: string, format: date-time }
-        revokedReason: { type: [string, 'null'] }
-        revokedAt: { type: [string, 'null'], format: date-time }
+        id:
+          type: string
+          format: ulid
+        assetId:
+          type: string
+          format: ulid
+        publicId:
+          type: string
+          format: uuid
+        tokenVersion:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, revoked]
+        issuedAt:
+          type: string
+          format: date-time
+        revokedReason:
+          type: [string, 'null']
+        revokedAt:
+          type: [string, 'null']
+          format: date-time
+
   securitySchemes:
-    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
-    sanctumBearer: { type: http, scheme: bearer }
- } }
-      summary: Revoke the current token and issue a replacement atomically
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '201': { description: Replacement active QR identity }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-  /assets/{assetId}/qr-identities/revoke:
-    parameters:
-      - { name: assetId, in: path, required: true, schema: { type: string, format: ulid } }
-    post:
-      operationId: revokeAssetQrIdentity
-      summary: Revoke the current QR identity without replacing it
-      security: *auth
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/QrReasonInput' }
-      responses:
-        '200': { description: Revoked QR identity evidence }
-        '404': { description: Unknown or cross-School Asset }
-        '409': { description: Asset has no active QR identity }
-components:
-  schemas:
-    QrReasonInput:
-      type: object
-      additionalProperties: false
-      required: [reason]
-      properties:
-        reason: { type: string, minLength: 3, maxLength: 1000 }
-    PublicAssetQr:
-      type: object
-      additionalProperties: false
-      required: [school, asset]
-      properties:
-        school:
-          type: object
-          additionalProperties: false
-          required: [code, name]
-          properties:
-            code: { type: string }
-            name: { type: string }
-        asset:
-          type: object
-          additionalProperties: false
-          required: [assetCode, name, category, condition, lifecycleStatus, homeLaboratory]
-          properties:
-            assetCode: { type: string }
-            name: { type: string }
-            category: { type: string }
-            condition: { type: string, enum: [good, minor_damage, moderate_damage, major_damage, unknown] }
-            lifecycleStatus: { type: string, enum: [active, retired, disposed] }
-            homeLaboratory:
-              oneOf:
-                - type: 'null'
-                - type: object
-                  additionalProperties: false
-                  required: [code, name]
-                  properties:
-                    code: { type: string }
-                    name: { type: string }
-    AssetQrIdentity:
-      type: object
-      additionalProperties: false
-      required: [id, assetId, publicId, tokenVersion, status, issuedAt, revokedReason, revokedAt]
-      properties:
-        id: { type: string, format: ulid }
-        assetId: { type: string, format: ulid }
-        publicId: { type: string, format: uuid }
-        tokenVersion: { type: integer, minimum: 1 }
-        status: { type: string, enum: [active, revoked] }
-        issuedAt: { type: string, format: date-time }
-        revokedReason: { type: [string, 'null'] }
-        revokedAt: { type: [string, 'null'], format: date-time }
-  securitySchemes:
-    sanctumSession: { type: apiKey, in: cookie, name: laravel_session }
-    sanctumBearer: { type: http, scheme: bearer }
+    sanctumSession:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+    sanctumBearer:
+      type: http
+      scheme: bearer
