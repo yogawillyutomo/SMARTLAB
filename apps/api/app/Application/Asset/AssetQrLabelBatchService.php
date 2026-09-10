@@ -153,7 +153,7 @@ class AssetQrLabelBatchService
                 ->where('school_id', $schoolId)
                 ->whereIn('id', $labIds->all())
                 ->orderBy('id')
-                ->lockForShare()
+                ->sharedLock()
                 ->get()
                 ->keyBy('id');
 
@@ -318,7 +318,7 @@ class AssetQrLabelBatchService
                 ->where('school_id', $schoolId)
                 ->whereIn('id', $labIds->all())
                 ->orderBy('id')
-                ->lockForShare()
+                ->sharedLock()
                 ->get()
                 ->keyBy('id');
 
