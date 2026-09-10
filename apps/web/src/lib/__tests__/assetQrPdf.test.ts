@@ -64,10 +64,20 @@ describe('Asset QR deterministic PDF', () => {
     expect(pdf).toContain('/MediaBox [0 0 595.276 841.89]');
     expect(pdf).toContain('(SMARTLAB - BP)');
     expect(pdf).toContain('(AST-0001)');
-    expect(pdf).toContain('(Komputer Praktikum 1)');
+    expect(pdf).toContain('(Komputer)');
+    expect(pdf).toContain('(Praktikum)');
+    expect(pdf).not.toContain('(Komputer Praktikum 1)');
     expect(pdf).toContain('(RPL1)');
     expect(pdf).not.toContain(batch.items![0].publicId);
     expect(pdf.endsWith('%%EOF\n')).toBe(true);
+  });
+
+  it('is byte-for-byte deterministic for the same immutable batch snapshot', () => {
+    const batch = makeBatch('50x30', 1);
+    const first = generateAssetQrLabelPdf(batch);
+    const second = generateAssetQrLabelPdf(batch);
+
+    expect(Array.from(first)).toEqual(Array.from(second));
   });
 
   it('keeps the exported A4 point geometry locked to 210 x 297 mm', () => {
