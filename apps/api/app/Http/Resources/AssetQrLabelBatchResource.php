@@ -12,7 +12,7 @@ class AssetQrLabelBatchResource extends JsonResource
         return [
             'id' => $this->id,
             'templateKey' => $this->template_key,
-            'filters' => $this->filters,
+            'filters' => (object) ($this->filters ?? []),
             'assetCount' => $this->asset_count,
             'laboratory' => $this->laboratory_id === null ? null : [
                 'id' => $this->laboratory_id,
