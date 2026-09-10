@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Input';
 import { ApiClientError } from '@/lib/apiClient';
+import { downloadAssetQrLabelPdf } from '@/lib/assetQrPdf';
 import { assetQrGateway, type AssetQrLabelBatch } from '@/services/assetQrApi';
 import { toast } from '@/stores/toastStore';
 
@@ -49,11 +50,27 @@ export function AssetQrLabelPrintPage() {
     return Math.ceil(batch.assetCount / assetQrLabelsPerA4(batch.templateKey));
   }, [batch]);
 
-  function printGeneratedBatch() {
-    if (!batch?.items?.length) {
-      toast('Immutable label snapshot belum tersedia.', 'error');
-      return;
+  function ensurePrintableBatch(): AssetQrLabelBatch | null {
+    if (!batch?.items?.length || batch.items.length !== batch.assetCount) {
+      toast('Immutable label snapshot belum lengkap.', 'error');
+      return null;
     }
+    return batch;
+  }
+
+  function downloadGeneratedBatch() {
+    const printableBatch = ensurePrintableBatch();
+    if (!printableBatch) return;
+    try {
+      downloadAssetQrLabelPdf(printableBatch);
+      toast('PDF A4 dibuat lokal dari immutable batch snapshot.', 'success');
+    } catch (nextError) {
+      toast(errorMessage(nextError), 'error');
+    }
+  }
+
+  function printGeneratedBatch() {
+    if (!ensurePrintableBatch()) return;
     window.print();
   }
 
@@ -99,7 +116,7 @@ export function AssetQrLabelPrintPage() {
     <div className="space-y-6">
       <PageHeader
         title="A4 Asset QR Labels"
-        description="Render lokal dari immutable batch snapshot. Gunakan dialog cetak browser untuk printer fisik atau Save as PDF."
+        description="Render lokal dari immutable batch snapshot. Unduh PDF A4 deterministik atau gunakan dialog cetak browser untuk printer fisik."
         icon={<Printer className="h-5 w-5" />}
         actions={
           <Button variant="secondary" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/assets/qr-labels')}>
@@ -109,7 +126,7 @@ export function AssetQrLabelPrintPage() {
       />
 
       <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
-        Dialog cetak yang terbuka <strong>bukan bukti printer fisik berhasil mencetak</strong>. Physical print + phone scan tetap harus dibuktikan pada UAT. Pilih skala 100% / Actual Size dan jangan aktifkan fit-to-page.
+        File PDF atau dialog cetak yang terbuka <strong>bukan bukti printer fisik berhasil mencetak</strong>. Physical print + phone scan tetap harus dibuktikan pada UAT. Saat mencetak, pilih skala 100% / Actual Size dan jangan aktifkan fit-to-page.
       </div>
 
       <Card>
@@ -124,12 +141,17 @@ export function AssetQrLabelPrintPage() {
               </div>
               <p className="text-xs text-ink-muted">Batch {batch.id} · {batch.generatedByName}</p>
             </div>
-            <Button icon={<FileDown className="h-4 w-4" />} onClick={printGeneratedBatch}>
-              Print / Save PDF
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button icon={<FileDown className="h-4 w-4" />} onClick={downloadGeneratedBatch}>
+                Download PDF
+              </Button>
+              <Button variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printGeneratedBatch}>
+                Print
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-ink-muted">
-            QR dibentuk sepenuhnya di browser dari public identifier UUID saja. Tidak ada request QR ke CDN atau layanan pihak ketiga.
+            QR dan PDF dibentuk sepenuhnya di browser dari immutable batch snapshot. Tidak ada request QR ke CDN atau layanan pihak ketiga.
           </p>
         </CardContent>
       </Card>
@@ -159,7 +181,7 @@ export function AssetQrLabelPrintPage() {
         <CardContent className="space-y-4">
           <div>
             <h2 className="font-semibold text-ink-primary">Preview label aktual</h2>
-            <p className="text-xs text-ink-muted">Menampilkan maksimal 12 dari immutable snapshot. QR di bawah adalah QR aktual yang juga dipakai pada lembar A4.</p>
+            <p className="text-xs text-ink-muted">Menampilkan maksimal 12 dari immutable snapshot. QR di bawah adalah QR aktual yang juga dipakai pada lembar A4 dan PDF download.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {(batch.items ?? []).slice(0, 12).map((item) => (
