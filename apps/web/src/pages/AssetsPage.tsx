@@ -369,6 +369,13 @@ export function AssetsPage() {
         <Card><CardContent><p className="text-xl font-bold text-ink-primary">{formatCurrency(totalValue)}</p><p className="text-xs text-ink-muted">Nilai Snapshot</p></CardContent></Card>
       </div>
 
+      {activeLabId && (
+        <div className="rounded-xl border border-base-700 bg-base-800/40 px-4 py-3 text-sm text-ink-muted">
+          Asset dengan <span className="font-medium text-ink-secondary">Home Laboratory = Belum ditetapkan</span> tidak termasuk scope Lab aktif.
+          Pilih <span className="font-medium text-ink-secondary">Semua Laboratorium</span> di topbar untuk meninjau atau menempatkannya.
+        </div>
+      )}
+
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3">
           <Select

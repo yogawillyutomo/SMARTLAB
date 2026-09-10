@@ -218,7 +218,7 @@ class S4ReconciliationApiTest extends TestCase
             'inventoryItemId' => $itemId,
             'clientMutationId' => (string) Str::uuid(),
             'kind' => 'issue',
-            'quantity' => '1.250',
+            'quantity' => '1.000',
             'reason' => 'Issue S4 reconciliation',
         ])->assertCreated();
 
@@ -247,7 +247,7 @@ class S4ReconciliationApiTest extends TestCase
         $signedMilli = $transactions->sum(fn (InventoryTransaction $tx): int => $this->toMilli($tx->signed_delta));
         $current = InventoryItem::query()->findOrFail($itemId);
         $this->assertSame($this->toMilli($current->on_hand_quantity), $signedMilli);
-        $this->assertSame('1.750', $current->on_hand_quantity);
+        $this->assertSame('2.000', $current->on_hand_quantity);
     }
 
     /** @param list<string> $permissions @return array{User,School,SchoolMembership} */

@@ -293,6 +293,9 @@ describe('source-of-truth migration foundation', () => {
     expect(loansSource).toContain("from '@/stores/uiStore'");
     expect(loansSource).toContain('homeLaboratoryId: activeLabId');
     expect(loansSource).toContain('loan.items.some((item) => scopedAssetIds.has(item.assetId))');
+    expect(loansSource).toContain('label="Cari Asset"');
+    expect(loansSource).toContain('filteredEligibleAssets');
+    expect(assetsSource).toContain('Home Laboratory = Belum ditetapkan');
     expect(loansSource).toContain('loanGateway.checkout');
     expect(loansSource).toContain('loanGateway.returnLoan');
     expect(loansSource).toContain('satu LoanItem → satu Asset ULID exact');

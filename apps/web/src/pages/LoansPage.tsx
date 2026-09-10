@@ -121,6 +121,7 @@ export function LoansPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
   const [detail, setDetail] = useState<LoanDto | null>(null);
   const [reasonAction, setReasonAction] = useState<ReasonAction>(null);
   const [reason, setReason] = useState('');
@@ -165,6 +166,19 @@ export function LoansPage() {
       && (asset.condition === 'good' || asset.condition === 'minor_damage')),
     [assets],
   );
+  const filteredEligibleAssets = useMemo(() => {
+    const query = assetSearch.trim().toLocaleLowerCase('id-ID');
+    if (query === '') return eligibleAssets;
+    return eligibleAssets.filter((asset) =>
+      [
+        asset.assetCode,
+        asset.name,
+        asset.category,
+        asset.brand ?? '',
+        asset.model ?? '',
+        asset.serialNumber ?? '',
+      ].some((value) => value.toLocaleLowerCase('id-ID').includes(query)));
+  }, [assetSearch, eligibleAssets]);
   const scopedAssetIds = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);
   const scopedLoans = useMemo(
     () => activeLabId
@@ -190,6 +204,7 @@ export function LoansPage() {
   const detailTimeline = detail ? loanTimeline(detail) : [];
 
   function resetCreate() {
+    setAssetSearch('');
     setForm({
       borrowerName: '',
       borrowerUnit: '',
@@ -416,11 +431,22 @@ export function LoansPage() {
           <Textarea label="Tujuan" required value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} />
 
           <div>
-            <p className="mb-2 text-sm font-medium text-ink-secondary">Asset canonical yang dipinjam</p>
-            <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-base-700 p-3">
+            <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+              <p className="text-sm font-medium text-ink-secondary">Asset canonical yang dipinjam</p>
+              <p className="text-xs text-ink-muted">{form.assetIds.length} dipilih</p>
+            </div>
+            <Input
+              label="Cari Asset"
+              value={assetSearch}
+              onChange={(event) => setAssetSearch(event.target.value)}
+              placeholder="Kode, nama, kategori, brand, model, atau serial"
+            />
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-base-700 p-3">
               {eligibleAssets.length === 0 ? (
                 <p className="text-sm text-ink-muted">Tidak ada Asset active dengan kondisi Baik/Rusak Ringan yang dapat dipilih.</p>
-              ) : eligibleAssets.map((asset) => (
+              ) : filteredEligibleAssets.length === 0 ? (
+                <p className="text-sm text-ink-muted">Tidak ada Asset yang cocok dengan pencarian.</p>
+              ) : filteredEligibleAssets.map((asset) => (
                 <label key={asset.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-700 bg-base-800/60 p-3">
                   <input
                     type="checkbox"
