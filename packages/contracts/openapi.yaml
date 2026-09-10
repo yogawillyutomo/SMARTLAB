@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: SmartLab API
-  version: 0.34.0
-  description: Canonical SmartLab API v1 contract. Version 0.34 starts S5.6 Asset QR Identity with history-preserving token lifecycle and a dedicated safe-minimal anonymous scan projection; Asset/Device/custody authorities remain unchanged.
+  version: 0.35.0
+  description: Canonical SmartLab API v1 contract. Version 0.35 completes the S5.6 Asset QR label-batch API contract with exact Asset selection, safe candidate projection, immutable generation snapshots, and append-only reprint evidence; Asset/Device/custody authorities remain unchanged.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -65,6 +65,10 @@ paths:
   /assets/{assetId}/qr-identities: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities' }
   /assets/{assetId}/qr-identities/rotate: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities~1rotate' }
   /assets/{assetId}/qr-identities/revoke: { $ref: './openapi-asset-qr.yaml#/paths/~1assets~1{assetId}~1qr-identities~1revoke' }
+  /asset-qr-label-candidates: { $ref: './openapi-asset-qr.yaml#/paths/~1asset-qr-label-candidates' }
+  /asset-qr-label-batches: { $ref: './openapi-asset-qr.yaml#/paths/~1asset-qr-label-batches' }
+  /asset-qr-label-batches/{batchId}: { $ref: './openapi-asset-qr.yaml#/paths/~1asset-qr-label-batches~1{batchId}' }
+  /asset-qr-label-batches/{batchId}/reprint: { $ref: './openapi-asset-qr.yaml#/paths/~1asset-qr-label-batches~1{batchId}~1reprint' }
   /devices: { $ref: './openapi-0.11.yaml#/paths/~1devices' }
   /devices/{deviceId}: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}' }
   /devices/{deviceId}/transfers: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}~1transfers' }
