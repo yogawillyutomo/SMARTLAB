@@ -21,6 +21,7 @@ import {
   FlaskConical,
   Megaphone,
   Laptop,
+  QrCode,
   type LucideIcon,
 } from 'lucide-react';
 import { hasServerPermission } from '@/lib/authIdentity';
@@ -33,6 +34,7 @@ export interface NavItem {
   icon: LucideIcon;
   module?: ModuleKey;
   serverPermission?: string;
+  serverPermissions?: string[];
   badgeKey?: 'pending_bookings' | 'overdue_loans' | 'overdue_maintenance';
 }
 
@@ -74,6 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/devices', label: 'Perangkat', icon: Laptop, serverPermission: 'devices.view' },
       { to: '/monitoring', label: 'Monitoring Perangkat', icon: Monitor, module: 'monitoring', serverPermission: 'devices.view' },
       { to: '/assets', label: 'Aset Tetap', icon: Boxes, module: 'assets', serverPermission: 'assets.view' },
+      { to: '/assets/qr-labels', label: 'Asset QR & Label', icon: QrCode, serverPermissions: ['assets.view', 'assets.generate-labels'] },
       { to: '/stock', label: 'Stok & Spare Part', icon: Package, module: 'stock', serverPermission: 'stock.view' },
       { to: '/incidents', label: 'Tiket Kerusakan', icon: AlertTriangle, serverPermission: 'incidents.view' },
       { to: '/work-orders', label: 'Tugas Perbaikan', icon: Wrench, module: 'work-orders', serverPermission: 'work-orders.view' },
@@ -125,6 +128,7 @@ export function canViewNavigationItem(
   item: NavItem,
 ): boolean {
   if (!user) return false;
+  if (item.serverPermissions) return item.serverPermissions.every((permission) => hasServerPermission(user, permission));
   if (item.serverPermission) return hasServerPermission(user, item.serverPermission);
   return item.module ? canView(permissions, user.role, item.module) : false;
 }
