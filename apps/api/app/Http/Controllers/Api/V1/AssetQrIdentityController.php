@@ -50,7 +50,9 @@ class AssetQrIdentityController extends Controller
             $request->user(),
             $assetId,
             (string) $request->validated('reason'),
-        )))->response($request);
+        )))
+            ->response($request)
+            ->setStatusCode(201);
     }
 
     public function revoke(

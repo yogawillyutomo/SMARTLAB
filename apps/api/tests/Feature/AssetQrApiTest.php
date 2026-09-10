@@ -173,7 +173,7 @@ class AssetQrApiTest extends TestCase
         $second = $this->postJson('/api/v1/assets/'.$asset->id.'/qr-identities/rotate', [
             'reason' => 'Prevent reuse after label exposure.',
         ])
-            ->assertOk()
+            ->assertCreated()
             ->assertJsonPath('data.tokenVersion', 2)
             ->assertJsonPath('data.status', 'active');
 

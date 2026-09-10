@@ -53,7 +53,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/QrReasonInput' }
       responses:
-        '200': { description: Replacement active QR identity }
+        '201': { description: Replacement active QR identity }
         '404': { description: Unknown or cross-School Asset }
         '409': { description: Asset has no active QR identity }
   /assets/{assetId}/qr-identities/revoke:

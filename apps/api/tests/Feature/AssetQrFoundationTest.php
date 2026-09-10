@@ -54,15 +54,20 @@ class AssetQrFoundationTest extends TestCase
             $this->identity($asset, $user, $membership, 2);
             $this->fail('Expected database to reject a second active Asset QR identity.');
         } catch (QueryException) {
+            $this->addToAssertionCount(1);
         }
 
+        $this->assertSame(1, AssetQrIdentity::query()->where('asset_id', $asset->id)->where('status', 'active')->count());
         $identity = AssetQrIdentity::query()->where('asset_id', $asset->id)->sole();
 
         try {
             $identity->delete();
             $this->fail('Expected Asset QR identity history delete to fail.');
         } catch (QueryException) {
+            $this->addToAssertionCount(1);
         }
+
+        $this->assertTrue(AssetQrIdentity::query()->whereKey($identity->id)->exists());
     }
 
     public function test_identity_allows_only_evidenced_active_to_revoked_transition(): void
