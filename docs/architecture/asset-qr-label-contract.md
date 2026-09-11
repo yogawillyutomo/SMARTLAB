@@ -2,11 +2,15 @@
 
 **Status:** LOCKED FOR S5.6 IMPLEMENTATION  
 **Baseline:** `main@276326946bd4d4b9c6cf7073058886a893279e52`  
-**Branch:** `feat/s5-6-asset-qr-labels`
+**Branch:** `feat/s5-6-asset-qr-labels`  
+**Product brand:** LARAS — Laboratory Asset & Resource Administration System  
+**Canonical public origin:** `https://laras.bakaranproject.com`
+
+Brand/domain authority is additionally locked in [LARAS Brand & Canonical Domain Contract](../product/LARAS_BRAND.md).
 
 ## 1. Purpose
 
-S5.6 adds a durable Asset-owned QR identity and printable physical-label workflow for canonical SMARTLAB Assets. It does not create a new Asset, Device, Inventory, Loan, Maintenance, Work Order, scheduling, or Laboratory-availability authority.
+S5.6 adds a durable Asset-owned QR identity and printable physical-label workflow for canonical LARAS Assets. It does not create a new Asset, Device, Inventory, Loan, Maintenance, Work Order, scheduling, or Laboratory-availability authority.
 
 The physical QR is an entry point to live canonical data. It is not a copy of mutable technical, financial, custody, or operational state.
 
@@ -21,17 +25,18 @@ The physical QR is an entry point to live canonical data. It is not a copy of mu
 
 ## 3. Physical QR payload — canonical public URL
 
-The physical label encodes a canonical HTTPS SMARTLAB public URL:
+The physical label encodes the permanent LARAS HTTPS public URL:
 
-`https://<stable-smartlab-origin>/q/<public-uuid>`
+`https://laras.bakaranproject.com/q/<public-uuid>`
 
 Rules:
 
 1. the only record identifier in the URL is the random, non-enumerable public UUID;
 2. the URL must never contain Asset ULID, School ULID, Device ULID, serial number, price, funding, supplier, notes, borrower/person identity, Loan/Maintenance/Work Order identifiers, audit/event payload, or technical specifications;
-3. `VITE_PUBLIC_SCAN_ORIGIN` is deployment configuration for the stable public web origin used when rendering/printing labels;
+3. production `VITE_PUBLIC_SCAN_ORIGIN` is exactly `https://laras.bakaranproject.com`;
 4. production label generation must fail closed when that origin is not configured or the resulting public URL exceeds the locked QR capacity;
-5. preview/development hostnames must never become the permanent physical-label authority unless explicitly approved as the canonical origin.
+5. Vercel preview/development hostnames or other transient hosting URLs must never become physical-label authority;
+6. hosting infrastructure may change later, but the canonical LARAS domain must remain compatible with already-issued physical labels.
 
 The QR encoder is local and dependency-free, uses Version 8 / ECC H with a four-module quiet zone, and does not send the payload to an external QR/CDN/chart service.
 
@@ -57,7 +62,7 @@ Rules:
 
 ## 5. Anonymous public scan projection
 
-`/q/{publicId}` is a public web route. It resolves through the dedicated anonymous API projection and must never reuse the canonical `AssetResource`.
+`/q/{publicId}` is a public LARAS web route. It resolves through the dedicated anonymous API projection and must never reuse the canonical `AssetResource`.
 
 Allowed anonymous fields are intentionally minimal:
 
@@ -86,13 +91,13 @@ A browser session does not silently expand the anonymous response. The public pa
 
 ## 6. Login handoff and authenticated expansion
 
-Sensitive or richer information requires SMARTLAB authentication **and** existing authorization.
+Sensitive or richer information requires LARAS authentication **and** existing authorization.
 
 Flow:
 
-1. phone camera opens `/q/{publicId}`;
+1. phone camera opens `https://laras.bakaranproject.com/q/{publicId}`;
 2. public page shows only the safe-minimal projection;
-3. user chooses **Masuk SMARTLAB untuk detail lengkap**;
+3. user chooses **Masuk LARAS untuk detail lengkap**;
 4. login preserves a safe internal return path back to the same `/q/{publicId}` page;
 5. after login, an authenticated resolver may return only the canonical `assetId` when:
    - the user has an active SchoolMembership;
@@ -148,13 +153,13 @@ Initial physical templates:
 
 A batch stores generated-by snapshots, selected filters, template, count, generation time, and per-item Asset/QR/Laboratory snapshots. Reprints are separate append-only events; batch/item rows are not rewritten.
 
-The API `scanPath` snapshot may identify the anonymous API resolver path, but the physical QR itself encodes the canonical public web `/q/{publicId}` URL.
+The API `scanPath` snapshot may identify the anonymous API resolver path, but the physical QR itself encodes the canonical LARAS public web `/q/{publicId}` URL.
 
 ## 9. Label content
 
 A label may show:
 
-- SMARTLAB / BP branding;
+- LARAS / BP branding;
 - QR;
 - Asset code;
 - short Asset name;
@@ -168,7 +173,8 @@ QR rendering must use high error correction, preserve the quiet zone, and keep t
 
 Before physical labels are accepted:
 
-- `VITE_PUBLIC_SCAN_ORIGIN` must point to the stable HTTPS SMARTLAB web origin;
+- `laras.bakaranproject.com` must resolve to the approved LARAS web deployment;
+- `VITE_PUBLIC_SCAN_ORIGIN` must be exactly `https://laras.bakaranproject.com` for production label generation;
 - `VITE_API_ORIGIN` must point to the deployed Laravel API when the web host does not proxy `/api`;
 - the public `/q/{publicId}` SPA route must resolve on direct navigation;
 - the anonymous API must be reachable from the public web origin under the deployed CORS/session policy;
@@ -205,11 +211,15 @@ Database enforcement must guarantee:
 
 SQLite portable tests and PostgreSQL validation both remain required.
 
-## 13. Delivery slices
+## 13. Brand migration compatibility
+
+S5.6 rebrands user-facing product surfaces to **LARAS**. The GitHub repository name `SMARTLAB`, existing API/internal identifiers, legacy `SMARTLAB_*` environment-variable names, `@smartlab.local` test identities, and existing browser storage keys may remain temporarily for compatibility. They are not public brand authority and must not be renamed incidentally merely for cosmetic consistency inside PR #90.
+
+## 14. Delivery slices
 
 - **S5.6.1:** persistence, permissions, identity lifecycle API, safe public resolution, tests, OpenAPI.
 - **S5.6.2:** label batch API, filters, generation/reprint evidence, frontend preview.
 - **S5.6.3:** A4 PDF rendering, 40×25 / 50×30 / 70×40 templates, BP mark composition, download/print UX.
-- **S5.6.4:** canonical public URL QR + safe public page + authenticated detail handoff + browser UAT + physical phone scan UAT + privacy/security verification + post-merge regression.
+- **S5.6.4:** canonical LARAS public URL QR + safe public page + authenticated detail handoff + browser UAT + physical phone scan UAT + privacy/security verification + post-merge regression.
 
 S6 monitoring telemetry remains deferred until S5.6 closes.
