@@ -131,7 +131,7 @@ function labelContent(batch: AssetQrLabelBatch, itemIndex: number, templateKey: 
   const nameLines = wrapText(item.assetName, approxChars, 2);
 
   commands.push('0 g\n');
-  commands.push(textCommand('F2', brandSize, textX, y + height - padding - brandSize, 'SMARTLAB - BP'));
+  commands.push(textCommand('F2', brandSize, textX, y + height - padding - brandSize, 'LARAS - BP'));
   commands.push(textCommand('F2', assetCodeSize, textX, y + height - padding - brandSize - assetCodeSize - 2, trimText(item.assetCode, Math.max(8, approxChars + 2))));
   nameLines.forEach((line, lineIndex) => {
     commands.push(textCommand('F1', nameSize, textX, y + height - padding - brandSize - assetCodeSize - 7 - lineIndex * (nameSize + 1), line));
@@ -151,7 +151,7 @@ function pageContent(batch: AssetQrLabelBatch, pageIndex: number): string {
 
 function buildPdf(objects: string[]): Uint8Array {
   const encoder = new TextEncoder();
-  let output = '%PDF-1.4\n%SMARTLAB\n';
+  let output = '%PDF-1.4\n%LARAS\n';
   const offsets: number[] = [0];
 
   objects.forEach((body, index) => {
@@ -198,7 +198,7 @@ export function generateAssetQrLabelPdf(batch: AssetQrLabelBatch): Uint8Array {
 
 export function assetQrPdfFilename(batch: AssetQrLabelBatch): string {
   const safeBatch = batch.id.replace(/[^A-Za-z0-9_-]/g, '-');
-  return `smartlab-asset-labels-${batch.templateKey}-${safeBatch}.pdf`;
+  return `laras-asset-labels-${batch.templateKey}-${safeBatch}.pdf`;
 }
 
 export function downloadAssetQrLabelPdf(batch: AssetQrLabelBatch): void {

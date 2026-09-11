@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { APP_BRAND } from '@/config/brand';
 import { ApiClientError } from '@/lib/apiClient';
 import { hasServerPermission } from '@/lib/authIdentity';
 import { assetQrPublicGateway, type PublicAssetQrView } from '@/services/assetQrPublicApi';
@@ -83,7 +84,7 @@ export function PublicAssetQrPage() {
             <FlaskConical className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">SMARTLAB</h1>
+            <h1 className="text-xl font-bold">{APP_BRAND.name}</h1>
             <p className="text-sm text-ink-muted">Public Asset Verification</p>
           </div>
         </div>
@@ -161,19 +162,19 @@ export function PublicAssetQrPage() {
 
                 {authStatus === 'bootstrapping' && (
                   <Button className="w-full" disabled icon={<LockKeyhole className="h-4 w-4" />}>
-                    Memeriksa akses SMARTLAB...
+                    Memeriksa akses {APP_BRAND.name}...
                   </Button>
                 )}
 
                 {!authenticated && authStatus !== 'bootstrapping' && (
                   <Button className="w-full" onClick={goToLogin} icon={<LogIn className="h-4 w-4" />}>
-                    Masuk SMARTLAB untuk detail lengkap
+                    Masuk {APP_BRAND.name} untuk detail lengkap
                   </Button>
                 )}
 
                 {canViewAsset && (
                   <Button className="w-full" loading={openingDetail} onClick={() => void openCanonicalAsset()} icon={<LockKeyhole className="h-4 w-4" />}>
-                    Buka detail Asset di SMARTLAB
+                    Buka detail Asset di {APP_BRAND.name}
                   </Button>
                 )}
 
@@ -188,7 +189,7 @@ export function PublicAssetQrPage() {
         </Card>
 
         <p className="text-center text-[11px] text-ink-muted">
-          QR publik hanya menjadi pintu masuk ke data Asset yang aman. Login SMARTLAB tidak menghapus batas SchoolMembership atau RBAC.
+          QR publik hanya menjadi pintu masuk ke data Asset yang aman. Login {APP_BRAND.name} tidak menghapus batas SchoolMembership atau RBAC.
         </p>
       </div>
     </div>

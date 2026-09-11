@@ -58,11 +58,11 @@ describe('Asset QR deterministic PDF', () => {
     const batch = makeBatch('50x30', 1);
     const pdf = pdfText(batch);
 
-    expect(pdf.startsWith('%PDF-1.4\n%SMARTLAB\n')).toBe(true);
+    expect(pdf.startsWith('%PDF-1.4\n%LARAS\n')).toBe(true);
     expect(pdf).toContain('/Type /Catalog');
     expect(pdf).toContain('/Count 1');
     expect(pdf).toContain('/MediaBox [0 0 595.276 841.89]');
-    expect(pdf).toContain('(SMARTLAB - BP)');
+    expect(pdf).toContain('(LARAS - BP)');
     expect(pdf).toContain('(AST-0001)');
     expect(pdf).toContain('(Komputer)');
     expect(pdf).toContain('(Praktikum)');
@@ -105,6 +105,6 @@ describe('Asset QR deterministic PDF', () => {
     const batch = makeBatch('40x25', 1);
     batch.id = 'batch/unsafe value';
 
-    expect(assetQrPdfFilename(batch)).toBe('smartlab-asset-labels-40x25-batch-unsafe-value.pdf');
+    expect(assetQrPdfFilename(batch)).toBe('laras-asset-labels-40x25-batch-unsafe-value.pdf');
   });
 });
