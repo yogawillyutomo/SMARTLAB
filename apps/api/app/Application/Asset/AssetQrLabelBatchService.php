@@ -191,6 +191,17 @@ class AssetQrLabelBatchService
                 $this->assertSelectionStillMatches($asset, $selection, $identity, $printed);
             }
 
+            $requiresQrIssue = $assets->contains(
+                fn (Asset $asset): bool => ! $activeIdentities->has($asset->id),
+            );
+            if ($requiresQrIssue && ! $context->permissions->contains('assets.manage-qr')) {
+                throw new AssetDomainException(
+                    'You do not have permission to issue missing Asset QR identities.',
+                    'FORBIDDEN',
+                    403,
+                );
+            }
+
             $autoIssuedCount = 0;
             foreach ($assets as $asset) {
                 if ($activeIdentities->has($asset->id)) {
