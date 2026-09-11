@@ -4,6 +4,7 @@ import { AppDataProvider } from '@/hooks/useAppData';
 import { AppLayout } from '@/layouts/AppLayout';
 import { RequireAuth, RequirePermission, RequireServerPermission, NotFoundPage } from '@/routes/guards';
 import { LoginPage } from '@/pages/LoginPage';
+import { PublicAssetQrPage } from '@/pages/PublicAssetQrPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { MonitoringPage } from '@/pages/MonitoringPage';
 import { Toaster } from '@/components/ui/Toaster';
@@ -42,6 +43,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/q/:publicId" element={<PublicAssetQrPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         element={

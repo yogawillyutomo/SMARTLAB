@@ -11,7 +11,30 @@ export function AssetQrCode({ publicId, className, showBpMark = true }: {
   className?: string;
   showBpMark?: boolean;
 }) {
-  const path = useMemo(() => assetQrSvgPath(createAssetQrMatrix(publicId)), [publicId]);
+  const rendered = useMemo(() => {
+    try {
+      return { path: assetQrSvgPath(createAssetQrMatrix(publicId)), error: '' };
+    } catch (error) {
+      return {
+        path: '',
+        error: error instanceof Error ? error.message : 'QR Asset tidak dapat dirender.',
+      };
+    }
+  }, [publicId]);
+
+  if (rendered.error) {
+    return (
+      <div
+        role="img"
+        aria-label="Asset QR tidak tersedia"
+        title={rendered.error}
+        className={`flex aspect-square items-center justify-center rounded bg-white p-2 text-center text-[10px] font-semibold text-black ${className ?? ''}`}
+      >
+        QR belum dikonfigurasi
+      </div>
+    );
+  }
+
   const total = ASSET_QR_SIZE + ASSET_QR_QUIET_ZONE * 2;
   const markSize = 5;
   const markStart = ASSET_QR_QUIET_ZONE + (ASSET_QR_SIZE - markSize) / 2;
@@ -26,7 +49,7 @@ export function AssetQrCode({ publicId, className, showBpMark = true }: {
       shapeRendering="crispEdges"
     >
       <rect width={total} height={total} fill="#fff" />
-      <path d={path} fill="#000" transform={`translate(${ASSET_QR_QUIET_ZONE} ${ASSET_QR_QUIET_ZONE})`} />
+      <path d={rendered.path} fill="#000" transform={`translate(${ASSET_QR_QUIET_ZONE} ${ASSET_QR_QUIET_ZONE})`} />
       {showBpMark && (
         <g aria-hidden="true">
           <rect x={markStart} y={markStart} width={markSize} height={markSize} rx="0.5" fill="#fff" />

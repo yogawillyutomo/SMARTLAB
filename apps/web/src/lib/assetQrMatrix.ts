@@ -1,24 +1,66 @@
 export class AssetQrMatrixError extends Error {
-  constructor(message = 'Public Asset QR identifier tidak valid.') {
+  constructor(message = 'Payload Asset QR tidak valid.') {
     super(message);
     this.name = 'AssetQrMatrixError';
   }
 }
 
-export const ASSET_QR_VERSION = 5;
+export const ASSET_QR_VERSION = 8;
 export const ASSET_QR_SIZE = ASSET_QR_VERSION * 4 + 17;
 export const ASSET_QR_QUIET_ZONE = 4;
 export const ASSET_QR_ERROR_CORRECTION = 'H' as const;
+export const ASSET_QR_MAX_PAYLOAD_BYTES = 84;
+export const ASSET_QR_PUBLIC_PATH_PREFIX = '/q/';
 
-const DATA_CODEWORDS = 46;
-const ECC_CODEWORDS_PER_BLOCK = 22;
-const DATA_BLOCK_LENGTHS = [11, 11, 12, 12] as const;
-const FORMAT_ECC_H = 2;
-const MASK_PATTERN = 0;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return UUID_PATTERN.test(value);
 }
+
+export function normalizeAssetQrPublicOrigin(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new AssetQrMatrixError('Origin public Asset QR tidak valid.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || (url.pathname !== '' && url.pathname !== '/')) {
+    throw new AssetQrMatrixError('Origin public Asset QR harus berupa origin HTTP(S) tanpa path, query, atau credential.');
+  }
+  return url.origin;
+}
+
+function configuredAssetQrPublicOrigin(): string {
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | boolean | undefined> }).env ?? {};
+  const configured = typeof env.VITE_PUBLIC_SCAN_ORIGIN === 'string' ? env.VITE_PUBLIC_SCAN_ORIGIN.trim() : '';
+  if (configured !== '') return normalizeAssetQrPublicOrigin(configured);
+  if (env.MODE === 'test') return 'https://smartlab.test';
+  if (env.DEV === true && typeof window !== 'undefined' && window.location.origin) {
+    return normalizeAssetQrPublicOrigin(window.location.origin);
+  }
+  throw new AssetQrMatrixError('VITE_PUBLIC_SCAN_ORIGIN wajib dikonfigurasi sebelum QR Asset dapat dicetak.');
+}
+
+export function buildAssetQrPublicUrl(publicId: string, origin = configuredAssetQrPublicOrigin()): string {
+  if (!isUuid(publicId)) throw new AssetQrMatrixError('Public Asset QR identifier tidak valid.');
+  const url = `${normalizeAssetQrPublicOrigin(origin)}${ASSET_QR_PUBLIC_PATH_PREFIX}${publicId.toLowerCase()}`;
+  if (new TextEncoder().encode(url).length > ASSET_QR_MAX_PAYLOAD_BYTES) {
+    throw new AssetQrMatrixError(`URL public Asset QR melebihi kapasitas QR v${ASSET_QR_VERSION}-H.`);
+  }
+  return url;
+}
+
+function assetQrPayload(value: string): string {
+  return isUuid(value) ? buildAssetQrPublicUrl(value) : value;
+}
+
+const DATA_CODEWORDS = 86;
+const ECC_CODEWORDS_PER_BLOCK = 26;
+const DATA_BLOCK_LENGTHS = [14, 14, 14, 14, 15, 15] as const;
+const ALIGNMENT_PATTERN_POSITIONS = [6, 24, 42] as const;
+const FORMAT_ECC_H = 2;
+const MASK_PATTERN = 0;
 
 function appendBits(target: number[], value: number, length: number): void {
   for (let shift = length - 1; shift >= 0; shift -= 1) target.push((value >>> shift) & 1);
@@ -69,14 +111,17 @@ function reedSolomonRemainder(data: number[], degree: number): number[] {
   return remainder;
 }
 
-function createDataCodewords(publicId: string): number[] {
-  if (!isUuid(publicId)) throw new AssetQrMatrixError();
-  const bytes = new TextEncoder().encode(publicId);
-  if (bytes.length !== 36) throw new AssetQrMatrixError();
+function createDataCodewords(value: string): number[] {
+  const payload = assetQrPayload(value);
+  const bytes = new TextEncoder().encode(payload);
+  if (bytes.length === 0) throw new AssetQrMatrixError();
+  if (bytes.length > ASSET_QR_MAX_PAYLOAD_BYTES) {
+    throw new AssetQrMatrixError(`Payload Asset QR melebihi kapasitas QR v${ASSET_QR_VERSION}-H.`);
+  }
 
   const bits: number[] = [];
-  appendBits(bits, 0b0100, 4); // byte mode
-  appendBits(bits, bytes.length, 8); // version 1-9 byte count
+  appendBits(bits, 0b0100, 4);
+  appendBits(bits, bytes.length, 8);
   bytes.forEach((byte) => appendBits(bits, byte, 8));
 
   const capacityBits = DATA_CODEWORDS * 8;
@@ -97,12 +142,14 @@ function createDataCodewords(publicId: string): number[] {
     codewords.push(pads[padIndex % pads.length]);
     padIndex += 1;
   }
-  if (codewords.length !== DATA_CODEWORDS) throw new AssetQrMatrixError('Public Asset QR identifier melebihi kapasitas QR v5-H.');
+  if (codewords.length !== DATA_CODEWORDS) {
+    throw new AssetQrMatrixError(`Payload Asset QR melebihi kapasitas QR v${ASSET_QR_VERSION}-H.`);
+  }
   return codewords;
 }
 
-function createInterleavedCodewords(publicId: string): number[] {
-  const data = createDataCodewords(publicId);
+function createInterleavedCodewords(payload: string): number[] {
+  const data = createDataCodewords(payload);
   const blocks: { data: number[]; ecc: number[] }[] = [];
   let offset = 0;
   DATA_BLOCK_LENGTHS.forEach((length) => {
@@ -144,11 +191,20 @@ function formatBits(maskPattern: number): number {
   return ((data << 10) | remainder) ^ 0x5412;
 }
 
+function versionBits(version: number): number {
+  let remainder = version << 12;
+  const generator = 0x1f25;
+  while (bchDigit(remainder) - bchDigit(generator) >= 0) {
+    remainder ^= generator << (bchDigit(remainder) - bchDigit(generator));
+  }
+  return (version << 12) | remainder;
+}
+
 function mask(row: number, column: number): boolean {
   return (row + column) % 2 === 0;
 }
 
-export function createAssetQrMatrix(publicId: string): boolean[][] {
+export function createAssetQrMatrix(payload: string): boolean[][] {
   const size = ASSET_QR_SIZE;
   const modules: Array<Array<boolean | null>> = Array.from({ length: size }, () => Array<boolean | null>(size).fill(null));
 
@@ -172,8 +228,8 @@ export function createAssetQrMatrix(publicId: string): boolean[][] {
   drawFinder(size - 7, 0);
   drawFinder(0, size - 7);
 
-  [6, 30].forEach((row) => {
-    [6, 30].forEach((column) => {
+  ALIGNMENT_PATTERN_POSITIONS.forEach((row) => {
+    ALIGNMENT_PATTERN_POSITIONS.forEach((column) => {
       if (modules[row][column] !== null) return;
       for (let r = -2; r <= 2; r += 1) {
         for (let c = -2; c <= 2; c += 1) {
@@ -188,6 +244,13 @@ export function createAssetQrMatrix(publicId: string): boolean[][] {
   }
   for (let column = 8; column < size - 8; column += 1) {
     if (modules[6][column] === null) modules[6][column] = column % 2 === 0;
+  }
+
+  const typeNumber = versionBits(ASSET_QR_VERSION);
+  for (let i = 0; i < 18; i += 1) {
+    const dark = ((typeNumber >>> i) & 1) === 1;
+    modules[Math.floor(i / 3)][(i % 3) + size - 11] = dark;
+    modules[(i % 3) + size - 11][Math.floor(i / 3)] = dark;
   }
 
   const typeInfo = formatBits(MASK_PATTERN);
@@ -205,7 +268,7 @@ export function createAssetQrMatrix(publicId: string): boolean[][] {
   }
   modules[size - 8][8] = true;
 
-  const data = createInterleavedCodewords(publicId);
+  const data = createInterleavedCodewords(payload);
   let row = size - 1;
   let direction = -1;
   let byteIndex = 0;
