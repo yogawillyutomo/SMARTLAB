@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, EyeOff, FlaskConical, GraduationCap, Lock, LogIn, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { APP_BRAND } from '@/config/brand';
 import { authIssueMessage } from '@/lib/authMessages';
 import { postLoginPath } from '@/lib/authNavigation';
 import { useAuthStore } from '@/stores/authStore';
@@ -37,7 +38,7 @@ export function LoginPage() {
     setPassword('');
 
     if (result.ok) {
-      toast('Selamat datang di SmartLab PPLG', 'success');
+      toast(`Selamat datang di ${APP_BRAND.name}`, 'success');
       navigate(postLoginPath(location.state), { replace: true });
       return;
     }
@@ -60,8 +61,8 @@ export function LoginPage() {
               <FlaskConical className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-lg font-bold text-ink-primary">SMARTLAB PPLG</p>
-              <p className="text-xs text-ink-muted">Laboratory Management System</p>
+              <p className="text-lg font-bold text-ink-primary">{APP_BRAND.name}</p>
+              <p className="text-xs text-ink-muted">{APP_BRAND.descriptor}</p>
             </div>
           </div>
         </div>
@@ -114,13 +115,13 @@ export function LoginPage() {
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white shadow-elevated">
               <FlaskConical className="h-7 w-7" />
             </div>
-            <h1 className="text-xl font-bold text-ink-primary">SMARTLAB PPLG</h1>
-            <p className="text-xs text-ink-muted">Laboratory Management System</p>
+            <h1 className="text-xl font-bold text-ink-primary">{APP_BRAND.name}</h1>
+            <p className="text-xs text-ink-muted">{APP_BRAND.descriptor}</p>
           </div>
 
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-ink-primary">Masuk ke akun Anda</h2>
-            <p className="mt-1 text-sm text-ink-muted">Gunakan akun SmartLab yang dikelola sekolah.</p>
+            <p className="mt-1 text-sm text-ink-muted">Gunakan akun {APP_BRAND.name} yang dikelola sekolah.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4" aria-busy={authenticating}>
@@ -223,7 +224,7 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-[10px] text-ink-muted">SmartLab PPLG v1.0.0 · Frontend Prototype</p>
+          <p className="mt-6 text-center text-[10px] text-ink-muted">{APP_BRAND.name} v1.0.0 · {APP_BRAND.byline}</p>
         </div>
       </div>
     </div>

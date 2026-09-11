@@ -41,6 +41,16 @@ class Asset extends Model
         return $this->hasMany(AssetChangeEvent::class);
     }
 
+    public function qrIdentities(): HasMany
+    {
+        return $this->hasMany(AssetQrIdentity::class);
+    }
+
+    public function qrLabelBatchItems(): HasMany
+    {
+        return $this->hasMany(AssetQrLabelBatchItem::class);
+    }
+
     protected function casts(): array
     {
         return [

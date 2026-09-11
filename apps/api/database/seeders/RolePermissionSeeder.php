@@ -11,7 +11,7 @@ class RolePermissionSeeder extends Seeder
     public const ROLE_PERMISSIONS = [
         'admin-lab' => [
             'laboratories.view', 'laboratories.create', 'laboratories.update', 'laboratories.export',
-            'assets.view', 'assets.create', 'assets.update', 'assets.delete', 'assets.export', 'assets.link-device', 'assets.retire',
+            'assets.view', 'assets.create', 'assets.update', 'assets.delete', 'assets.export', 'assets.link-device', 'assets.retire', 'assets.manage-qr', 'assets.generate-labels',
             'stock.view', 'stock.create', 'stock.update', 'stock.transact', 'stock.export',
             'maintenance.view', 'maintenance.create-plan', 'maintenance.update-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete', 'maintenance.cancel', 'maintenance.consume-stock', 'maintenance.export',
             'loans.view', 'loans.view-all', 'loans.create', 'loans.approve', 'loans.checkout', 'loans.return', 'loans.close', 'loans.cancel', 'loans.export',
@@ -36,7 +36,7 @@ class RolePermissionSeeder extends Seeder
         ],
         'kepala-lab' => [
             'laboratories.view', 'laboratories.update', 'laboratories.export',
-            'assets.view', 'assets.export', 'assets.retire', 'assets.dispose',
+            'assets.view', 'assets.export', 'assets.retire', 'assets.dispose', 'assets.manage-qr', 'assets.generate-labels',
             'stock.view', 'stock.export',
             'maintenance.view', 'maintenance.create-plan', 'maintenance.update-plan', 'maintenance.schedule', 'maintenance.start', 'maintenance.complete', 'maintenance.cancel', 'maintenance.consume-stock', 'maintenance.export',
             'loans.view', 'loans.view-all', 'loans.approve', 'loans.checkout', 'loans.return', 'loans.close', 'loans.cancel', 'loans.export',

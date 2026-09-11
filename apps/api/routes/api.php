@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\V1\ActivityReportController;
 use App\Http\Controllers\Api\V1\ActivityReportAttachmentController;
 use App\Http\Controllers\Api\V1\AcademicPeriodMasterController;
 use App\Http\Controllers\Api\V1\AssetController;
+use App\Http\Controllers\Api\V1\AssetQrIdentityController;
+use App\Http\Controllers\Api\V1\PublicAssetQrController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DeviceTransferController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -31,6 +33,7 @@ use App\Http\Controllers\Api\V1\SpaSessionAuthController;
 use App\Http\Controllers\Api\V1\TimetablePublicationController;
 use App\Http\Middleware\RequireAcademicMasterVersionPrecondition;
 use App\Http\Middleware\RequireAssetVersionPrecondition;
+use App\Http\Middleware\RequireAssetQrTokenVersionPrecondition;
 use App\Http\Middleware\RequireActivityReportVersionPrecondition;
 use App\Http\Middleware\RequireDeviceVersionPrecondition;
 use App\Http\Middleware\RequireIncidentVersionPrecondition;
@@ -49,6 +52,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('health', HealthController::class);
+    Route::get('public/assets/qr/{publicId}', PublicAssetQrController::class);
     Route::post('auth/login', [SpaSessionAuthController::class, 'login']);
     Route::post('auth/logout', [SpaSessionAuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::get('me', MeController::class)->middleware('auth:sanctum');
@@ -180,6 +184,15 @@ Route::prefix('v1')->group(function (): void {
             ->middleware(['permission:assets.retire', RequireAssetVersionPrecondition::class]);
         Route::post('assets/{assetId}/dispose', [AssetController::class, 'dispose'])
             ->middleware(['permission:assets.dispose', RequireAssetVersionPrecondition::class]);
+
+        Route::get('assets/{assetId}/qr-identities', [AssetQrIdentityController::class, 'index'])
+            ->middleware('permission:assets.manage-qr');
+        Route::post('assets/{assetId}/qr-identities', [AssetQrIdentityController::class, 'store'])
+            ->middleware('permission:assets.manage-qr');
+        Route::post('assets/{assetId}/qr-identities/rotate', [AssetQrIdentityController::class, 'rotate'])
+            ->middleware(['permission:assets.manage-qr', RequireAssetQrTokenVersionPrecondition::class]);
+        Route::post('assets/{assetId}/qr-identities/revoke', [AssetQrIdentityController::class, 'revoke'])
+            ->middleware(['permission:assets.manage-qr', RequireAssetQrTokenVersionPrecondition::class]);
 
         Route::get('devices', [DeviceController::class, 'index'])->middleware('permission:devices.view');
         Route::post('devices', [DeviceController::class, 'store'])->middleware('permission:devices.create');

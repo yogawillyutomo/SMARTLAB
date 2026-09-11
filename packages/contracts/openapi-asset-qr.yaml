@@ -1,0 +1,715 @@
+openapi: 3.1.0
+info:
+  title: SmartLab Asset QR API module
+  version: 0.36.0
+  description: >-
+    Asset-owned QR identity and immutable label-batch authority for S5.6.
+    Physical labels encode a canonical SMARTLAB public web URL whose only record
+    identifier is the random public UUID. Anonymous resolution remains safe-minimal;
+    authenticated expansion remains subject to active SchoolMembership and RBAC.
+paths:
+  /public/assets/qr/{publicId}:
+    parameters:
+      - name: publicId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: resolvePublicAssetQr
+      summary: Resolve one active Asset QR UUID to a safe anonymous projection
+      description: >-
+        Used by the public /q/{publicId} web page. The response is deliberately
+        safe-minimal and never expands merely because the browser also has a session.
+      security: []
+      responses:
+        '200':
+          description: Safe-minimal public Asset identity
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicAssetQr'
+        '404':
+          description: Malformed, unknown, or revoked QR identifier
+
+  /asset-qr/{publicId}:
+    parameters:
+      - name: publicId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: resolveAuthenticatedAssetQr
+      summary: Resolve a public QR UUID to the canonical Asset target after login
+      description: >-
+        Requires an authenticated active SchoolMembership plus assets.view.
+        Returns only the canonical Asset ID for same-School navigation; sensitive
+        Asset data remains behind the normal protected Asset endpoint and its RBAC.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Same-School canonical Asset navigation target
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [assetId]
+                    properties:
+                      assetId:
+                        type: string
+                        format: ulid
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing assets.view or inactive membership
+        '404':
+          description: Malformed, unknown, revoked, or cross-School QR identifier
+
+  /assets/{assetId}/qr-identities:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
+    get:
+      operationId: listAssetQrIdentities
+      summary: List QR identity history for one exact Asset
+      description: Requires assets.manage-qr in the active School.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: QR identity history, newest token version first
+        '403':
+          description: Missing assets.manage-qr or inactive membership
+        '404':
+          description: Unknown or cross-School Asset
+    post:
+      operationId: issueAssetQrIdentity
+      summary: Issue the first/current QR identity without mutating Asset version
+      description: Requires assets.manage-qr in the active School.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '201':
+          description: New active QR identity
+        '403':
+          description: Missing assets.manage-qr or inactive membership
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset already has an active QR identity
+
+  /assets/{assetId}/qr-identities/rotate:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
+    post:
+      operationId: rotateAssetQrIdentity
+      summary: Revoke the current token and issue a replacement atomically
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/QrIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QrReasonInput'
+      responses:
+        '201':
+          description: Replacement active QR identity
+        '403':
+          description: Missing assets.manage-qr or inactive membership
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset has no active QR identity
+        '412':
+          description: QR token version conflict
+        '428':
+          description: Missing or invalid QR token If-Match
+
+  /assets/{assetId}/qr-identities/revoke:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
+    post:
+      operationId: revokeAssetQrIdentity
+      summary: Revoke the current QR identity without replacing it
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/QrIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QrReasonInput'
+      responses:
+        '200':
+          description: Revoked QR identity evidence
+        '403':
+          description: Missing assets.manage-qr or inactive membership
+        '404':
+          description: Unknown or cross-School Asset
+        '409':
+          description: Asset has no active QR identity
+        '412':
+          description: QR token version conflict
+        '428':
+          description: Missing or invalid QR token If-Match
+
+  /asset-qr-label-candidates:
+    get:
+      operationId: listAssetQrLabelCandidates
+      summary: List exact School-scoped Assets eligible for label selection
+      description: >-
+        Requires assets.generate-labels and assets.view. The response intentionally
+        excludes acquisition, price, supplier, notes, serial number, and Device
+        technical profile even though authorized search may match selected canonical
+        Asset text fields.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/LaboratoryId'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Condition'
+        - $ref: '#/components/parameters/LifecycleStatus'
+        - $ref: '#/components/parameters/LinkStatus'
+        - $ref: '#/components/parameters/QrStatus'
+        - $ref: '#/components/parameters/PrintedStatus'
+        - $ref: '#/components/parameters/Page'
+        - name: perPage
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Safe label candidates in deterministic Asset-code order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetQrLabelCandidateListResponse'
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing required label/Asset permission or inactive membership
+        '422':
+          description: Invalid filter parameters
+
+  /asset-qr-label-batches:
+    get:
+      operationId: listAssetQrLabelBatches
+      summary: List immutable Asset QR label generation batches
+      description: Requires assets.generate-labels and remains scoped to the active School membership.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      parameters:
+        - $ref: '#/components/parameters/LaboratoryId'
+        - $ref: '#/components/parameters/Page'
+        - name: perPage
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Immutable batch summaries, newest generation first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetQrLabelBatchListResponse'
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing assets.generate-labels or inactive membership
+        '422':
+          description: Invalid filter parameters
+    post:
+      operationId: createAssetQrLabelBatch
+      summary: Generate one immutable exact-Asset label batch
+      description: >-
+        Requires assets.generate-labels and assets.view. If any selected Asset lacks
+        an active QR identity, assets.manage-qr is additionally required before the
+        server may issue that missing identity atomically. Asset version and all
+        Device, Inventory, custody, Incident, TESSELA, and availability authorities
+        remain untouched.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetQrLabelBatchInput'
+      responses:
+        '201':
+          description: Immutable generated batch with exact item snapshots and generated event
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AssetQrLabelBatchDetail'
+        '401':
+          description: Authentication required
+        '403':
+          description: >-
+            Missing assets.generate-labels/assets.view, inactive membership, or
+            missing assets.manage-qr when a selected Asset requires first QR issuance
+        '404':
+          description: Selected Asset or requested Laboratory is unknown or outside the active School
+        '409':
+          description: Candidate selection became stale before generation
+        '422':
+          description: Invalid template, exact Asset selection, or filter snapshot
+
+  /asset-qr-label-batches/{batchId}:
+    parameters:
+      - name: batchId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
+    get:
+      operationId: getAssetQrLabelBatch
+      summary: Read one immutable label batch with item and event evidence
+      description: Requires assets.generate-labels and resolves only inside the active School membership.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      responses:
+        '200':
+          description: Exact immutable batch evidence
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AssetQrLabelBatchDetail'
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing assets.generate-labels or inactive membership
+        '404':
+          description: Unknown or cross-School label batch
+
+  /asset-qr-label-batches/{batchId}/reprint:
+    parameters:
+      - name: batchId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: ulid
+    post:
+      operationId: reprintAssetQrLabelBatch
+      summary: Append reprint evidence for an unchanged, still-valid label batch
+      description: >-
+        Requires assets.generate-labels. Reprint never rewrites the batch or items
+        and fails closed when current Asset/QR/Laboratory authority no longer matches
+        the frozen batch snapshots.
+      security:
+        - sanctumSession: []
+        - sanctumBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReprintAssetQrLabelBatchInput'
+      responses:
+        '200':
+          description: Existing immutable batch plus newly appended reprint event
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AssetQrLabelBatchDetail'
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing assets.generate-labels or inactive membership
+        '404':
+          description: Unknown or cross-School label batch
+        '409':
+          description: Batch is stale because current Asset, active QR identity, or Laboratory evidence drifted
+        '422':
+          description: Invalid reprint reason
+
+components:
+  parameters:
+    QrIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    Search:
+      name: search
+      in: query
+      schema:
+        type: string
+        maxLength: 255
+    LaboratoryId:
+      name: laboratoryId
+      in: query
+      description: Omit to keep School-wide scope, including Assets with no Home Laboratory.
+      schema:
+        type: string
+        format: ulid
+    Category:
+      name: category
+      in: query
+      schema:
+        type: string
+        maxLength: 100
+    Condition:
+      name: condition
+      in: query
+      schema:
+        $ref: '#/components/schemas/AssetCondition'
+    LifecycleStatus:
+      name: lifecycleStatus
+      in: query
+      schema:
+        $ref: '#/components/schemas/AssetLifecycleStatus'
+    LinkStatus:
+      name: linkStatus
+      in: query
+      schema:
+        type: string
+        enum: [linked, unlinked]
+    QrStatus:
+      name: qrStatus
+      in: query
+      schema:
+        type: string
+        enum: [active, missing]
+    PrintedStatus:
+      name: printedStatus
+      in: query
+      description: Derived from immutable label-batch history for the current active QR identity.
+      schema:
+        type: string
+        enum: [printed, unprinted]
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+  schemas:
+    AssetCondition:
+      type: string
+      enum: [good, minor_damage, moderate_damage, major_damage, unknown]
+
+    AssetLifecycleStatus:
+      type: string
+      enum: [active, retired, disposed]
+
+    QrReasonInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+
+    PublicAssetQr:
+      type: object
+      additionalProperties: false
+      required: [school, asset]
+      properties:
+        school:
+          type: object
+          additionalProperties: false
+          required: [code, name]
+          properties:
+            code: { type: string }
+            name: { type: string }
+        asset:
+          type: object
+          additionalProperties: false
+          required: [assetCode, name, category, condition, lifecycleStatus, homeLaboratory]
+          properties:
+            assetCode: { type: string }
+            name: { type: string }
+            category: { type: string }
+            condition:
+              $ref: '#/components/schemas/AssetCondition'
+            lifecycleStatus:
+              $ref: '#/components/schemas/AssetLifecycleStatus'
+            homeLaboratory:
+              oneOf:
+                - type: 'null'
+                - type: object
+                  additionalProperties: false
+                  required: [code, name]
+                  properties:
+                    code: { type: string }
+                    name: { type: string }
+
+    AssetQrIdentity:
+      type: object
+      additionalProperties: false
+      required: [id, assetId, publicId, tokenVersion, status, issuedAt, revokedReason, revokedAt]
+      properties:
+        id: { type: string, format: ulid }
+        assetId: { type: string, format: ulid }
+        publicId: { type: string, format: uuid }
+        tokenVersion: { type: integer, minimum: 1 }
+        status: { type: string, enum: [active, revoked] }
+        issuedAt: { type: string, format: date-time }
+        revokedReason: { type: [string, 'null'] }
+        revokedAt: { type: [string, 'null'], format: date-time }
+
+    LaboratorySnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: ulid }
+        code: { type: string }
+        name: { type: string }
+
+    AssetQrLabelSelection:
+      type: object
+      additionalProperties: false
+      properties:
+        laboratoryId:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: ulid
+        category: { type: string, maxLength: 100 }
+        condition:
+          $ref: '#/components/schemas/AssetCondition'
+        lifecycleStatus:
+          $ref: '#/components/schemas/AssetLifecycleStatus'
+        linkStatus: { type: string, enum: [linked, unlinked] }
+        qrStatus: { type: string, enum: [active, missing] }
+        printedStatus: { type: string, enum: [printed, unprinted] }
+        search: { type: string, maxLength: 255 }
+
+    AssetQrLabelCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, assetCode, name, category, condition, lifecycleStatus, linked, laboratory, qr]
+      properties:
+        id: { type: string, format: ulid }
+        assetCode: { type: string }
+        name: { type: string }
+        category: { type: string }
+        condition:
+          $ref: '#/components/schemas/AssetCondition'
+        lifecycleStatus:
+          $ref: '#/components/schemas/AssetLifecycleStatus'
+        linked: { type: boolean }
+        laboratory:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/LaboratorySnapshot'
+        qr:
+          type: object
+          additionalProperties: false
+          required: [status, tokenVersion, printed]
+          properties:
+            status: { type: string, enum: [active, missing] }
+            tokenVersion:
+              oneOf:
+                - type: 'null'
+                - type: integer
+                  minimum: 1
+            printed: { type: boolean }
+
+    PaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, perPage, total, lastPage]
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+        lastPage: { type: integer, minimum: 1 }
+
+    AssetQrLabelCandidateListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetQrLabelCandidate'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreateAssetQrLabelBatchInput:
+      type: object
+      additionalProperties: false
+      required: [templateKey, assetIds]
+      properties:
+        templateKey:
+          type: string
+          enum: [40x25, 50x30, 70x40]
+          default: 50x30
+        assetIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items:
+            type: string
+            format: ulid
+        selection:
+          $ref: '#/components/schemas/AssetQrLabelSelection'
+
+    ReprintAssetQrLabelBatchInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+
+    AssetQrLabelBatchItem:
+      type: object
+      additionalProperties: false
+      required: [ordinal, assetId, assetCode, assetName, laboratory, publicId, tokenVersion, scanPath]
+      properties:
+        ordinal: { type: integer, minimum: 1 }
+        assetId: { type: string, format: ulid }
+        assetCode: { type: string }
+        assetName: { type: string }
+        laboratory:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/LaboratorySnapshot'
+        publicId: { type: string, format: uuid }
+        tokenVersion: { type: integer, minimum: 1 }
+        scanPath:
+          type: string
+          description: API resolver path snapshot; the physical QR itself encodes the canonical public web /q/{publicId} URL.
+          pattern: '^/api/v1/public/assets/qr/[0-9a-fA-F-]+$'
+
+    AssetQrLabelBatchEvent:
+      type: object
+      additionalProperties: false
+      required: [type, actorName, payload, createdAt]
+      properties:
+        type: { type: string, enum: [generated, reprinted] }
+        actorName: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    AssetQrLabelBatch:
+      type: object
+      additionalProperties: false
+      required: [id, templateKey, filters, assetCount, laboratory, generatedByName, generatedAt]
+      properties:
+        id: { type: string, format: ulid }
+        templateKey: { type: string, enum: [40x25, 50x30, 70x40] }
+        filters:
+          $ref: '#/components/schemas/AssetQrLabelSelection'
+        assetCount: { type: integer, minimum: 1, maximum: 500 }
+        laboratory:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/LaboratorySnapshot'
+        generatedByName: { type: string }
+        generatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetQrLabelBatchItem'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetQrLabelBatchEvent'
+
+    AssetQrLabelBatchDetail:
+      allOf:
+        - $ref: '#/components/schemas/AssetQrLabelBatch'
+        - type: object
+          required: [items, events]
+
+    AssetQrLabelBatchListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetQrLabelBatch'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+  securitySchemes:
+    sanctumSession:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+    sanctumBearer:
+      type: http
+      scheme: bearer

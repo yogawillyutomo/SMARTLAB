@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, FlaskConical, X } from 'lucide-react';
+import { APP_BRAND } from '@/config/brand';
 import { getVisibleNavGroupsForUser } from '@/routes/nav';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -31,8 +32,8 @@ export function AppSidebar() {
           </div>
           {!sidebarCollapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-ink-primary">SMARTLAB PPLG</p>
-              <p className="truncate text-[10px] text-ink-muted">Laboratory Management System</p>
+              <p className="truncate text-sm font-bold text-ink-primary">{APP_BRAND.name}</p>
+              <p className="truncate text-[10px] text-ink-muted">{APP_BRAND.descriptor}</p>
             </div>
           )}
           <button

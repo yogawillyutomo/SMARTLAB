@@ -411,18 +411,19 @@ Delivered by S4.6 on merged `main`:
 - no automatic browser-data import is approved. Classification is limited to `exact_safe_match`, `unmatched`, `ambiguous`, `invalid`, and `blocked_by_dependency`; local/browser IDs never become canonical IDs by inference;
 - storage-cleared core browser evidence plus exact implementation-head impacted retests were recorded as PASS; PR #83 merged to `main@3757e986cbc8a15bcde3cbe92a3ed71f73f64d04`, and post-merge workflow #313 passed `web-ci` and `api-ci`; S4 is closed.
 
-Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. Corrective Work Orders are canonical through merged S5.3; S5.4 separately gates the browser frontend cutover and storage-cleared UAT before S5 closure.
+Inventory must reject negative stock transactionally. Direct quantity edits are not a canonical operation. Loan and Maintenance custody must not rewrite Asset/Device home Laboratory or lifecycle. S5 is closed on `main@276326946bd4d4b9c6cf7073058886a893279e52` after PR #88 and PR #89 plus post-merge CI #341; its exact-Asset Work Order, Campaign orchestration, Global Laboratory Context, PostgreSQL UTC, and browser-UAT boundaries are canonical.
 
 ### Phase S5 - Corrective maintenance
 
-S5.1 is accepted/locked on merged PR #85 / `main@8c7f84ee5ff64787c8df01a70ea5cf23877eee95` through [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). S5.2 is complete on merged PR #86 / `main@91000032b5ced1455ff8c0fd15316f1257692cc6`. S5.3 Inventory + verification is complete on merged PR #87 / `main@5835b10a116c0e9fba0319ce697cfd608824052a`. S5.4 frontend cutover is candidate PR #88 and remains browser-UAT gated.
+S5.1 is accepted/locked on merged PR #85 / `main@8c7f84ee5ff64787c8df01a70ea5cf23877eee95` through [ADR-003 — Corrective Work Order Boundary](ADR-003-corrective-work-order-boundary.md) and [S5 Corrective Work Order Domain Contract](work-order-domain-contract.md). S5.2 is complete on PR #86, S5.3 on PR #87, S5.4 Work Order frontend cutover on PR #88, and the S5.5 closure tranche (Maintenance Campaign/Batch, UAT hardening, Global Laboratory Context, timezone and response-contract fixes) on PR #89. Final `main@276326946bd4d4b9c6cf7073058886a893279e52` passed post-merge CI #341 and Vercel.
 
 Planned slices:
 
 - **S5.1 — complete/locked on merged main:** exact-Asset Work Order authority, optional Incident link, corrective custody, assignment/lifecycle, Inventory-only spare-part consumption boundary, Asset-authority verification boundary, and no implicit Device/Incident/Laboratory mutation; merged as PR #85 / `8c7f84ee`;
 - **S5.2 — complete / merged PR #86 (`91000032`):** PostgreSQL WorkOrder/Event persistence, School/year numbering, ETag lifecycle through completed/rework/cancel, assignment, exact Asset subject, Loan/Maintenance/WorkOrder custody exclusion, Asset terminal/unlink guard integration, Asset operational-state `in_repair`, real contention tests, OpenAPI 0.31;
 - **S5.3 — complete / merged PR #87 (`5835b10a`):** `work-orders.consume-stock`, immutable WorkOrderPartUsage bound at DB insert to the exact sourced InventoryTransaction, sourceType `work_order`, idempotent clientMutationId replay, Asset condition application through Asset authority, Asset-version drift fail-closed, atomic verification/custody release, PostgreSQL stock and verify-vs-Asset contention proofs, OpenAPI 0.32;
-- **S5.4 — implementation candidate / PR #88:** canonical typed Work Order gateway; `/work-orders` and deep link cut over to server authority; exact Asset/Laboratory/optional Incident create; server permission-derived assignees; Inventory-authoritative parts; verify through Work Order/Asset authority; no local cost/Device mutation; route/nav server permission guard; source-of-truth tests; automated CI green; storage-cleared manual browser UAT still pending.
+- **S5.4 — complete / merged PR #88 (`3d455868`):** canonical typed Work Order gateway; `/work-orders` and deep link server authority; exact Asset/Laboratory/optional Incident create; server permission-derived assignees; Inventory-authoritative parts; verify through Work Order/Asset authority; no local cost/Device mutation; storage-cleared browser UAT complete.
+- **S5.5 — complete / merged PR #89 (`27632694`):** Maintenance Campaign/Batch orchestration, Work Order UAT hardening, canonical Dashboard/Monitoring, Global Laboratory Context, PostgreSQL connection UTC pinning, Activity Report empty-map response stabilization, dedicated data-bearing browser fixtures/UAT, exact-head CI #340 and post-merge CI #341.
 
 Locked S5 direction:
 
@@ -436,6 +437,22 @@ Locked S5 direction:
 - Device state is never mutated implicitly;
 - whole-Laboratory downtime remains Unified Availability / Operational Calendar authority;
 - the prototype mutable `cost` is not promoted as canonical finance.
+
+### Phase S5.6 - Asset QR Identity & Label Batch
+
+S5.6 is intentionally sequenced before telemetry. Its authority contract is [Asset QR Identity & Label Batch Contract](asset-qr-label-contract.md).
+
+Locked rules:
+
+- Asset owns QR identity; Device QR, Loan, Maintenance, and Work Order are not QR identity authorities;
+- only a random non-enumerable public identifier is encoded;
+- anonymous resolution is safe-minimal and must not expose internal IDs, serial, funding, price, supplier, borrower identity, audit data, or Device technical profile;
+- authenticated expansion is permission-derived from current canonical records;
+- rotate/revoke preserves identity history and does not mutate Asset version;
+- one Asset has at most one active QR identity; old public IDs fail closed after revocation;
+- label batches/items are immutable evidence; reprints are append-only events;
+- label generation never changes Asset/Device/Inventory/custody state and never blocks a Laboratory;
+- printable PDF and physical scan reliability are downstream gates after persistence/API authority.
 
 ### Phase S6 - Monitoring telemetry
 
