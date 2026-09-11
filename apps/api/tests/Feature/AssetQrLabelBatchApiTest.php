@@ -83,9 +83,9 @@ class AssetQrLabelBatchApiTest extends TestCase
             ->assertJsonPath('data.0.qr.printed', true);
     }
 
-    public function test_generation_requires_label_qr_and_asset_permissions(): void
+    public function test_generation_requires_manage_qr_only_when_missing_identity_would_be_issued(): void
     {
-        [, $school] = $this->authenticateWithPermissions(['assets.generate-labels', 'assets.view']);
+        [$user, $school, $membership] = $this->authenticateWithPermissions(['assets.generate-labels', 'assets.view']);
         $asset = Asset::factory()->for($school)->create();
 
         $this->postJson('/api/v1/asset-qr-label-batches', [
@@ -94,6 +94,34 @@ class AssetQrLabelBatchApiTest extends TestCase
         ])
             ->assertForbidden()
             ->assertJsonPath('code', 'FORBIDDEN');
+
+        $this->assertDatabaseCount('asset_qr_label_batches', 0);
+        $this->assertDatabaseCount('asset_qr_identities', 0);
+
+        AssetQrIdentity::query()->create([
+            'school_id' => $school->id,
+            'asset_id' => $asset->id,
+            'public_id' => (string) Str::uuid(),
+            'token_version' => 1,
+            'status' => 'active',
+            'issued_by_user_id' => $user->id,
+            'issued_by_membership_id' => $membership->id,
+            'issued_by_user_id_snapshot' => $user->id,
+            'issued_by_membership_id_snapshot' => $membership->id,
+            'issued_by_name_snapshot' => $user->name,
+            'issued_at' => now(),
+        ]);
+
+        $this->postJson('/api/v1/asset-qr-label-batches', [
+            'templateKey' => '50x30',
+            'assetIds' => [$asset->id],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.events.0.payload.autoIssuedQrCount', 0)
+            ->assertJsonPath('data.items.0.tokenVersion', 1);
+
+        $this->assertDatabaseCount('asset_qr_label_batches', 1);
+        $this->assertDatabaseCount('asset_qr_identities', 1);
     }
 
     public function test_generation_atomically_issues_missing_qr_and_freezes_deterministic_exact_snapshots(): void
