@@ -1,6 +1,6 @@
 # ADR-004 — PC Monitoring Telemetry Boundary
 
-**Status:** PROPOSED — S6 planning only; implementation and merge are blocked until S5.6 closes  
+**Status:** PROPOSED / IMPLEMENTATION ACTIVE — stacked S6 development is allowed in draft branches; merge to `main` and production deployment remain blocked until S5.6 closes  
 **Date:** 2026-09-12  
 **Decision scope:** LARAS PC-agent identity, enrollment/revocation, approved telemetry, Device authority, privacy, retention, and monitoring-read boundaries.
 
@@ -8,9 +8,21 @@
 
 LARAS already has canonical School-scoped Device inventory and technical profiles. The `/monitoring` UI intentionally shows only canonical Device data today and explicitly refuses to fabricate realtime state. S6 adds real PC monitoring without turning the agent into a surveillance or remote-administration product.
 
-Repository policy already reserves `services/pc-agent` for a Go-based Windows service and allows only device-health telemetry. Keylogging, screenshots, browser history, personal documents, and user-content collection are prohibited.
+Repository policy reserves `services/pc-agent` for a Go-based Windows service and allows only device-health telemetry. Keylogging, screenshots, browser history, personal documents, and user-content collection are prohibited.
 
 The main architectural risk is not chart rendering. It is allowing an untrusted endpoint to impersonate another Device, cross School boundaries, mutate Device authority, or silently expand telemetry into invasive collection.
+
+## Governance
+
+S6 may be developed in parallel with the still-open S5.6 tranche using stacked **Draft** branches and PRs. This changes the old sequencing rule from “implementation cannot start” to a safer delivery rule:
+
+- S6 development and automated validation may proceed in isolated stacked branches;
+- S6 must not merge into `main` while S5.6 remains open;
+- S6 must not be deployed as production monitoring while S5.6 remains open;
+- S6 development must not modify or weaken the S5.6 branch, runtime gates, privacy gates, or physical QR acceptance criteria;
+- after S5.6 merges, S6 must be reconciled against the verified merged `main` before any merge of S6 is considered.
+
+The current S6.2 development tranche is therefore evidence-building only, not production authority.
 
 ## Decision
 
@@ -32,7 +44,7 @@ S6 v1 uses a server-authorized enrollment flow:
 2. the Windows agent redeems only that code over TLS;
 3. the server derives School and Device identity from the enrollment record — the agent never supplies authoritative `schoolId` or `deviceId` during normal telemetry ingestion;
 4. successful redemption creates one active `DeviceAgentInstallation` and returns a machine credential once;
-5. re-enrollment/replacement must revoke the prior active installation under a serialized Device-scoped write.
+5. re-enrollment/replacement revokes the prior active installation under a serialized Device-scoped write.
 
 S6 v1 allows enrollment only for eligible Windows-capable Device types: `desktop_pc`, `laptop`, and `server`, and only while the Device lifecycle is eligible for monitoring. Terminal/ineligible Device state must fail closed.
 
@@ -42,7 +54,7 @@ No MAC address, Windows MachineGuid, motherboard UUID, or other hardware fingerp
 
 PC-agent endpoints do not use a browser session as machine identity.
 
-Proposed v1 credential model:
+V1 credential model:
 
 - credential identifier + cryptographically random 256-bit secret;
 - secret returned only once at enrollment;
@@ -80,13 +92,13 @@ S6 v1 explicitly does **not** collect:
 - arbitrary shell output;
 - temperature/sensor telemetry as a baseline requirement.
 
-Temperature is intentionally excluded from S6 v1 because Windows sensor availability is inconsistent and the current repository privacy contract does not list it as approved default telemetry.
+Temperature is intentionally excluded from S6 v1 because Windows sensor availability is inconsistent and the repository privacy contract does not list it as approved default telemetry.
 
 ### 5. Online/offline is a telemetry read model, not Device lifecycle
 
 Online state is derived from **server `received_at`**, never from the agent clock or a writable Device field.
 
-Default policy proposal:
+Default policy:
 
 - heartbeat every 60 seconds;
 - `online` when last server receive age is <= 150 seconds;
@@ -105,7 +117,7 @@ S6 separates:
 - append-oriented hardware snapshots only when normalized inventory changes;
 - durable enrollment/revocation evidence.
 
-Initial proposal:
+Initial policy:
 
 - metric sample every 5 minutes;
 - 30-day raw metric retention;
@@ -113,7 +125,7 @@ Initial proposal:
 - latest projection retained while the Device exists;
 - retention cleanup is server-controlled and tested.
 
-At 500 monitored PCs, a 5-minute sample interval produces about 144,000 metric samples/day (~4.32 million/30 days), which remains feasible on ordinary PostgreSQL without introducing TimescaleDB as a new dependency. This is a sizing estimate, not a production benchmark.
+At 500 monitored PCs, a 5-minute sample interval produces about 144,000 metric samples/day (~4.32 million/30 days). This is a sizing estimate, not a production benchmark, and does not justify adding a time-series database before measurements demand it.
 
 ### 7. Offline buffering is bounded and idempotent
 
@@ -122,7 +134,7 @@ The agent buffers metric samples locally during network loss:
 - maximum 24 hours of 5-minute samples (288 samples per installation by default);
 - oldest samples are dropped when the bound is exceeded, with a local dropped-sample counter surfaced after reconnect;
 - retry uses exponential backoff with jitter and a bounded maximum delay;
-- reconnect sends bounded batches (proposed maximum 100 samples/request);
+- reconnect sends bounded batches (maximum 100 samples/request initially);
 - each sample has a stable random `sampleId`, boot identifier, and monotonic sequence so server retries are idempotent and gaps/restarts can be explained.
 
 The server rejects samples too far in the future and samples older than the accepted backfill window. `received_at` remains server-owned.
@@ -131,7 +143,7 @@ The server rejects samples too far in the future and samples older than the acce
 
 S6 does not require Redis/WebSocket/SSE infrastructure merely to display near-realtime health.
 
-Initial UI proposal:
+Initial UI policy:
 
 - agent heartbeat: 60 seconds;
 - web monitoring refresh: 30 seconds while visible;
@@ -140,29 +152,13 @@ Initial UI proposal:
 
 ### 9. No remote-control channel in S6 core
 
-S6 core must not implement:
-
-- arbitrary commands/shell execution;
-- remote desktop/control;
-- file upload/download from PCs;
-- browser control;
-- power actions;
-- software installation/removal;
-- unsigned or silently downloaded agent updates.
+S6 core must not implement arbitrary commands/shell execution, remote desktop/control, file upload/download from PCs, browser control, power actions, software installation/removal, or unsigned/silently downloaded agent updates.
 
 A signed agent-update mechanism is a later security tranche. Until then, update policy is explicit manual/admin-controlled deployment. If automatic updates are introduced later, signature verification and rollback policy are mandatory before enablement.
 
 ### 10. No automatic operational side effects
 
-Telemetry may show health state and threshold badges, but S6 v1 does not automatically:
-
-- change Device lifecycle;
-- change Asset condition;
-- create/close Incident;
-- create Work Order;
-- consume Inventory;
-- block a Laboratory;
-- notify users persistently.
+Telemetry may show health state and threshold badges, but S6 v1 does not automatically change Device lifecycle, change Asset condition, create/close Incident, create Work Order, consume Inventory, block a Laboratory, or notify users persistently.
 
 Persistent notifications/analytics belong to S7 unless a later accepted contract explicitly moves a narrowly defined alert into S6.
 
@@ -178,7 +174,7 @@ Implementation must include:
 - strict telemetry schema validation and numeric bounds;
 - duplicate/replay idempotency;
 - no credential/body logging;
-- audit events for human enrollment creation, redemption, revocation, and replacement;
+- audit evidence for human enrollment creation, redemption, revocation, and replacement;
 - cross-School negative tests and PostgreSQL concurrency tests.
 
 ## Product consequences
@@ -197,9 +193,13 @@ Implementation must include:
 - remote support tooling;
 - integration into S7 notifications/analytics.
 
-## Implementation gate
+## Delivery gate
 
-This ADR is planning-only. S6 implementation must not start until S5.6 Asset QR Identity & Label Batch closes its required runtime/privacy/physical-scan gates and is merged.
+S6 implementation may proceed only in isolated stacked Draft branches while S5.6 is open. S6 cannot be considered mergeable-to-main or production-ready until:
+
+1. S5.6 production-domain/runtime/privacy/physical-scan gates are complete and PR #90 is merged;
+2. S6 is reconciled against that verified merged `main`;
+3. the applicable S6 exact-head automated, security, and real-Windows evidence is complete.
 
 ## Related contracts
 
