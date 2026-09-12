@@ -62,6 +62,10 @@ class PermissionSeeder extends Seeder
             'update' => 'Ubah Perangkat',
             'export' => 'Ekspor Perangkat',
             'manage' => 'Kelola Perangkat',
+            'manage-agent' => 'Kelola enrollment dan credential PC Agent',
+        ],
+        'telemetry' => [
+            'view' => 'Lihat telemetri kesehatan perangkat',
         ],
         'device-transfers' => [
             'create' => 'Pindahkan Perangkat Antar Laboratorium',

@@ -1,0 +1,99 @@
+openapi: 3.1.0
+info:
+  title: LARAS PC Agent Identity API
+  version: 0.37.0
+  description: S6.2 machine identity, one-time enrollment, revocation, and policy contract. Telemetry metrics are intentionally deferred to S6.3.
+paths:
+  /devices/{deviceId}/agent-enrollments:
+    post:
+      summary: Create a short-lived one-time enrollment code for one exact Device
+      security: [{ sanctumSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '201':
+          description: Enrollment created; enrollmentCode is returned once and is never stored plaintext
+        '403': { description: Missing devices.manage-agent }
+        '404': { description: Device not found inside active School }
+        '409': { description: Device is not eligible for PC-agent enrollment }
+  /devices/{deviceId}/agent-installations:
+    get:
+      summary: List installation and revocation history without credential secrets
+      security: [{ sanctumSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200': { description: Installation history }
+        '403': { description: Missing devices.manage-agent }
+        '404': { description: Device not found inside active School }
+  /device-agent-installations/{installationId}/revoke:
+    post:
+      summary: Revoke an installation immediately
+      security: [{ sanctumSession: [] }]
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 3, maxLength: 1000 }
+      responses:
+        '200': { description: Installation revoked or already revoked }
+        '403': { description: Missing devices.manage-agent }
+        '404': { description: Installation not found inside active School }
+  /pc-agent/v1/enroll:
+    post:
+      summary: Redeem one-time enrollment code for a revocable machine credential
+      description: The server resolves School and Device exclusively from the enrollment record. Browser authentication is not machine identity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enrollmentCode, agentVersion]
+              properties:
+                enrollmentCode:
+                  type: string
+                  pattern: '^[A-Fa-f0-9]{32}$'
+                agentVersion: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '201':
+          description: Enrollment redeemed. Credential is returned exactly once.
+        '401': { description: Invalid, unavailable, expired, revoked, or already redeemed enrollment }
+        '409': { description: Canonical Device is no longer eligible }
+        '422': { description: Invalid or unexpected payload field }
+  /pc-agent/v1/config:
+    get:
+      summary: Read non-secret machine policy and prove current credential validity
+      security: [{ machineBearer: [] }]
+      responses:
+        '200': { description: Current S6 machine policy }
+        '401': { description: Missing, invalid, revoked, or ineligible machine credential }
+components:
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, minLength: 26, maxLength: 26 }
+  securitySchemes:
+    sanctumSession:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+      description: Existing first-party LARAS browser session plus active SchoolMembership and RBAC.
+    machineBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: '<credentialId>.<256-bit-secret>'
+      description: Dedicated revocable per-installation PC-agent credential. Not a human Sanctum session.

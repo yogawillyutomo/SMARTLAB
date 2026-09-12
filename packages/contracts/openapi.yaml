@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: SmartLab API
-  version: 0.36.0
-  description: Canonical SmartLab API v1 contract. Version 0.36 adds the public-URL Asset QR login handoff while preserving safe anonymous projection, SchoolMembership boundaries, RBAC, and immutable S5.6 label evidence.
+  title: LARAS API
+  version: 0.37.0
+  description: Canonical LARAS API v1 contract. Version 0.37 adds S6.2 revocable PC-agent enrollment and machine identity while preserving Device authority, SchoolMembership boundaries, RBAC, and the S5.6 Asset QR contract.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local Laravel API
@@ -73,6 +73,11 @@ paths:
   /devices: { $ref: './openapi-0.11.yaml#/paths/~1devices' }
   /devices/{deviceId}: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}' }
   /devices/{deviceId}/transfers: { $ref: './openapi-0.11.yaml#/paths/~1devices~1{deviceId}~1transfers' }
+  /devices/{deviceId}/agent-enrollments: { $ref: './openapi-pc-agent.yaml#/paths/~1devices~1{deviceId}~1agent-enrollments' }
+  /devices/{deviceId}/agent-installations: { $ref: './openapi-pc-agent.yaml#/paths/~1devices~1{deviceId}~1agent-installations' }
+  /device-agent-installations/{installationId}/revoke: { $ref: './openapi-pc-agent.yaml#/paths/~1device-agent-installations~1{installationId}~1revoke' }
+  /pc-agent/v1/enroll: { $ref: './openapi-pc-agent.yaml#/paths/~1pc-agent~1v1~1enroll' }
+  /pc-agent/v1/config: { $ref: './openapi-pc-agent.yaml#/paths/~1pc-agent~1v1~1config' }
   /incidents/reporting-context/laboratories: { $ref: './openapi-0.11.yaml#/paths/~1incidents~1reporting-context~1laboratories' }
   /incidents/reporting-context/laboratories/{laboratoryId}/devices: { $ref: './openapi-0.11.yaml#/paths/~1incidents~1reporting-context~1laboratories~1{laboratoryId}~1devices' }
   /incidents/assignee-candidates: { $ref: './openapi-0.11.yaml#/paths/~1incidents~1assignee-candidates' }
@@ -150,3 +155,4 @@ components:
   securitySchemes:
     sanctumSession: { $ref: './openapi-0.11.yaml#/components/securitySchemes/sanctumSession' }
     sanctumBearer: { $ref: './openapi-0.11.yaml#/components/securitySchemes/sanctumBearer' }
+    machineBearer: { $ref: './openapi-pc-agent.yaml#/components/securitySchemes/machineBearer' }
