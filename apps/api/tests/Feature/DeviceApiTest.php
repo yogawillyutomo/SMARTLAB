@@ -1223,7 +1223,7 @@ class DeviceApiTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/devices'))
             ->values();
 
-        $this->assertCount(6, $routes);
+        $this->assertCount(8, $routes);
         $actual = $routes->map(fn ($route): array => [
             'methods' => $route->methods(),
             'uri' => $route->uri(),
@@ -1242,6 +1242,22 @@ class DeviceApiTest extends TestCase
         $this->assertContains('permission:device-transfers.create', $actual[4]['middleware']);
         $this->assertSame('api/v1/devices/{deviceId}/transfers', $actual[5]['uri']);
         $this->assertContains('permission:device-transfers.view', $actual[5]['middleware']);
+
+        $agentEnrollment = collect($actual)->first(fn (array $route): bool =>
+            $route['methods'] === ['POST']
+            && $route['uri'] === 'api/v1/devices/{deviceId}/agent-enrollments'
+        );
+        $this->assertNotNull($agentEnrollment);
+        $this->assertContains('auth:sanctum', $agentEnrollment['middleware']);
+        $this->assertContains('permission:devices.manage-agent', $agentEnrollment['middleware']);
+
+        $agentInstallations = collect($actual)->first(fn (array $route): bool =>
+            $route['methods'] === ['GET', 'HEAD']
+            && $route['uri'] === 'api/v1/devices/{deviceId}/agent-installations'
+        );
+        $this->assertNotNull($agentInstallations);
+        $this->assertContains('auth:sanctum', $agentInstallations['middleware']);
+        $this->assertContains('permission:devices.manage-agent', $agentInstallations['middleware']);
 
         [, $school] = $this->authenticateWithPermissions(['devices.update']);
         $device = Device::factory()->for($school)->create();
