@@ -10,7 +10,7 @@ use App\Models\DeviceAgentInstallation;
 use App\Models\School;
 use App\Models\SchoolMembership;
 use App\Models\User;
-use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group;
@@ -103,7 +103,7 @@ class DeviceAgentPostgresConcurrencyTest extends TestCase
         $this->assertSame(1, $this->successCount($results), json_encode($results));
         $failures = array_values(array_filter($results, fn (array $result): bool => $result['ok'] === false));
         $this->assertCount(1, $failures, json_encode($results));
-        $this->assertSame(QueryException::class, $failures[0]['class']);
+        $this->assertSame(UniqueConstraintViolationException::class, $failures[0]['class']);
         $this->assertSame(1, DeviceAgentInstallation::query()
             ->where('device_id', $device->id)
             ->where('status', 'active')
