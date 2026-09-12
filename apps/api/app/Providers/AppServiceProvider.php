@@ -20,5 +20,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadRoutesFrom(base_path('routes/asset_qr_labels.php'));
+        $this->loadRoutesFrom(base_path('routes/pc_agent.php'));
     }
 }
