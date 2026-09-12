@@ -92,7 +92,8 @@ class DeviceAgentIdentityApiTest extends TestCase
             ->assertJsonPath('data.installationId', $installation->id)
             ->assertJsonPath('data.policy.heartbeatIntervalSeconds', 60);
 
-        $this->getJson('/api/v1/pc-agent/v1/config')
+        $this->withoutHeader('Authorization')
+            ->getJson('/api/v1/pc-agent/v1/config')
             ->assertUnauthorized()
             ->assertJsonPath('code', 'DEVICE_AGENT_UNAUTHENTICATED');
         $this->withHeader('Authorization', 'Bearer '.$credentialId.'.'.str_repeat('A', 43))
