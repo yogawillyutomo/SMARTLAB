@@ -1228,36 +1228,39 @@ class DeviceApiTest extends TestCase
             'methods' => $route->methods(),
             'uri' => $route->uri(),
             'middleware' => $route->gatherMiddleware(),
-        ])->all();
+        ]);
 
-        $this->assertSame('api/v1/devices', $actual[0]['uri']);
-        $this->assertContains('permission:devices.view', $actual[0]['middleware']);
-        $this->assertSame('api/v1/devices', $actual[1]['uri']);
-        $this->assertContains('permission:devices.create', $actual[1]['middleware']);
-        $this->assertSame('api/v1/devices/{deviceId}', $actual[2]['uri']);
-        $this->assertContains('permission:devices.view', $actual[2]['middleware']);
-        $this->assertSame('api/v1/devices/{deviceId}', $actual[3]['uri']);
-        $this->assertContains('permission:devices.update', $actual[3]['middleware']);
-        $this->assertSame('api/v1/devices/{deviceId}/transfers', $actual[4]['uri']);
-        $this->assertContains('permission:device-transfers.create', $actual[4]['middleware']);
-        $this->assertSame('api/v1/devices/{deviceId}/transfers', $actual[5]['uri']);
-        $this->assertContains('permission:device-transfers.view', $actual[5]['middleware']);
+        $assertRoute = function (array $methods, string $uri, string $permission) use ($actual): array {
+            $route = $actual->first(fn (array $candidate): bool =>
+                $candidate['methods'] === $methods && $candidate['uri'] === $uri
+            );
 
-        $agentEnrollment = collect($actual)->first(fn (array $route): bool =>
-            $route['methods'] === ['POST']
-            && $route['uri'] === 'api/v1/devices/{deviceId}/agent-enrollments'
+            $this->assertNotNull($route, sprintf('Expected route %s %s to be registered.', implode('|', $methods), $uri));
+            $this->assertContains($permission, $route['middleware']);
+
+            return $route;
+        };
+
+        $assertRoute(['GET', 'HEAD'], 'api/v1/devices', 'permission:devices.view');
+        $assertRoute(['POST'], 'api/v1/devices', 'permission:devices.create');
+        $assertRoute(['GET', 'HEAD'], 'api/v1/devices/{deviceId}', 'permission:devices.view');
+        $assertRoute(['PATCH'], 'api/v1/devices/{deviceId}', 'permission:devices.update');
+        $assertRoute(['POST'], 'api/v1/devices/{deviceId}/transfers', 'permission:device-transfers.create');
+        $assertRoute(['GET', 'HEAD'], 'api/v1/devices/{deviceId}/transfers', 'permission:device-transfers.view');
+
+        $agentEnrollment = $assertRoute(
+            ['POST'],
+            'api/v1/devices/{deviceId}/agent-enrollments',
+            'permission:devices.manage-agent',
         );
-        $this->assertNotNull($agentEnrollment);
         $this->assertContains('auth:sanctum', $agentEnrollment['middleware']);
-        $this->assertContains('permission:devices.manage-agent', $agentEnrollment['middleware']);
 
-        $agentInstallations = collect($actual)->first(fn (array $route): bool =>
-            $route['methods'] === ['GET', 'HEAD']
-            && $route['uri'] === 'api/v1/devices/{deviceId}/agent-installations'
+        $agentInstallations = $assertRoute(
+            ['GET', 'HEAD'],
+            'api/v1/devices/{deviceId}/agent-installations',
+            'permission:devices.manage-agent',
         );
-        $this->assertNotNull($agentInstallations);
         $this->assertContains('auth:sanctum', $agentInstallations['middleware']);
-        $this->assertContains('permission:devices.manage-agent', $agentInstallations['middleware']);
 
         [, $school] = $this->authenticateWithPermissions(['devices.update']);
         $device = Device::factory()->for($school)->create();
